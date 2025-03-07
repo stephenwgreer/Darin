@@ -1,6 +1,9 @@
-numpy
-sounddevice
-pyaudio
-soundcard
-comtypes
-soundfile
+numpy==2.2.3
+sounddevice==0.5.1
+pyaudio==0.2.14
+soundcard==0.4.3
+comtypes==1.4.10
+soundfile==0.13.1
+keyboard
+google-cloud-speech==2.22.0
+google-cloud-texttospeech==2.14.2
