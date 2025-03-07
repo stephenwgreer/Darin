@@ -1,0 +1,6 @@
+numpy
+sounddevice
+pyaudio
+soundcard
+comtypes
+soundfile
