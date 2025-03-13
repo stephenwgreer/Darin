@@ -164,36 +164,59 @@ class ApiClient:
     def transcribe_with_deepgram(self, audio_data, sample_rate):
         """
         Transcribe audio using Deepgram API
-        For this example, we'll simulate with Google's recognition
-        In a real app, replace with Deepgram API call
         """
-        # Create a recognizer
-        recognizer = sr.Recognizer()
-        
-        # Convert numpy array to WAV file in memory
-        byte_io = io.BytesIO()
-        with wave.open(byte_io, 'wb') as wave_file:
-            wave_file.setnchannels(1)
-            wave_file.setsampwidth(2)  # 16-bit audio
-            wave_file.setframerate(sample_rate)
-            wave_file.writeframes((audio_data * 32767).astype(np.int16).tobytes())
-        
-        # Create AudioData object from WAV bytes
-        byte_io.seek(0)
-        text = ""
-        
-        try:
-            with sr.AudioFile(byte_io) as source:
-                audio = recognizer.record(source)
-                # Recognize speech using Google Web Speech API (replace with Deepgram)
-                text = recognizer.recognize_google(audio)
-        except sr.UnknownValueError:
-            text = "Speech recognition could not understand the audio"
-        except sr.RequestError as e:
-            text = f"Speech recognition error: {e}"
-            
-        return text
+        file = "BSGPT_REC.wav"
+        print("Transcribing audio...")
 
+        # Deepgram API endpoint
+        url = "https://api.deepgram.com/v1/listen"
+
+        # Request headers
+        headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}"
+        }
+        
+        # Parameters for the transcription
+        params = {
+            "punctuate": "true",
+            "model": "general",
+            "language": "en-US"
+        }
+        
+        with open(file, "rb") as audio:
+            # Send the request to Deepgram
+            response = requests.post(
+                url,
+                headers=headers,
+                params=params,
+                data=audio
+            )
+        
+        if response.status_code == 200:
+            print("response 200")
+            response_json = response.json()
+            
+            # Debug: Print the whole response structure
+            print("Full response structure:")
+            print(json.dumps(response_json, indent=2))
+            
+            # The correct path to the transcript is likely different
+            # Try the standard Deepgram response structure
+            try:
+                transcript = response_json["results"]["channels"][0]["alternatives"][0]["transcript"]
+                print(f"Found transcript: {transcript}")
+                return transcript
+            except KeyError:
+                # If that fails, try to locate the transcript by exploring the response
+                print("Standard path not found, examining response structure...")
+                
+                # If you can identify the correct structure from the debug output,
+                # update this code accordingly
+                return "Error: Could not locate transcript in response. Check console output for structure."
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            return f"Error: {response.status_code} - {response.text}"
 
 class MainWindow(QMainWindow):
     # Custom signals
@@ -205,7 +228,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Audio Recorder and Analyzer")
+        self.setWindowTitle("BS GPT")
         self.setGeometry(100, 100, 1000, 700)
         
         # Initialize components
