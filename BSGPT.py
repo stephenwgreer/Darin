@@ -31,12 +31,9 @@ import anthropic
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DEEPGRAM_API_KEY:
     raise ValueError("DEEPGRAM_API_KEY not found in .env file")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-if not ANTHROPIC_API_KEY:
-    raise ValueError("ANTHROPIC_API_KEY not found in .env file")
 
 class ContinuousRecorder:
-    def __init__(self, buffer_minutes=5, sample_rate=48000, chunk_seconds=1):
+    def __init__(self, buffer_minutes=3, sample_rate=48000, chunk_seconds=1):
         self.sample_rate = sample_rate
         self.chunk_seconds = chunk_seconds
         self.chunk_frames = chunk_seconds * sample_rate
@@ -124,38 +121,38 @@ class ApiClient:
         try:
             client = anthropic.Anthropic(api_key=self.anthropic_api_key)
             
-            prompt = f"""
-            Analyze the following transcript and extract the main topics, 
-            entities, and a brief summary. Return the result as a JSON object.
-            
-            Transcript: "{transcript_text}"
-            
-            Format your response as JSON only:
-            {{
-              "topics": ["topic1", "topic2", ...],
-              "entities": ["entity1", "entity2", ...],
-              "summary": "Brief summary of the content"
-            }}
+            PROMPT = f"""
+            Analyze the following block of text and summarize the topic three topics discussed in the transcription.
+
+            The first topic should be the strongest one, the second topic should be the second strongest, and the third topic should be the third strongest.
+
+            Return the list of topics in JSON format which can be passed on to other applications where the keys are topic 1, topic 2, and topic 3.
+            And the values are each of the topics.
+
+            Return nothing other than this requested output.
+
+            Text to analyze:
+            {transcript_text}
             """
             
             message = client.messages.create(
-                model="claude-3-sonnet-20240229",
-                max_tokens=1000,
+                model="claude-3-7-sonnet-20250219",
+                max_tokens=1024,
                 temperature=0,
                 system="You analyze transcripts and extract key information as JSON.",
                 messages=[
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": PROMPT}
                 ]
             )
             
             # Extract the JSON from the response
             response_text = message.content[0].text
             try:
-                # Try to parse the response as JSON
+                # Parse the response as JSON
                 json_result = json.loads(response_text)
-                return json_result
+                return json_result  # Return the parsed JSON as a dictionary
             except json.JSONDecodeError:
-                # If not valid JSON, return the raw text
+                # If not valid JSON, return the raw text as a dictionary
                 return {"error": "Invalid JSON response", "raw_text": response_text}
                 
         except Exception as e:
@@ -255,13 +252,13 @@ class MainWindow(QMainWindow):
         # Main widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        main_layout = QVBoxLayout(main_widget)  
         
         # Header section
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         
-        app_title = QLabel("Audio Recorder and Analyzer")
+        app_title = QLabel("Welcome to BSGPT, your second brain")
         app_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header_layout.addWidget(app_title)
         
