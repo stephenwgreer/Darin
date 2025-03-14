@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel, QTextEdit, 
     QProgressBar, QMessageBox, QSplitter)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QFont, QIcon, QTextCursor
 
 # Audio processing imports
 import soundcard as sc
@@ -135,7 +135,7 @@ class ApiClient:
             Return the list of topics in JSON format which can be passed on to other applications where the keys are topic 1, topic 2, and topic 3.
             And the values are each of the topics.
 
-            Return nothing other than this requested output.
+            Return nothing other than this requested output. Return ONLY formatted JSON with no extra characters.
 
             Text to analyze:
             {transcript_text}
@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("BS GPT")
+        self.setWindowTitle("Devin")
         self.setGeometry(100, 100, 1000, 700)
         
         # Initialize components
@@ -264,7 +264,7 @@ class MainWindow(QMainWindow):
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         
-        app_title = QLabel("Welcome to BSGPT, your second brain")
+        app_title = QLabel("Welcome to Devin, your intern")
         app_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header_layout.addWidget(app_title)
         
@@ -349,6 +349,9 @@ class MainWindow(QMainWindow):
         self.sentiment_button.setEnabled(False)
         left_layout.addWidget(self.sentiment_button)
         
+        # Add a separator
+        left_layout.addSpacing(20)
+
         # Buffer status
         buffer_status_label = QLabel("Buffer Status")
         buffer_status_label.setFont(QFont("Arial", 14))
@@ -369,7 +372,7 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right_panel)
         
         # Transcript area
-        transcript_label = QLabel("Transcript (Deepgram)")
+        transcript_label = QLabel("Transcript")
         transcript_label.setFont(QFont("Arial", 14))
         right_layout.addWidget(transcript_label)
         
@@ -379,7 +382,7 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.transcript_text)
         
         # Processed output
-        processed_label = QLabel("Processed Output (Claude)")
+        processed_label = QLabel("Processed Output")
         processed_label.setFont(QFont("Arial", 14))
         right_layout.addWidget(processed_label)
         
@@ -561,21 +564,48 @@ class MainWindow(QMainWindow):
         ).start()
 
     def _practitioner_insights_thread(self, transcript):
-        """Background thread for getting practitioner insights"""
+        """Background thread for getting practitioner insights with streaming updates"""
         try:
             # Create client
             client = utils.get_anthropic_client(self.api_client.anthropic_api_key)
             
-            # Get insights for each topic
-            results = utils.get_practitioner_insights(client, transcript)
+            # Extract topics first
+            self.processing_complete.emit({"result": "Extracting main topics..."})
+            topics_result = utils.process_transcript(client, transcript, utils.TOPIC_SUMMARY_PROMPT)
             
-            # Format results for display
-            formatted_result = json.dumps(results, indent=2)
+            # Parse topics from JSON
+            topics_data = json.loads(topics_result)
             
-            # Update UI with result
-            self.processing_complete.emit({"result": formatted_result})
+            # Prepare accumulating output text
+            accumulated_output = "Generating insights...\n\n"
+            self.processing_complete.emit({"result": accumulated_output})
+            
+            # For each topic, get practitioner insights and update UI immediately
+            for key, topic in topics_data.items():
+                # Update UI to show which topic we're processing
+                accumulated_output += f"Processing {key}: {topic}...\n"
+                self.processing_complete.emit({"result": accumulated_output})
+                
+                # Get insights for this topic
+                insight = utils.process_transcript(
+                    client, 
+                    transcript, 
+                    utils.PRACTITIONER_INSIGHTS_PROMPT, 
+                    topic=topic
+                )
+                
+                # Add to accumulated output right away
+                accumulated_output += f"\n{key}: {topic}\n{insight}\n\n"
+                
+                # Update UI immediately with each completed topic
+                self.processing_complete.emit({"result": accumulated_output})
+            
+            # Re-enable buttons
+            self.set_prompt_buttons_enabled(True)
+            
         except Exception as e:
             self.processing_complete.emit({"error": f"Error processing insights: {str(e)}"})
+            self.set_prompt_buttons_enabled(True)
     
     def set_prompt_buttons_enabled(self, enabled):
         """Enable or disable all prompt buttons"""
@@ -608,9 +638,23 @@ class MainWindow(QMainWindow):
     
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
-        # Format the result as pretty JSON
-        formatted_json = json.dumps(result, indent=2)
-        self.processed_text.setPlainText(formatted_json)
+        if "error" in result:
+            # Show error
+            self.processed_text.setPlainText(f"Error: {result['error']}")
+        elif "result" in result:
+            # Show result text - preserve formatting including bullets and newlines
+            self.processed_text.setPlainText(result["result"])
+            
+            # Scroll to the bottom to show latest updates
+            cursor = self.processed_text.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            self.processed_text.setTextCursor(cursor)
+        else:
+            # Format the entire result as pretty JSON
+            formatted_json = json.dumps(result, indent=2)
+            self.processed_text.setPlainText(formatted_json)
+        
+        # Always re-enable the process button
         self.process_button.setText("Process with Claude")
         self.process_button.setEnabled(True)
     
