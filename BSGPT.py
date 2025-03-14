@@ -27,6 +27,9 @@ import speech_recognition as sr
 import requests
 import anthropic
 
+# Add this import at the top of your file with other imports
+import utils
+
 # Get the API key from environment variables
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 if not DEEPGRAM_API_KEY:
@@ -122,9 +125,12 @@ class ApiClient:
             client = anthropic.Anthropic(api_key=self.anthropic_api_key)
             
             PROMPT = f"""
-            Analyze the following block of text and summarize the topic three topics discussed in the transcription.
+            Analyze the following transcript from a work call and summarize the topic three topics discussed in the transcription.
 
             The first topic should be the strongest one, the second topic should be the second strongest, and the third topic should be the third strongest.
+
+            I want the topics to be relevant to a follow-up prompt which take each topic and then distill practitioner level insights.
+            Keep that in mind when deciding what the topics are.
 
             Return the list of topics in JSON format which can be passed on to other applications where the keys are topic 1, topic 2, and topic 3.
             And the values are each of the topics.
@@ -308,6 +314,40 @@ class MainWindow(QMainWindow):
         self.process_button.clicked.connect(self.process_transcript)
         self.process_button.setEnabled(False)
         left_layout.addWidget(self.process_button)
+
+        # Add a separator
+        left_layout.addSpacing(20)
+
+        # Add a label for prompt buttons
+        prompt_label = QLabel("Specific Prompts")
+        prompt_label.setFont(QFont("Arial", 14))
+        left_layout.addWidget(prompt_label)
+        
+        # Add buttons for specific prompts
+        self.topic_button = QPushButton("Extract Topics")
+        self.topic_button.clicked.connect(lambda: self.run_specific_prompt(utils.TOPIC_SUMMARY_PROMPT))
+        self.topic_button.setEnabled(False)
+        left_layout.addWidget(self.topic_button)
+        
+        self.insights_button = QPushButton("Banking Practitioner Insights")
+        self.insights_button.clicked.connect(self.run_practitioner_insights)
+        self.insights_button.setEnabled(False)
+        left_layout.addWidget(self.insights_button)
+        
+        self.summary_button = QPushButton("Meeting Summary")
+        self.summary_button.clicked.connect(lambda: self.run_specific_prompt(utils.MEETING_SUMMARY_PROMPT))
+        self.summary_button.setEnabled(False)
+        left_layout.addWidget(self.summary_button)
+        
+        self.questions_button = QPushButton("Generate Follow-up Questions")
+        self.questions_button.clicked.connect(lambda: self.run_specific_prompt(utils.FOLLOW_UP_QUESTIONS_PROMPT))
+        self.questions_button.setEnabled(False)
+        left_layout.addWidget(self.questions_button)
+        
+        self.sentiment_button = QPushButton("Sentiment Analysis")
+        self.sentiment_button.clicked.connect(lambda: self.run_specific_prompt(utils.SENTIMENT_ANALYSIS_PROMPT))
+        self.sentiment_button.setEnabled(False)
+        left_layout.addWidget(self.sentiment_button)
         
         # Buffer status
         buffer_status_label = QLabel("Buffer Status")
@@ -454,6 +494,98 @@ class MainWindow(QMainWindow):
         if ok and new_key:
             self.api_client.anthropic_api_key = new_key
     
+    def run_specific_prompt(self, prompt_template):
+        """Process transcript with a specific prompt template"""
+        # Disable all prompt buttons to prevent multiple clicks
+        self.set_prompt_buttons_enabled(False)
+        
+        # Get the current transcript
+        transcript = self.current_transcript
+        
+        if not transcript:
+            self.set_prompt_buttons_enabled(True)
+            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            return
+        
+        # Update the processed text to show we're working
+        self.processed_text.setPlainText("Processing with Claude...")
+        
+        # Start processing in a separate thread
+        threading.Thread(
+            target=self._specific_prompt_thread, 
+            args=(transcript, prompt_template)
+        ).start()
+    
+    def _specific_prompt_thread(self, transcript, prompt_template):
+        """Background thread for processing with a specific prompt"""
+        try:
+            # Create client
+            client = utils.get_anthropic_client(self.api_client.anthropic_api_key)
+            
+            # Process with the template
+            result = utils.process_transcript(client, transcript, prompt_template)
+            
+            # Try to parse as JSON for display
+            try:
+                parsed_result = json.loads(result)
+                formatted_result = json.dumps(parsed_result, indent=2)
+            except:
+                # If not valid JSON, just use the text result
+                formatted_result = result
+                
+            # Update UI with result
+            self.processing_complete.emit({"result": formatted_result})
+        except Exception as e:
+            self.processing_complete.emit({"error": str(e)})
+    
+    def run_practitioner_insights(self):
+        """Process transcript to get banking practitioner insights for each topic"""
+        # Disable all buttons to prevent multiple clicks
+        self.set_prompt_buttons_enabled(False)
+        
+        # Get the current transcript
+        transcript = self.current_transcript
+        
+        if not transcript:
+            self.set_prompt_buttons_enabled(True)
+            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            return
+        
+        # Update the processed text to show we're working
+        self.processed_text.setPlainText("Analyzing topics and generating banking practitioner insights...")
+        
+        # Start processing in a separate thread
+        threading.Thread(
+            target=self._practitioner_insights_thread, 
+            args=(transcript,)
+        ).start()
+
+    def _practitioner_insights_thread(self, transcript):
+        """Background thread for getting practitioner insights"""
+        try:
+            # Create client
+            client = utils.get_anthropic_client(self.api_client.anthropic_api_key)
+            
+            # Get insights for each topic
+            results = utils.get_practitioner_insights(client, transcript)
+            
+            # Format results for display
+            formatted_result = json.dumps(results, indent=2)
+            
+            # Update UI with result
+            self.processing_complete.emit({"result": formatted_result})
+        except Exception as e:
+            self.processing_complete.emit({"error": f"Error processing insights: {str(e)}"})
+    
+    def set_prompt_buttons_enabled(self, enabled):
+        """Enable or disable all prompt buttons"""
+        self.topic_button.setEnabled(enabled)
+        self.insights_button.setEnabled(enabled)
+        self.summary_button.setEnabled(enabled)
+        self.questions_button.setEnabled(enabled)
+        self.sentiment_button.setEnabled(enabled)
+        self.process_button.setEnabled(enabled)
+    
     # Slots for custom signals
     @pyqtSlot()
     def on_recording_started(self):
@@ -470,7 +602,9 @@ class MainWindow(QMainWindow):
         self.transcript_text.setPlainText(text)
         self.transcribe_button.setText("Transcribe Buffer")
         self.transcribe_button.setEnabled(True)
-        self.process_button.setEnabled(True)
+        
+        # Enable all prompt buttons when we have a transcript
+        self.set_prompt_buttons_enabled(True)
     
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
