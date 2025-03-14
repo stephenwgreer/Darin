@@ -1,0 +1,356 @@
+import json
+import threading
+from datetime import datetime
+
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                            QLabel, QSplitter, QMessageBox, QInputDialog, 
+                            QLineEdit, QPushButton)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QFont
+
+from audio.recorder import ContinuousRecorder
+from api.client import ApiClient
+from ui.controls_panel import ControlsPanel
+from ui.output_panel import OutputPanel
+from prompts.templates import *
+
+class MainWindow(QMainWindow):
+    # Custom signals
+    recording_started = pyqtSignal()
+    recording_stopped = pyqtSignal()
+    transcription_complete = pyqtSignal(str)
+    processing_complete = pyqtSignal(dict)
+    buffer_updated = pyqtSignal(float)
+    
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Darin")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # Initialize components
+        self.recorder = ContinuousRecorder(buffer_minutes=5)
+        self.api_client = ApiClient()
+        self.current_transcript = ""
+        
+        # Setup UI
+        self.setup_ui()
+        
+        # Connect signals to slots
+        self.setup_connections()
+        
+        # Start buffer update timer
+        self.buffer_timer = QTimer(self)
+        self.buffer_timer.timeout.connect(self.update_buffer_info)
+        self.buffer_timer.start(1000)  # Update every second
+    
+    def setup_ui(self):
+        # Main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QVBoxLayout(main_widget)
+        
+        # Header section
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        
+        app_title = QLabel("Welcome to Darin, your intern who listens")
+        app_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        header_layout.addWidget(app_title)
+        
+        header_layout.addStretch()
+        
+        self.settings_button = QPushButton("Settings")
+        self.settings_button.clicked.connect(self.show_settings)
+        header_layout.addWidget(self.settings_button)
+        
+        main_layout.addWidget(header_widget)
+        
+        # Content section with splitter
+        self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.content_splitter.setHandleWidth(5)  # Make splitter handle more visible
+        
+        # Left panel (controls)
+        self.controls_panel = ControlsPanel()
+        
+        # Right panel (output)
+        self.output_panel = OutputPanel()
+        
+        # Add panels to splitter
+        self.content_splitter.addWidget(self.controls_panel)
+        self.content_splitter.addWidget(self.output_panel)
+        
+        # Set the proportions
+        self.content_splitter.setStretchFactor(0, 1)  # Controls take 1/3
+        self.content_splitter.setStretchFactor(1, 2)  # Output takes 2/3
+        
+        main_layout.addWidget(self.content_splitter)
+        
+        # Footer
+        footer = QLabel("© 2025 Darin Listening Assistant")
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(footer)
+    
+    def setup_connections(self):
+        # Connect control panel signals
+        self.controls_panel.record_clicked.connect(self.toggle_recording)
+        self.controls_panel.save_clicked.connect(self.save_audio_buffer)
+        self.controls_panel.transcribe_clicked.connect(self.transcribe_buffer)
+        self.controls_panel.process_clicked.connect(self.process_transcript)
+        self.controls_panel.topics_clicked.connect(lambda: self.run_specific_prompt(TOPIC_SUMMARY_PROMPT))
+        self.controls_panel.insights_clicked.connect(self.run_practitioner_insights)
+        self.controls_panel.summary_clicked.connect(lambda: self.run_specific_prompt(MEETING_SUMMARY_PROMPT))
+        self.controls_panel.questions_clicked.connect(lambda: self.run_specific_prompt(FOLLOW_UP_QUESTIONS_PROMPT))
+        self.controls_panel.sentiment_clicked.connect(lambda: self.run_specific_prompt(SENTIMENT_ANALYSIS_PROMPT))
+        
+        # Connect custom signals to slots
+        self.recording_started.connect(self.on_recording_started)
+        self.recording_stopped.connect(self.on_recording_stopped)
+        self.transcription_complete.connect(self.on_transcription_complete)
+        self.processing_complete.connect(self.on_processing_complete)
+        self.buffer_updated.connect(self.on_buffer_updated)
+    
+    def toggle_recording(self):
+        if not self.recorder.is_recording:
+            # Start recording
+            if self.recorder.start_recording():
+                self.recording_started.emit()
+        else:
+            # Stop recording
+            if self.recorder.stop_recording():
+                self.recording_stopped.emit()
+    
+    def save_audio_buffer(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"recording_{timestamp}.wav"
+        
+        audio_data = self.recorder.save_buffer(filename)
+        if audio_data is not None:
+            QMessageBox.information(self, "Save Complete", f"Audio saved to {filename}")
+    
+    def transcribe_buffer(self):
+            # Disable button to prevent multiple clicks
+            self.controls_panel.transcribe_button.setEnabled(False)
+            self.controls_panel.transcribe_button.setText("Transcribing...")
+            
+            # Get audio data from buffer
+            audio_data = self.recorder.save_buffer()
+            
+            if audio_data is None:
+                self.controls_panel.transcribe_button.setText("Transcribe Buffer")
+                self.controls_panel.transcribe_button.setEnabled(True)
+                QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
+                return
+            
+            # Start transcription in a separate thread
+            threading.Thread(target=self._transcribe_thread, 
+                            args=(audio_data, self.recorder.sample_rate)).start()
+    
+    def _transcribe_thread(self, audio_data, sample_rate):
+        """Background thread for transcription"""
+        try:
+            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            self.current_transcript = text
+            self.transcription_complete.emit(text)
+        except Exception as e:
+            self.transcription_complete.emit(f"Transcription error: {str(e)}")
+    
+    def process_transcript(self):
+        # Disable button to prevent multiple clicks
+        self.controls_panel.process_button.setEnabled(False)
+        self.controls_panel.process_button.setText("Processing...")
+        
+        # Get the current transcript
+        transcript = self.current_transcript
+        
+        if not transcript:
+            self.controls_panel.process_button.setText("Process with Claude")
+            self.controls_panel.process_button.setEnabled(True)
+            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            return
+        
+        # Start processing in a separate thread
+        threading.Thread(target=self._process_thread, args=(transcript,)).start()
+    
+    def _process_thread(self, transcript):
+        """Background thread for API processing"""
+        try:
+            result = self.api_client.process_with_anthropic(transcript)
+            self.processing_complete.emit(result)
+        except Exception as e:
+            self.processing_complete.emit({"error": str(e)})
+    
+    def run_specific_prompt(self, prompt_template):
+        """Process transcript with a specific prompt template"""
+        # Disable all prompt buttons
+        self.controls_panel.set_prompt_buttons_enabled(False)
+        
+        # Get the current transcript
+        transcript = self.current_transcript
+        
+        if not transcript:
+            self.controls_panel.set_prompt_buttons_enabled(True)
+            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            return
+        
+        # Update output to show progress
+        self.output_panel.set_output("Processing with Claude...")
+        
+        # Start processing in a separate thread
+        threading.Thread(
+            target=self._specific_prompt_thread, 
+            args=(transcript, prompt_template)
+        ).start()
+    
+    def _specific_prompt_thread(self, transcript, prompt_template):
+        """Background thread for processing with a specific prompt"""
+        try:
+            # Get client from API wrapper
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.api_client.anthropic_api_key)
+            
+            # Import processing function
+            from api.anthropic_utils import process_with_template
+            
+            # Process with the template
+            result = process_with_template(client, transcript, prompt_template)
+            
+            # Try to parse as JSON for display
+            try:
+                parsed_result = json.loads(result)
+                formatted_result = json.dumps(parsed_result, indent=2)
+            except:
+                # If not valid JSON, just use the text result
+                formatted_result = result
+                
+            # Update UI with result
+            self.processing_complete.emit({"result": formatted_result})
+        except Exception as e:
+            self.processing_complete.emit({"error": str(e)})
+    
+    def run_practitioner_insights(self):
+        """Process transcript to get banking practitioner insights for each topic"""
+        # Disable all buttons
+        self.controls_panel.set_prompt_buttons_enabled(False)
+        
+        # Get the current transcript
+        transcript = self.current_transcript
+        
+        if not transcript:
+            self.controls_panel.set_prompt_buttons_enabled(True)
+            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            return
+        
+        # Update the output to show progress
+        self.output_panel.set_output("Analyzing topics and generating banking practitioner insights...")
+        
+        # Start processing in a separate thread
+        threading.Thread(
+            target=self._practitioner_insights_thread, 
+            args=(transcript,)
+        ).start()
+    
+    def _practitioner_insights_thread(self, transcript):
+        """Background thread for getting practitioner insights with streaming updates"""
+        try:
+            # Get client from API wrapper
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.api_client.anthropic_api_key)
+            
+            # Import processing function
+            from api.anthropic_utils import process_with_template
+            
+            # Extract topics first
+            self.processing_complete.emit({"result": "Extracting main topics..."})
+            topics_result = process_with_template(client, transcript, TOPIC_SUMMARY_PROMPT)
+            
+            # Parse topics from JSON
+            topics_data = json.loads(topics_result)
+            
+            # Prepare accumulating output text
+            accumulated_output = "Generating insights...\n\n"
+            self.processing_complete.emit({"result": accumulated_output})
+            
+            # For each topic, get practitioner insights and update UI immediately
+            for key, topic in topics_data.items():
+                # Update UI to show which topic we're processing
+                accumulated_output += f"Processing {key}: {topic}...\n"
+                self.processing_complete.emit({"result": accumulated_output})
+                
+                # Get insights for this topic
+                insight = process_with_template(
+                    client, 
+                    transcript, 
+                    PRACTITIONER_INSIGHTS_PROMPT, 
+                    topic=topic
+                )
+                
+                # Add to accumulated output right away
+                accumulated_output += f"\n{key}: {topic}\n{insight}\n\n"
+                
+                # Update UI immediately with each completed topic
+                self.processing_complete.emit({"result": accumulated_output})
+            
+            # Re-enable buttons
+            self.controls_panel.set_prompt_buttons_enabled(True)
+            
+        except Exception as e:
+            self.processing_complete.emit({"error": f"Error processing insights: {str(e)}"})
+            self.controls_panel.set_prompt_buttons_enabled(True)
+    
+    def update_buffer_info(self):
+        """Update the buffer information display"""
+        if self.recorder.is_recording:
+            buffer_seconds = self.recorder.get_buffer_seconds()
+            max_minutes = self.recorder.buffer_minutes
+            
+            self.buffer_updated.emit(buffer_seconds)
+    
+    def show_settings(self):
+        """Show settings dialog"""
+        api_key = self.api_client.anthropic_api_key or ""
+        new_key, ok = QInputDialog.getText(
+            self, "API Settings", "Anthropic API Key:", 
+            QLineEdit.EchoMode.Password, api_key
+        )
+        
+        if ok and new_key:
+            self.api_client.anthropic_api_key = new_key
+    
+    # Slots for custom signals
+    @pyqtSlot()
+    def on_recording_started(self):
+        self.controls_panel.set_recording_active(True)
+    
+    @pyqtSlot()
+    def on_recording_stopped(self):
+        self.controls_panel.set_recording_active(False)
+    
+    @pyqtSlot(str)
+    def on_transcription_complete(self, text):
+        self.output_panel.set_transcript(text)
+        self.controls_panel.transcribe_button.setText("Transcribe Buffer")
+        self.controls_panel.transcribe_button.setEnabled(True)
+        
+        # Enable all prompt buttons when we have a transcript
+        self.controls_panel.set_prompt_buttons_enabled(True)
+    
+    @pyqtSlot(dict)
+    def on_processing_complete(self, result):
+        if "error" in result:
+            # Show error
+            self.output_panel.set_output(f"Error: {result['error']}")
+        elif "result" in result:
+            # Show result text
+            self.output_panel.set_output(result["result"])
+        else:
+            # Format the entire result as pretty JSON
+            self.output_panel.set_output_json(result)
+        
+        # Always re-enable the process button
+        self.controls_panel.process_button.setText("Process with Claude")
+        self.controls_panel.process_button.setEnabled(True)
+    
+    @pyqtSlot(float)
+    def on_buffer_updated(self, buffer_seconds):
+        max_minutes = self.recorder.buffer_minutes
+        self.controls_panel.update_buffer_info(buffer_seconds, max_minutes)
