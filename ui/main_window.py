@@ -5,7 +5,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                            QLabel, QSplitter, QMessageBox, QInputDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtGui import QFont, QPixmap, QIcon
 
 from audio.recorder import ContinuousRecorder
 from api.client import ApiClient
@@ -25,7 +25,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Darin")
         self.setGeometry(100, 100, 1000, 700)
-        
+
+            # Set application icon
+        app_icon = QIcon("assets/Darin_ICON.png")
+        self.setWindowIcon(app_icon)
+            
         # Initialize components
         self.recorder = ContinuousRecorder(buffer_minutes=5)
         self.api_client = ApiClient()
