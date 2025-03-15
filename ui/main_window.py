@@ -3,10 +3,9 @@ import threading
 from datetime import datetime
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                            QLabel, QSplitter, QMessageBox, QInputDialog, 
-                            QLineEdit, QPushButton)
+                           QLabel, QSplitter, QMessageBox, QInputDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap
 
 from audio.recorder import ContinuousRecorder
 from api.client import ApiClient
@@ -44,28 +43,48 @@ class MainWindow(QMainWindow):
         self.buffer_timer.start(1000)  # Update every second
     
     def setup_ui(self):
+        ########################
         # Main widget and layout
+        ########################
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
+        main_layout = QVBoxLayout(main_widget)  
         
+        ########################
         # Header section
+        ########################
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         
-        app_title = QLabel("Welcome to Darin, your intern who listens")
+        # Add logo on left
+        logo_label = QLabel()
+        small_logo = QPixmap("assets/Darin_Round.png")  # Create assets folder with your logo
+        small_logo = small_logo.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio)
+        logo_label.setPixmap(small_logo)
+        header_layout.addWidget(logo_label)
+        
+        # Add spacing between logo and title
+        header_layout.addSpacing(10)
+        
+        # App title
+        app_title = QLabel("Welcome to Darin, your intern")
         app_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header_layout.addWidget(app_title)
         
         header_layout.addStretch()
         
-        self.settings_button = QPushButton("Settings")
-        self.settings_button.clicked.connect(self.show_settings)
-        header_layout.addWidget(self.settings_button)
+        # Replace settings button with larger logo
+        large_logo_label = QLabel()
+        large_logo = QPixmap("assets/Darin_Round.png")
+        large_logo = large_logo.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio)
+        large_logo_label.setPixmap(large_logo)
+        header_layout.addWidget(large_logo_label)
         
         main_layout.addWidget(header_widget)
         
+        ########################
         # Content section with splitter
+        ########################
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.content_splitter.setHandleWidth(5)  # Make splitter handle more visible
         
