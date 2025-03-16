@@ -23,10 +23,10 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Darin")
+        self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
 
-            # Set application icon
+        # Set application icon
         app_icon = QIcon("assets/Darin_ICON.png")
         self.setWindowIcon(app_icon)
             
@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self.recorder = ContinuousRecorder(buffer_minutes=5)
         self.api_client = ApiClient()
         self.current_transcript = ""
+        self.is_processing = False  # Track if we're currently processing
         
         # Setup UI
         self.setup_ui()
@@ -119,11 +120,11 @@ class MainWindow(QMainWindow):
         self.controls_panel.save_clicked.connect(self.save_audio_buffer)
         self.controls_panel.transcribe_clicked.connect(self.transcribe_buffer)
         self.controls_panel.process_clicked.connect(self.process_transcript)
-        self.controls_panel.topics_clicked.connect(lambda: self.run_specific_prompt(TOPIC_SUMMARY_PROMPT))
-        self.controls_panel.insights_clicked.connect(self.run_practitioner_insights)
-        self.controls_panel.summary_clicked.connect(lambda: self.run_specific_prompt(MEETING_SUMMARY_PROMPT))
-        self.controls_panel.questions_clicked.connect(lambda: self.run_specific_prompt(FOLLOW_UP_QUESTIONS_PROMPT))
-        self.controls_panel.sentiment_clicked.connect(lambda: self.run_specific_prompt(SENTIMENT_ANALYSIS_PROMPT))
+        self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT))
+        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(None, is_insights=True))
+        self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT))
+        self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT))
+        self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -151,22 +152,22 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Save Complete", f"Audio saved to {filename}")
     
     def transcribe_buffer(self):
-            # Disable button to prevent multiple clicks
-            self.controls_panel.transcribe_button.setEnabled(False)
-            self.controls_panel.transcribe_button.setText("Transcribing...")
-            
-            # Get audio data from buffer
-            audio_data = self.recorder.save_buffer()
-            
-            if audio_data is None:
-                self.controls_panel.transcribe_button.setText("Transcribe Buffer")
-                self.controls_panel.transcribe_button.setEnabled(True)
-                QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
-                return
-            
-            # Start transcription in a separate thread
-            threading.Thread(target=self._transcribe_thread, 
-                            args=(audio_data, self.recorder.sample_rate)).start()
+        # Disable button to prevent multiple clicks
+        self.controls_panel.transcribe_button.setEnabled(False)
+        self.controls_panel.transcribe_button.setText("Transcribing...")
+        
+        # Get audio data from buffer
+        audio_data = self.recorder.save_buffer()
+        
+        if audio_data is None:
+            self.controls_panel.transcribe_button.setText("Transcribe Buffer")
+            self.controls_panel.transcribe_button.setEnabled(True)
+            QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
+            return
+        
+        # Start transcription in a separate thread
+        threading.Thread(target=self._transcribe_thread, 
+                        args=(audio_data, self.recorder.sample_rate)).start()
     
     def _transcribe_thread(self, audio_data, sample_rate):
         """Background thread for transcription"""
@@ -178,9 +179,13 @@ class MainWindow(QMainWindow):
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
     
     def process_transcript(self):
+        if self.is_processing:
+            return
+            
         # Disable button to prevent multiple clicks
         self.controls_panel.process_button.setEnabled(False)
         self.controls_panel.process_button.setText("Processing...")
+        self.is_processing = True
         
         # Get the current transcript
         transcript = self.current_transcript
@@ -188,6 +193,7 @@ class MainWindow(QMainWindow):
         if not transcript:
             self.controls_panel.process_button.setText("Process with Claude")
             self.controls_panel.process_button.setEnabled(True)
+            self.is_processing = False
             QMessageBox.warning(self, "Processing Error", "No transcript to process")
             return
         
@@ -201,32 +207,91 @@ class MainWindow(QMainWindow):
             self.processing_complete.emit(result)
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
+        finally:
+            self.is_processing = False
     
-    def run_specific_prompt(self, prompt_template):
-        """Process transcript with a specific prompt template"""
+    def run_prompt_with_auto_transcribe(self, prompt_template=None, is_insights=False):
+        """Auto transcribe and then run a specific prompt"""
+        if self.is_processing:
+            return
+            
+        self.is_processing = True
+        
         # Disable all prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(False)
         
-        # Get the current transcript
-        transcript = self.current_transcript
+        # Update output to show progress
+        self.output_panel.set_output("Capturing audio and transcribing...")
         
-        if not transcript:
+        # If we already have a transcript, use it directly
+        if self.current_transcript:
+            if is_insights:
+                self._run_practitioner_insights(self.current_transcript)
+            else:
+                self._run_specific_prompt(self.current_transcript, prompt_template)
+            return
+            
+        # Otherwise get audio data from buffer
+        audio_data = self.recorder.save_buffer()
+        
+        if audio_data is None:
             self.controls_panel.set_prompt_buttons_enabled(True)
-            QMessageBox.warning(self, "Processing Error", "No transcript to process")
+            self.is_processing = False
+            QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
             return
         
-        # Update output to show progress
-        self.output_panel.set_output("Processing with Claude...")
-        
-        # Start processing in a separate thread
-        threading.Thread(
-            target=self._specific_prompt_thread, 
-            args=(transcript, prompt_template)
-        ).start()
+        # Start transcription and processing in a separate thread
+        if is_insights:
+            threading.Thread(
+                target=self._transcribe_and_insights_thread, 
+                args=(audio_data, self.recorder.sample_rate)
+            ).start()
+        else:
+            threading.Thread(
+                target=self._transcribe_and_process_thread, 
+                args=(audio_data, self.recorder.sample_rate, prompt_template)
+            ).start()
     
-    def _specific_prompt_thread(self, transcript, prompt_template):
-        """Background thread for processing with a specific prompt"""
+    def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
+        """Background thread for transcription followed by processing with a specific prompt"""
         try:
+            # First transcribe
+            self.output_panel.set_output("Transcribing audio...")
+            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            self.current_transcript = text
+            
+            # Update UI with transcript
+            self.transcription_complete.emit(text)
+            
+            # Then process with the specific prompt
+            self._run_specific_prompt(text, prompt_template)
+        except Exception as e:
+            self.processing_complete.emit({"error": str(e)})
+            self.is_processing = False
+            
+    def _transcribe_and_insights_thread(self, audio_data, sample_rate):
+        """Background thread for transcription followed by practitioner insights"""
+        try:
+            # First transcribe
+            self.output_panel.set_output("Transcribing audio...")
+            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            self.current_transcript = text
+            
+            # Update UI with transcript
+            self.transcription_complete.emit(text)
+            
+            # Then process for insights
+            self._run_practitioner_insights(text)
+        except Exception as e:
+            self.processing_complete.emit({"error": str(e)})
+            self.is_processing = False
+    
+    def _run_specific_prompt(self, transcript, prompt_template):
+        """Process transcript with a specific prompt template"""
+        try:
+            # Update output to show progress
+            self.output_panel.set_output("Processing with Claude...")
+            
             # Get client from API wrapper
             import anthropic
             client = anthropic.Anthropic(api_key=self.api_client.anthropic_api_key)
@@ -249,31 +314,11 @@ class MainWindow(QMainWindow):
             self.processing_complete.emit({"result": formatted_result})
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
+        finally:
+            self.is_processing = False
     
-    def run_practitioner_insights(self):
-        """Process transcript to get banking practitioner insights for each topic"""
-        # Disable all buttons
-        self.controls_panel.set_prompt_buttons_enabled(False)
-        
-        # Get the current transcript
-        transcript = self.current_transcript
-        
-        if not transcript:
-            self.controls_panel.set_prompt_buttons_enabled(True)
-            QMessageBox.warning(self, "Processing Error", "No transcript to process")
-            return
-        
-        # Update the output to show progress
-        self.output_panel.set_output("Analyzing topics and generating banking practitioner insights...")
-        
-        # Start processing in a separate thread
-        threading.Thread(
-            target=self._practitioner_insights_thread, 
-            args=(transcript,)
-        ).start()
-    
-    def _practitioner_insights_thread(self, transcript):
-        """Background thread for getting practitioner insights with streaming updates"""
+    def _run_practitioner_insights(self, transcript):
+        """Process transcript to get banking practitioner insights"""
         try:
             # Get client from API wrapper
             import anthropic
@@ -313,11 +358,10 @@ class MainWindow(QMainWindow):
                 # Update UI immediately with each completed topic
                 self.processing_complete.emit({"result": accumulated_output})
             
-            # Re-enable buttons
-            self.controls_panel.set_prompt_buttons_enabled(True)
-            
         except Exception as e:
             self.processing_complete.emit({"error": f"Error processing insights: {str(e)}"})
+        finally:
+            self.is_processing = False
             self.controls_panel.set_prompt_buttons_enabled(True)
     
     def update_buffer_info(self):
@@ -343,10 +387,20 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def on_recording_started(self):
         self.controls_panel.set_recording_active(True)
+        
+        # Now we also enable the prompt buttons when recording starts
+        self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot()
     def on_recording_stopped(self):
         self.controls_panel.set_recording_active(False)
+        
+        # Keep buttons enabled even when recording stops
+        # as long as we have buffer data
+        if self.recorder.get_buffer_seconds() > 0:
+            self.controls_panel.save_button.setEnabled(True)
+            self.controls_panel.transcribe_button.setEnabled(True)
+            self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
@@ -372,8 +426,15 @@ class MainWindow(QMainWindow):
         # Always re-enable the process button
         self.controls_panel.process_button.setText("Process with Claude")
         self.controls_panel.process_button.setEnabled(True)
+        self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot(float)
     def on_buffer_updated(self, buffer_seconds):
         max_minutes = self.recorder.buffer_minutes
         self.controls_panel.update_buffer_info(buffer_seconds, max_minutes)
+        
+        # Enable buttons if we have buffer data
+        if buffer_seconds > 0:
+            self.controls_panel.save_button.setEnabled(True)
+            self.controls_panel.transcribe_button.setEnabled(True)
+            self.controls_panel.set_prompt_buttons_enabled(True)
