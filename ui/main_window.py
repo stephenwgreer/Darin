@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
     transcription_complete = pyqtSignal(str)
     processing_complete = pyqtSignal(dict)
     buffer_updated = pyqtSignal(float)
+    progress_update = pyqtSignal(str)  # Signal for thread-safe progress updates
     
     def __init__(self):
         super().__init__()
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
         self.transcription_complete.connect(self.on_transcription_complete)
         self.processing_complete.connect(self.on_processing_complete)
         self.buffer_updated.connect(self.on_buffer_updated)
+        self.progress_update.connect(self.on_progress_update)
     
     def toggle_recording(self):
         if not self.recorder.is_recording:
@@ -256,7 +258,7 @@ class MainWindow(QMainWindow):
         """Background thread for transcription followed by processing with a specific prompt"""
         try:
             # First transcribe
-            self.output_panel.set_output("Transcribing audio...")
+            self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
             self.current_transcript = text
             
@@ -273,7 +275,7 @@ class MainWindow(QMainWindow):
         """Background thread for transcription followed by practitioner insights"""
         try:
             # First transcribe
-            self.output_panel.set_output("Transcribing audio...")
+            self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
             self.current_transcript = text
             
@@ -290,7 +292,7 @@ class MainWindow(QMainWindow):
         """Process transcript with a specific prompt template"""
         try:
             # Update output to show progress
-            self.output_panel.set_output("Processing with Claude...")
+            self.progress_update.emit("Processing with Claude...")
             
             # Get client from API wrapper
             import anthropic
@@ -328,21 +330,31 @@ class MainWindow(QMainWindow):
             from api.anthropic_utils import process_with_template
             
             # Extract topics first
-            self.processing_complete.emit({"result": "Extracting main topics..."})
+            self.progress_update.emit("Extracting main topics...")
             topics_result = process_with_template(client, transcript, TOPIC_SUMMARY_PROMPT)
             
-            # Parse topics from JSON
-            topics_data = json.loads(topics_result)
+            # Parse topics from JSON with better error handling
+            try:
+                topics_data = json.loads(topics_result)
+                
+                # Verify we got a dictionary back
+                if not isinstance(topics_data, dict):
+                    self.progress_update.emit(f"Unexpected response format: {topics_result}")
+                    topics_data = {"topic1": "General banking topics"}
+            except json.JSONDecodeError as e:
+                self.progress_update.emit(f"Error parsing topics: {str(e)}\nRaw response: {topics_result}")
+                # Fallback to a default topic
+                topics_data = {"topic1": "General banking topics"}
             
             # Prepare accumulating output text
             accumulated_output = "Generating insights...\n\n"
-            self.processing_complete.emit({"result": accumulated_output})
+            self.progress_update.emit(accumulated_output)
             
-            # For each topic, get practitioner insights and update UI immediately
+            # For each topic, get practitioner insights and update UI through signals
             for key, topic in topics_data.items():
                 # Update UI to show which topic we're processing
-                accumulated_output += f"Processing {key}: {topic}...\n"
-                self.processing_complete.emit({"result": accumulated_output})
+                status_update = f"{accumulated_output}Processing {key}: {topic}...\n"
+                self.progress_update.emit(status_update)
                 
                 # Get insights for this topic
                 insight = process_with_template(
@@ -352,17 +364,18 @@ class MainWindow(QMainWindow):
                     topic=topic
                 )
                 
-                # Add to accumulated output right away
-                accumulated_output += f"\n{key}: {topic}\n{insight}\n\n"
-                
-                # Update UI immediately with each completed topic
-                self.processing_complete.emit({"result": accumulated_output})
+                # Add to accumulated output
+                accumulated_output = f"{status_update}\n{key}: {topic}\n{insight}\n\n"
+            
+            # Final result when complete
+            self.processing_complete.emit({"result": accumulated_output})
             
         except Exception as e:
-            self.processing_complete.emit({"error": f"Error processing insights: {str(e)}"})
+            import traceback
+            error_details = traceback.format_exc()
+            self.processing_complete.emit({"error": f"Error processing insights: {str(e)}\n\n{error_details}"})
         finally:
             self.is_processing = False
-            self.controls_panel.set_prompt_buttons_enabled(True)
     
     def update_buffer_info(self):
         """Update the buffer information display"""
@@ -427,6 +440,11 @@ class MainWindow(QMainWindow):
         self.controls_panel.process_button.setText("Process with Claude")
         self.controls_panel.process_button.setEnabled(True)
         self.controls_panel.set_prompt_buttons_enabled(True)
+        
+    @pyqtSlot(str)
+    def on_progress_update(self, message):
+        """Handle progress updates in a thread-safe way"""
+        self.output_panel.set_output(message)
     
     @pyqtSlot(float)
     def on_buffer_updated(self, buffer_seconds):
