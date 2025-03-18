@@ -2,6 +2,8 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QSplitter
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QTextCursor
 
+from ui.font_manager import FontManager
+
 class OutputPanel(QWidget):
     """Right panel containing transcript and processed output"""
     
@@ -21,12 +23,13 @@ class OutputPanel(QWidget):
         transcript_layout = QVBoxLayout(transcript_container)
         
         transcript_label = QLabel("Transcript")
-        transcript_label.setFont(QFont("Arial", 14))
+        transcript_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         transcript_layout.addWidget(transcript_label)
         
         self.transcript_text = QTextEdit()
         self.transcript_text.setReadOnly(True)
         self.transcript_text.setMinimumHeight(100)
+        self.transcript_text.setFont(FontManager.get_font(12, QFont.Weight.Normal))
         transcript_layout.addWidget(self.transcript_text)
         
         # Processed output container
@@ -34,12 +37,13 @@ class OutputPanel(QWidget):
         output_layout = QVBoxLayout(output_container)
         
         output_label = QLabel("Processed Output")
-        output_label.setFont(QFont("Arial", 14))
+        output_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         output_layout.addWidget(output_label)
         
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(200)
+        self.output_text.setFont(FontManager.get_font(12, QFont.Weight.Normal))
         output_layout.addWidget(self.output_text)
         
         # Add containers to splitter

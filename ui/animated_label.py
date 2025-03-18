@@ -2,6 +2,8 @@ from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
+from ui.font_manager import FontManager
+
 class AnimatedLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(parent)
@@ -22,7 +24,7 @@ class AnimatedLabel(QLabel):
         self.cursor_timer.start(500)  # Blink every 500ms
         
         # Set the font
-        self.setFont(QFont("Space Grotesk", 18, QFont.Weight.Bold))
+        self.setFont(FontManager.get_font(18, QFont.Weight.Bold))
     
     def update_text(self):
         if self.current_index < len(self.full_text):

@@ -12,6 +12,7 @@ from api.client import ApiClient
 from ui.controls_panel import ControlsPanel
 from ui.output_panel import OutputPanel
 from ui.animated_label import AnimatedLabel
+from ui.font_manager import FontManager
 from prompts.templates import *
 
 class MainWindow(QMainWindow):
@@ -27,6 +28,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
+
+        # Load fonts
+        FontManager.load_fonts()
 
         # Set application icon
         app_icon = QIcon("assets/Darin_ICON.png")
