@@ -24,7 +24,8 @@ Text to analyze:
 
 # Practitioner insights prompt
 PRACTITIONER_INSIGHTS_PROMPT = """
-What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. Provide 5 bullets.
+What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. Provide 5 bullets. 
+Return in markdown syntax to make it pretty formatting.
 """
 
 # Meeting summary prompt
@@ -32,6 +33,7 @@ MEETING_SUMMARY_PROMPT = """
 Create a concise summary of the following meeting transcript.
 Include key decisions made, important discussion points, and overall meeting purpose.
 Format as a readable meeting summary that could be shared with team members.
+Return in markdown syntax to make it pretty formatting.
 
 Text to analyze:
 {transcript}
@@ -64,6 +66,7 @@ RECOMMENDATIONS:
 [Concise recommendation 3]
 
 Keep your analysis objective, concise, and focused on improving the thinking rather than criticizing it.
+Return in markdown syntax to make it pretty formatting.
 
 Transcript:
 {transcript}
@@ -98,6 +101,8 @@ PROVOCATIVE_IDEAS:
 [Novel connection or insight]
 
 Keep questions constructive, focused on generating new insights rather than criticism. Phrase questions to invite collaborative brainstorming.
+Return in markdown syntax to make it pretty formatting.
+
 Transcript:
 {transcript}
 """
@@ -126,6 +131,8 @@ MISSING_CONSIDERATIONS:
 [Business value proposition that wasn't highlighted]
 
 Be specific about how SAS Viya's analytics, AI, data management, and visualization capabilities directly address the customer's expressed needs and challenges.
+Return in markdown syntax to make it pretty formatting.
+
 Transcript:
 {transcript}
 """
@@ -173,7 +180,7 @@ Transcript:
 FOLLOW_UP_QUESTIONS_PROMPT = """
 Based on the following transcript, generate 5 insightful follow-up questions that would 
 help clarify or expand on the topics discussed.
-Return in JSON format with a "questions" array.
+Return in markdown syntax to make it pretty formatting.
 
 Text to analyze:
 {transcript}
