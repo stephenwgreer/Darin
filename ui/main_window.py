@@ -11,6 +11,7 @@ from audio.recorder import ContinuousRecorder
 from api.client import ApiClient
 from ui.controls_panel import ControlsPanel
 from ui.output_panel import OutputPanel
+from ui.animated_label import AnimatedLabel
 from prompts.templates import *
 
 class MainWindow(QMainWindow):
@@ -72,9 +73,8 @@ class MainWindow(QMainWindow):
         # Add spacing between logo and title
         header_layout.addSpacing(10)
         
-        # App title
-        app_title = QLabel("Welcome to Darin, your intern")
-        app_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        # App title with typing animation
+        app_title = AnimatedLabel("Welcome to Darin, your intern")
         header_layout.addWidget(app_title)
         
         header_layout.addStretch()
