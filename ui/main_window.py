@@ -23,6 +23,7 @@ class MainWindow(QMainWindow):
     processing_complete = pyqtSignal(dict)
     buffer_updated = pyqtSignal(float)
     progress_update = pyqtSignal(str)  # Signal for thread-safe progress updates
+    stream_update = pyqtSignal(str)  # New signal for streaming updates
     
     def __init__(self):
         super().__init__()
@@ -138,6 +139,7 @@ class MainWindow(QMainWindow):
         self.processing_complete.connect(self.on_processing_complete)
         self.buffer_updated.connect(self.on_buffer_updated)
         self.progress_update.connect(self.on_progress_update)
+        self.stream_update.connect(self.on_stream_update)
     
     def toggle_recording(self):
         if not self.recorder.is_recording:
@@ -265,27 +267,22 @@ class MainWindow(QMainWindow):
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
+            self.output_panel.set_output("")  # Clear the output
             
-            # Get client from API wrapper
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_client.anthropic_api_key)
-            
-            # Import processing function
-            from api.anthropic_utils import process_with_template
+            def handle_stream(text):
+                """Callback to handle streaming text"""
+                self.stream_update.emit(text)
             
             # Process with the template
-            result = process_with_template(client, transcript, prompt_template)
+            result = self.api_client.process_with_anthropic(
+                transcript, 
+                prompt_template,
+                stream=True,
+                callback=handle_stream
+            )
             
-            # Try to parse as JSON for display
-            try:
-                parsed_result = json.loads(result)
-                formatted_result = json.dumps(parsed_result, indent=2)
-            except:
-                # If not valid JSON, just use the text result
-                formatted_result = result
-                
-            # Update UI with result
-            self.processing_complete.emit({"result": formatted_result})
+            # Final update with complete response
+            self.processing_complete.emit({"result": result})
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
         finally:
@@ -295,15 +292,20 @@ class MainWindow(QMainWindow):
         """Process transcript to get banking practitioner insights"""
         try:
             # Get client from API wrapper
-            import anthropic
-            client = anthropic.Anthropic(api_key=self.api_client.anthropic_api_key)
+            self.progress_update.emit("Extracting main topics...")
+            self.output_panel.set_output("")  # Clear the output
             
-            # Import processing function
-            from api.anthropic_utils import process_with_template
+            def handle_stream(text):
+                """Callback to handle streaming text"""
+                self.stream_update.emit(text)
             
             # Extract topics first
-            self.progress_update.emit("Extracting main topics...")
-            topics_result = process_with_template(client, transcript, DEFAULT_TOPIC_EXTRACTION_PROMPT)
+            topics_result = self.api_client.process_with_anthropic(
+                transcript, 
+                DEFAULT_TOPIC_EXTRACTION_PROMPT,
+                stream=True,
+                callback=handle_stream
+            )
             
             # Parse topics from JSON with better error handling
             try:
@@ -329,10 +331,11 @@ class MainWindow(QMainWindow):
                 self.progress_update.emit(status_update)
                 
                 # Get insights for this topic
-                insight = process_with_template(
-                    client, 
+                insight = self.api_client.process_with_anthropic(
                     transcript, 
                     PRACTITIONER_INSIGHTS_PROMPT, 
+                    stream=True,
+                    callback=handle_stream,
                     topic=topic
                 )
                 
@@ -410,6 +413,11 @@ class MainWindow(QMainWindow):
         
         # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
+    
+    @pyqtSlot(str)
+    def on_stream_update(self, text):
+        """Handle streaming updates in a thread-safe way"""
+        self.output_panel.append_output(text)
     
     @pyqtSlot(str)
     def on_progress_update(self, message):

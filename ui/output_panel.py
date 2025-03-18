@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QTextBrowser, QSplitter
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QTextBrowser, QSplitter, QScrollBar
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QTextCursor
 
 from ui.font_manager import FontManager
@@ -8,9 +8,17 @@ from ui.markdown_formatter import MarkdownFormatter
 class OutputPanel(QWidget):
     """Right panel containing transcript and processed output"""
     
+    # Signal for updating HTML content in the main thread
+    html_update = pyqtSignal(str)
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+        self._current_output = ""
+        self._auto_scroll = True
+        
+        # Connect the HTML update signal
+        self.html_update.connect(self._update_html_content)
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -120,13 +128,36 @@ class OutputPanel(QWidget):
     
     def set_output(self, text):
         """Set the processed output text with markdown formatting"""
+        self._current_output = text
         html_text = MarkdownFormatter.markdown_to_html(text)
-        self.output_text.setHtml(html_text)
-        
-        # Scroll to the bottom
-        cursor = self.output_text.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.output_text.setTextCursor(cursor)
+        self.html_update.emit(html_text)
+    
+    def append_output(self, new_text):
+        """Append text to the current output, preserving markdown formatting"""
+        # If the new text starts with a newline and we already have content,
+        # remove the newline to prevent double spacing
+        if new_text.startswith('\n') and self._current_output:
+            new_text = new_text[1:]
+            
+        self._current_output += new_text
+        html_text = MarkdownFormatter.markdown_to_html(self._current_output)
+        self.html_update.emit(html_text)
+    
+    @pyqtSlot(str)
+    def _update_html_content(self, html):
+        """Update the HTML content in the main thread"""
+        self.output_text.setHtml(html)
+        if self._auto_scroll:
+            self._scroll_to_bottom()
+    
+    def _scroll_to_bottom(self):
+        """Scroll the output text to the bottom"""
+        scrollbar = self.output_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def set_auto_scroll(self, enabled):
+        """Enable or disable auto-scrolling"""
+        self._auto_scroll = enabled
     
     def set_output_json(self, json_data):
         """Set the output to formatted JSON"""
@@ -138,3 +169,4 @@ class OutputPanel(QWidget):
         """Clear both text fields"""
         self.transcript_text.clear()
         self.output_text.clear()
+        self._current_output = ""
