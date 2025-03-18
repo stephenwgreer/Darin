@@ -69,19 +69,19 @@ class ControlsPanel(QWidget):
         self.topic_button.setEnabled(False)
         layout.addWidget(self.topic_button)
         
-        # Banking insights
-        self.insights_button = QPushButton("Banking Practitioner Insights")
-        self.insights_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.insights_button.clicked.connect(self.insights_clicked.emit)
-        self.insights_button.setEnabled(False)
-        layout.addWidget(self.insights_button)
-        
         # Meeting summary
         self.summary_button = QPushButton("Meeting Summary")
         self.summary_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.summary_button.clicked.connect(self.summary_clicked.emit)
         self.summary_button.setEnabled(False)
         layout.addWidget(self.summary_button)
+        
+        # Banking insights
+        self.insights_button = QPushButton("Banking Practitioner Insights")
+        self.insights_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
+        self.insights_button.clicked.connect(self.insights_clicked.emit)
+        self.insights_button.setEnabled(False)
+        layout.addWidget(self.insights_button)
         
         # Follow-up questions
         self.questions_button = QPushButton("Generate Follow-up Questions")
