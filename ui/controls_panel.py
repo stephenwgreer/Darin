@@ -10,12 +10,15 @@ class ControlsPanel(QWidget):
     record_clicked = pyqtSignal()
     save_clicked = pyqtSignal()
     transcribe_clicked = pyqtSignal()
-    process_clicked = pyqtSignal()
     topics_clicked = pyqtSignal()
     insights_clicked = pyqtSignal()
     summary_clicked = pyqtSignal()
     questions_clicked = pyqtSignal()
     sentiment_clicked = pyqtSignal()
+    fill_gaps_clicked = pyqtSignal()
+    brainstorm_clicked = pyqtSignal()
+    company_fit_clicked = pyqtSignal()
+    fact_check_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,13 +51,6 @@ class ControlsPanel(QWidget):
         self.transcribe_button.clicked.connect(self.transcribe_clicked.emit)
         self.transcribe_button.setEnabled(False)
         layout.addWidget(self.transcribe_button)
-        
-        # Process button
-        self.process_button = QPushButton("Process with Claude")
-        self.process_button.setFont(QFont("Arial", 12))
-        self.process_button.clicked.connect(self.process_clicked.emit)
-        self.process_button.setEnabled(False)
-        layout.addWidget(self.process_button)
         
         # Spacer
         layout.addSpacing(20)
@@ -94,6 +90,30 @@ class ControlsPanel(QWidget):
         self.sentiment_button.setEnabled(False)
         layout.addWidget(self.sentiment_button)
         
+        # Fill in gaps in reasoning
+        self.fill_gaps_button = QPushButton("Fill Gaps in Reasoning")
+        self.fill_gaps_button.clicked.connect(self.fill_gaps_clicked.emit)
+        self.fill_gaps_button.setEnabled(False)
+        layout.addWidget(self.fill_gaps_button)
+        
+        # Brainstorm
+        self.brainstorm_button = QPushButton("Brainstorm Questions")
+        self.brainstorm_button.clicked.connect(self.brainstorm_clicked.emit)
+        self.brainstorm_button.setEnabled(False)
+        layout.addWidget(self.brainstorm_button)
+        
+        # Company fit
+        self.company_fit_button = QPushButton("SAS Viya Alignment")
+        self.company_fit_button.clicked.connect(self.company_fit_clicked.emit)
+        self.company_fit_button.setEnabled(False)
+        layout.addWidget(self.company_fit_button)
+        
+        # Fact checking
+        self.fact_check_button = QPushButton("Fact Check Transcript")
+        self.fact_check_button.clicked.connect(self.fact_check_clicked.emit)
+        self.fact_check_button.setEnabled(False)
+        layout.addWidget(self.fact_check_button)
+        
         # Spacer
         layout.addSpacing(20)
         
@@ -131,7 +151,10 @@ class ControlsPanel(QWidget):
         self.summary_button.setEnabled(enabled)
         self.questions_button.setEnabled(enabled)
         self.sentiment_button.setEnabled(enabled)
-        self.process_button.setEnabled(enabled)
+        self.fill_gaps_button.setEnabled(enabled)
+        self.brainstorm_button.setEnabled(enabled)
+        self.company_fit_button.setEnabled(enabled)
+        self.fact_check_button.setEnabled(enabled)
     
     def update_buffer_info(self, seconds, max_minutes):
         """Update buffer information display"""

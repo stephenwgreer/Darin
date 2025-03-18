@@ -79,13 +79,6 @@ class MainWindow(QMainWindow):
         
         header_layout.addStretch()
         
-        # Replace settings button with larger logo
-        large_logo_label = QLabel()
-        large_logo = QPixmap("assets/Darin_Round.png")
-        large_logo = large_logo.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio)
-        large_logo_label.setPixmap(large_logo)
-        header_layout.addWidget(large_logo_label)
-        
         main_layout.addWidget(header_widget)
         
         ########################
@@ -120,12 +113,19 @@ class MainWindow(QMainWindow):
         self.controls_panel.record_clicked.connect(self.toggle_recording)
         self.controls_panel.save_clicked.connect(self.save_audio_buffer)
         self.controls_panel.transcribe_clicked.connect(self.transcribe_buffer)
-        self.controls_panel.process_clicked.connect(self.process_transcript)
+        
+        # Original prompt buttons
         self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT))
         self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(None, is_insights=True))
         self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT))
         self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT))
         self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT))
+        
+        # New prompt buttons
+        self.controls_panel.fill_gaps_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FILL_IN_GAPS_PROMPT))
+        self.controls_panel.brainstorm_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(BRAINSTORM_PROMPT))
+        self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT))
+        self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -179,38 +179,6 @@ class MainWindow(QMainWindow):
             self.transcription_complete.emit(text)
         except Exception as e:
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
-    
-    def process_transcript(self):
-        if self.is_processing:
-            return
-            
-        # Disable button to prevent multiple clicks
-        self.controls_panel.process_button.setEnabled(False)
-        self.controls_panel.process_button.setText("Processing...")
-        self.is_processing = True
-        
-        # Get the current transcript
-        transcript = self.current_transcript
-        
-        if not transcript:
-            self.controls_panel.process_button.setText("Process with Claude")
-            self.controls_panel.process_button.setEnabled(True)
-            self.is_processing = False
-            QMessageBox.warning(self, "Processing Error", "No transcript to process")
-            return
-        
-        # Start processing in a separate thread
-        threading.Thread(target=self._process_thread, args=(transcript,)).start()
-    
-    def _process_thread(self, transcript):
-        """Background thread for API processing"""
-        try:
-            result = self.api_client.process_with_anthropic(transcript)
-            self.processing_complete.emit(result)
-        except Exception as e:
-            self.processing_complete.emit({"error": str(e)})
-        finally:
-            self.is_processing = False
     
     def run_prompt_with_auto_transcribe(self, prompt_template=None, is_insights=False):
         """Auto transcribe and then run a specific prompt"""
@@ -331,7 +299,7 @@ class MainWindow(QMainWindow):
             
             # Extract topics first
             self.progress_update.emit("Extracting main topics...")
-            topics_result = process_with_template(client, transcript, TOPIC_SUMMARY_PROMPT)
+            topics_result = process_with_template(client, transcript, DEFAULT_TOPIC_EXTRACTION_PROMPT)
             
             # Parse topics from JSON with better error handling
             try:
@@ -436,11 +404,9 @@ class MainWindow(QMainWindow):
             # Format the entire result as pretty JSON
             self.output_panel.set_output_json(result)
         
-        # Always re-enable the process button
-        self.controls_panel.process_button.setText("Process with Claude")
-        self.controls_panel.process_button.setEnabled(True)
+        # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
-        
+    
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""

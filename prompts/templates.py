@@ -3,8 +3,9 @@ DEFAULT_TOPIC_EXTRACTION_PROMPT = """
 Analyze the following transcript from a work call and summarize the topic three topics discussed 
 in the transcription.
 
-The first topic should be the strongest one, the second topic should be the second strongest, and 
-the third topic should be the third strongest.
+The first topic should be the MOST RECENT topic discussed (since this is a transcript, this is the 
+last few setences of the transcript), the second topic should be the second strongest of the entire transcript, 
+and the third topic should be the third strongest.
 
 I want the topics to be relevant to a follow-up prompt which take each topic and then distill 
 practitioner level insights.
@@ -182,7 +183,10 @@ Text to analyze:
 SENTIMENT_ANALYSIS_PROMPT = """
 Analyze the sentiment and emotional tone of this conversation transcript.
 Identify any tensions, positive moments, or shifts in tone throughout the discussion.
-Return a JSON object with "overall_sentiment" and "key_moments" fields.
+Return bullet points with "overall_sentiment" and "key_moments" sub-bullets.
+Overall sentiment: [Positive/Negative/Neutral]
+Key moments:
+- [Brief description]
 
 Text to analyze:
 {transcript}
