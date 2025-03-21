@@ -79,3 +79,28 @@ class ContinuousRecorder:
         """Get the current buffer length in seconds"""
         with self.buffer_lock:
             return len(self.audio_buffer) * self.chunk_seconds
+    
+    def get_last_n_seconds(self, seconds):
+        """Get the last N seconds of audio from the buffer"""
+        with self.buffer_lock:
+            if not self.audio_buffer:
+                return None
+                
+            # Calculate how many chunks we need
+            chunks_needed = seconds // self.chunk_seconds
+            if chunks_needed == 0:
+                chunks_needed = 1  # At least get one chunk
+                
+            # Get the last N chunks
+            chunks = self.audio_buffer[-chunks_needed:]
+            
+            # Combine chunks into one array
+            if len(chunks) > 1:
+                combined_data = np.concatenate(chunks, axis=0)
+            else:
+                combined_data = chunks[0]
+                
+            # Get mono audio (first channel)
+            mono_data = combined_data[:, 0]
+            
+            return mono_data

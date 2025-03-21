@@ -21,7 +21,6 @@ class MainWindow(QMainWindow):
     recording_stopped = pyqtSignal()
     transcription_complete = pyqtSignal(str)
     processing_complete = pyqtSignal(dict)
-    buffer_updated = pyqtSignal(float)
     progress_update = pyqtSignal(str)  # Signal for thread-safe progress updates
     stream_update = pyqtSignal(str)  # New signal for streaming updates
     
@@ -38,7 +37,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(app_icon)
             
         # Initialize components
-        self.recorder = ContinuousRecorder(buffer_minutes=5)
+        self.recorder = ContinuousRecorder(buffer_minutes=3)
         self.api_client = ApiClient()
         self.current_transcript = ""
         self.is_processing = False  # Track if we're currently processing
@@ -48,11 +47,6 @@ class MainWindow(QMainWindow):
         
         # Connect signals to slots
         self.setup_connections()
-        
-        # Start buffer update timer
-        self.buffer_timer = QTimer(self)
-        self.buffer_timer.timeout.connect(self.update_buffer_info)
-        self.buffer_timer.start(1000)  # Update every second
     
     def setup_ui(self):
         ########################
@@ -116,8 +110,9 @@ class MainWindow(QMainWindow):
     def setup_connections(self):
         # Connect control panel signals
         self.controls_panel.record_clicked.connect(self.toggle_recording)
-        self.controls_panel.save_clicked.connect(self.save_audio_buffer)
         self.controls_panel.transcribe_clicked.connect(self.transcribe_buffer)
+        self.controls_panel.transcribe_last_30_clicked.connect(self.transcribe_last_30_seconds)
+        self.controls_panel.clear_output_clicked.connect(self.clear_output)
         
         # Original prompt buttons
         self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT))
@@ -137,7 +132,6 @@ class MainWindow(QMainWindow):
         self.recording_stopped.connect(self.on_recording_stopped)
         self.transcription_complete.connect(self.on_transcription_complete)
         self.processing_complete.connect(self.on_processing_complete)
-        self.buffer_updated.connect(self.on_buffer_updated)
         self.progress_update.connect(self.on_progress_update)
         self.stream_update.connect(self.on_stream_update)
     
@@ -146,20 +140,17 @@ class MainWindow(QMainWindow):
             # Start recording
             if self.recorder.start_recording():
                 self.recording_started.emit()
+                # Update UI to show recording state
+                self.controls_panel.set_recording_active(True)
         else:
             # Stop recording
             if self.recorder.stop_recording():
                 self.recording_stopped.emit()
-    
-    def save_audio_buffer(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"recording_{timestamp}.wav"
-        
-        audio_data = self.recorder.save_buffer(filename)
-        if audio_data is not None:
-            QMessageBox.information(self, "Save Complete", f"Audio saved to {filename}")
+                # Update UI to show stopped state
+                self.controls_panel.set_recording_active(False)
     
     def transcribe_buffer(self):
+        """Transcribe the current audio buffer"""
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_button.setEnabled(False)
         self.controls_panel.transcribe_button.setText("Transcribing...")
@@ -195,6 +186,9 @@ class MainWindow(QMainWindow):
         
         # Disable all prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(False)
+        
+        # Clear output before running new prompt
+        self.clear_output()
         
         # Update output to show progress
         self.output_panel.set_output("Capturing audio and transcribing...")
@@ -320,30 +314,23 @@ class MainWindow(QMainWindow):
                 # Fallback to a default topic
                 topics_data = {"topic1": "General banking topics"}
             
-            # Prepare accumulating output text
-            accumulated_output = "Generating insights...\n\n"
-            self.progress_update.emit(accumulated_output)
+            # Clear any previous status messages
+            self.output_panel.set_output("")
             
             # For each topic, get practitioner insights and update UI through signals
             for key, topic in topics_data.items():
-                # Update UI to show which topic we're processing
-                status_update = f"{accumulated_output}Processing {key}: {topic}...\n"
-                self.progress_update.emit(status_update)
+                # Format the prompt with the topic
+                formatted_prompt = PRACTITIONER_INSIGHTS_PROMPT.format(topic=topic)
                 
                 # Get insights for this topic
                 insight = self.api_client.process_with_anthropic(
                     transcript, 
-                    PRACTITIONER_INSIGHTS_PROMPT, 
+                    formatted_prompt,
                     stream=True,
-                    callback=handle_stream,
-                    topic=topic
+                    callback=handle_stream
                 )
-                
-                # Add to accumulated output
-                accumulated_output = f"{status_update}\n{key}: {topic}\n{insight}\n\n"
             
-            # Final result when complete
-            self.processing_complete.emit({"result": accumulated_output})
+            # No need for final emit since streaming updates will show the content
             
         except Exception as e:
             import traceback
@@ -352,49 +339,28 @@ class MainWindow(QMainWindow):
         finally:
             self.is_processing = False
     
-    def update_buffer_info(self):
-        """Update the buffer information display"""
-        if self.recorder.is_recording:
-            buffer_seconds = self.recorder.get_buffer_seconds()
-            max_minutes = self.recorder.buffer_minutes
-            
-            self.buffer_updated.emit(buffer_seconds)
-    
-    def show_settings(self):
-        """Show settings dialog"""
-        api_key = self.api_client.anthropic_api_key or ""
-        new_key, ok = QInputDialog.getText(
-            self, "API Settings", "Anthropic API Key:", 
-            QLineEdit.EchoMode.Password, api_key
-        )
-        
-        if ok and new_key:
-            self.api_client.anthropic_api_key = new_key
-    
     # Slots for custom signals
     @pyqtSlot()
     def on_recording_started(self):
-        self.controls_panel.set_recording_active(True)
-        
-        # Now we also enable the prompt buttons when recording starts
+        # Enable prompt buttons when recording starts
         self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot()
     def on_recording_stopped(self):
-        self.controls_panel.set_recording_active(False)
-        
         # Keep buttons enabled even when recording stops
         # as long as we have buffer data
         if self.recorder.get_buffer_seconds() > 0:
-            self.controls_panel.save_button.setEnabled(True)
             self.controls_panel.transcribe_button.setEnabled(True)
             self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
         self.output_panel.set_transcript(text)
+        # Reset both transcribe buttons
         self.controls_panel.transcribe_button.setText("Transcribe Buffer")
         self.controls_panel.transcribe_button.setEnabled(True)
+        self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
+        self.controls_panel.transcribe_last_30_button.setEnabled(True)
         
         # Enable all prompt buttons when we have a transcript
         self.controls_panel.set_prompt_buttons_enabled(True)
@@ -417,20 +383,35 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_stream_update(self, text):
         """Handle streaming updates in a thread-safe way"""
-        self.output_panel.append_output(text)
+        # Only append if the text isn't a status message
+        if not text.startswith("Generating insights") and not text.startswith("Processing topic"):
+            self.output_panel.append_output(text)
     
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
         self.output_panel.set_output(message)
-    
-    @pyqtSlot(float)
-    def on_buffer_updated(self, buffer_seconds):
-        max_minutes = self.recorder.buffer_minutes
-        self.controls_panel.update_buffer_info(buffer_seconds, max_minutes)
+
+    def clear_output(self):
+        """Clear the output panel"""
+        self.output_panel.set_output("")
+        self.current_transcript = ""  # Also clear the current transcript
+
+    def transcribe_last_30_seconds(self):
+        """Transcribe only the last 30 seconds of audio"""
+        # Disable button to prevent multiple clicks
+        self.controls_panel.transcribe_last_30_button.setEnabled(False)
+        self.controls_panel.transcribe_last_30_button.setText("Transcribing...")
         
-        # Enable buttons if we have buffer data
-        if buffer_seconds > 0:
-            self.controls_panel.save_button.setEnabled(True)
-            self.controls_panel.transcribe_button.setEnabled(True)
-            self.controls_panel.set_prompt_buttons_enabled(True)
+        # Get last 30 seconds of audio data
+        audio_data = self.recorder.get_last_n_seconds(30)
+        
+        if audio_data is None:
+            self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
+            self.controls_panel.transcribe_last_30_button.setEnabled(True)
+            QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
+            return
+        
+        # Start transcription in a separate thread
+        threading.Thread(target=self._transcribe_thread, 
+                        args=(audio_data, self.recorder.sample_rate)).start()

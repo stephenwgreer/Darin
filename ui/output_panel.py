@@ -16,6 +16,7 @@ class OutputPanel(QWidget):
         self.setup_ui()
         self._current_output = ""
         self._auto_scroll = True
+        self._user_scrolled = False
         
         # Connect the HTML update signal
         self.html_update.connect(self._update_html_content)
@@ -55,6 +56,10 @@ class OutputPanel(QWidget):
         self.output_text.setReadOnly(True)
         self.output_text.setMinimumHeight(200)
         self.output_text.setFont(FontManager.get_font(12, QFont.Weight.Normal))
+        
+        # Connect scrollbar signals
+        self.output_text.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        self.output_text.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
         
         # Set up the stylesheet for the output text
         self.output_text.setStyleSheet("""
@@ -122,6 +127,26 @@ class OutputPanel(QWidget):
         # Add splitter to layout
         layout.addWidget(self.vertical_splitter)
     
+    def _on_scroll(self, value):
+        """Handle manual scrolling"""
+        scrollbar = self.output_text.verticalScrollBar()
+        # Check if we're not at the bottom
+        self._user_scrolled = value < scrollbar.maximum()
+        
+        # If user scrolls to bottom, resume auto-scrolling
+        if value == scrollbar.maximum():
+            self._user_scrolled = False
+    
+    def _on_range_changed(self, min_val, max_val):
+        """Handle when the scrollbar range changes (new content added)"""
+        scrollbar = self.output_text.verticalScrollBar()
+        if self._user_scrolled:
+            # Calculate and maintain the relative position
+            current_value = scrollbar.value()
+            scrollbar.setValue(current_value)
+        elif self._auto_scroll:
+            self._scroll_to_bottom()
+            
     def set_transcript(self, text):
         """Set the transcript text"""
         self.transcript_text.setPlainText(text)
@@ -129,6 +154,7 @@ class OutputPanel(QWidget):
     def set_output(self, text):
         """Set the processed output text with markdown formatting"""
         self._current_output = text
+        self._user_scrolled = False  # Reset scroll state when setting new content
         html_text = MarkdownFormatter.markdown_to_html(text)
         self.html_update.emit(html_text)
     
@@ -146,8 +172,18 @@ class OutputPanel(QWidget):
     @pyqtSlot(str)
     def _update_html_content(self, html):
         """Update the HTML content in the main thread"""
+        # Store the current scroll position and whether we were at bottom
+        scrollbar = self.output_text.verticalScrollBar()
+        current_value = scrollbar.value()
+        was_at_bottom = current_value == scrollbar.maximum()
+        
+        # Update content
         self.output_text.setHtml(html)
-        if self._auto_scroll:
+        
+        # Restore scroll position
+        if self._user_scrolled and not was_at_bottom:
+            scrollbar.setValue(current_value)
+        elif was_at_bottom or self._auto_scroll:
             self._scroll_to_bottom()
     
     def _scroll_to_bottom(self):
@@ -158,6 +194,9 @@ class OutputPanel(QWidget):
     def set_auto_scroll(self, enabled):
         """Enable or disable auto-scrolling"""
         self._auto_scroll = enabled
+        if enabled:
+            self._user_scrolled = False
+            self._scroll_to_bottom()
     
     def set_output_json(self, json_data):
         """Set the output to formatted JSON"""
@@ -170,3 +209,4 @@ class OutputPanel(QWidget):
         self.transcript_text.clear()
         self.output_text.clear()
         self._current_output = ""
+        self._user_scrolled = False

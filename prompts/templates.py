@@ -3,13 +3,8 @@ DEFAULT_TOPIC_EXTRACTION_PROMPT = """
 Analyze the following transcript from a work call and summarize the topic three topics discussed 
 in the transcription.
 
-The first topic should be the MOST RECENT topic discussed (since this is a transcript, this is the 
-last few setences of the transcript), the second topic should be the second strongest of the entire transcript, 
-and the third topic should be the third strongest.
-
-I want the topics to be relevant to a follow-up prompt which take each topic and then distill 
-practitioner level insights.
-Keep that in mind when deciding what the topics are.
+Read the transcript carefully and decide what is the most relevent topic being discussed that is relevent to banking. That will be topic 1.
+Then create two more sub-topics related to the main topic and based on what was discussed in the transcript.
 
 Return the list of topics in JSON format which can be passed on to other applications where the 
 keys are topic 1, topic 2, and topic 3.
@@ -24,8 +19,18 @@ Text to analyze:
 
 # Practitioner insights prompt
 PRACTITIONER_INSIGHTS_PROMPT = """
-What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. Provide 5 bullets. 
-Return in markdown syntax to make it pretty formatting.
+What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. 
+Provide 5 bullets. Respond as if you are the practitioner making a declaritive and explanatory statement. 
+
+The format for the response should exactly what is below:
+
+## Topic: {topic}
++ Bullet 1
++ Bullet 2
++ Bullet 3
++ Bullet 4
++ Bullet 5
+
 """
 
 # Meeting summary prompt

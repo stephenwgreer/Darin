@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, 
                          QProgressBar, QSpacerItem, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
+from datetime import datetime
 
 from ui.font_manager import FontManager
 
@@ -10,8 +11,8 @@ class ControlsPanel(QWidget):
     
     # Signals
     record_clicked = pyqtSignal()
-    save_clicked = pyqtSignal()
     transcribe_clicked = pyqtSignal()
+    transcribe_last_30_clicked = pyqtSignal()
     topics_clicked = pyqtSignal()
     insights_clicked = pyqtSignal()
     summary_clicked = pyqtSignal()
@@ -21,10 +22,14 @@ class ControlsPanel(QWidget):
     brainstorm_clicked = pyqtSignal()
     company_fit_clicked = pyqtSignal()
     fact_check_clicked = pyqtSignal()
+    clear_output_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+        self._recording_start_time = None
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._update_timestamp)
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -40,12 +45,13 @@ class ControlsPanel(QWidget):
         self.record_button.clicked.connect(self.record_clicked.emit)
         layout.addWidget(self.record_button)
         
-        # Save button
-        self.save_button = QPushButton("Save Current Buffer")
-        self.save_button.setFont(FontManager.get_font(12, QFont.Weight.Normal))
-        self.save_button.clicked.connect(self.save_clicked.emit)
-        self.save_button.setEnabled(False)
-        layout.addWidget(self.save_button)
+        # Timestamp label
+        self.timestamp_label = QLabel("00:00:00")
+        self.timestamp_label.setFont(FontManager.get_font(12, QFont.Weight.Normal))
+        self.timestamp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.timestamp_label.setStyleSheet("color: #666666;")
+        self.timestamp_label.hide()
+        layout.addWidget(self.timestamp_label)
         
         # Transcribe button
         self.transcribe_button = QPushButton("Transcribe Buffer")
@@ -53,6 +59,20 @@ class ControlsPanel(QWidget):
         self.transcribe_button.clicked.connect(self.transcribe_clicked.emit)
         self.transcribe_button.setEnabled(False)
         layout.addWidget(self.transcribe_button)
+        
+        # Transcribe last 30 seconds button
+        self.transcribe_last_30_button = QPushButton("Transcribe Last 30s")
+        self.transcribe_last_30_button.setFont(FontManager.get_font(12, QFont.Weight.Normal))
+        self.transcribe_last_30_button.clicked.connect(self.transcribe_last_30_clicked.emit)
+        self.transcribe_last_30_button.setEnabled(False)
+        layout.addWidget(self.transcribe_last_30_button)
+        
+        # Clear output button
+        self.clear_button = QPushButton("Clear Output")
+        self.clear_button.setFont(FontManager.get_font(12, QFont.Weight.Normal))
+        self.clear_button.clicked.connect(self.clear_output_clicked.emit)
+        self.clear_button.setStyleSheet("background-color: #ffebee; color: #c62828;")
+        layout.addWidget(self.clear_button)
         
         # Spacer
         layout.addSpacing(20)
@@ -125,36 +145,32 @@ class ControlsPanel(QWidget):
         self.fact_check_button.setEnabled(False)
         layout.addWidget(self.fact_check_button)
         
-        # Spacer
-        layout.addSpacing(20)
-        
-        # Buffer info section
-        buffer_label = QLabel("Buffer Status")
-        buffer_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
-        layout.addWidget(buffer_label)
-        
-        # Buffer progress bar
-        self.buffer_progress = QProgressBar()
-        self.buffer_progress.setRange(0, 100)
-        self.buffer_progress.setValue(0)
-        layout.addWidget(self.buffer_progress)
-        
-        # Buffer info text
-        self.buffer_info = QLabel("Buffer: 0 seconds / 0 minutes")
-        self.buffer_info.setFont(FontManager.get_font(12, QFont.Weight.Normal))
-        layout.addWidget(self.buffer_info)
-        
         # Add stretch at the bottom
         layout.addStretch()
     
-    def set_recording_active(self, is_recording):
-        """Update UI for recording state"""
-        if is_recording:
-            self.record_button.setText("Stop Recording")
-            self.save_button.setEnabled(True)
-            self.transcribe_button.setEnabled(True)
+    def set_recording_active(self, active):
+        """Update UI state when recording starts/stops"""
+        self.record_button.setText("Stop Recording" if active else "Start Recording")
+        self.transcribe_button.setEnabled(True)
+        self.transcribe_last_30_button.setEnabled(True)
+        
+        if active:
+            self._recording_start_time = datetime.now()
+            self._timer.start(1000)  # Update every second
+            self.timestamp_label.show()
         else:
-            self.record_button.setText("Start Recording")
+            self._timer.stop()
+            self.timestamp_label.hide()
+            self.timestamp_label.setText("00:00:00")
+    
+    def _update_timestamp(self):
+        """Update the timestamp display"""
+        if self._recording_start_time:
+            elapsed = datetime.now() - self._recording_start_time
+            hours = elapsed.seconds // 3600
+            minutes = (elapsed.seconds % 3600) // 60
+            seconds = elapsed.seconds % 60
+            self.timestamp_label.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
     
     def set_prompt_buttons_enabled(self, enabled):
         """Enable or disable all prompt buttons"""
@@ -167,11 +183,3 @@ class ControlsPanel(QWidget):
         self.brainstorm_button.setEnabled(enabled)
         self.company_fit_button.setEnabled(enabled)
         self.fact_check_button.setEnabled(enabled)
-    
-    def update_buffer_info(self, seconds, max_minutes):
-        """Update buffer information display"""
-        minutes = seconds / 60
-        progress = min(100, int((seconds / (max_minutes * 60)) * 100))
-        
-        self.buffer_progress.setValue(progress)
-        self.buffer_info.setText(f"Buffer: {seconds:.1f} seconds / {minutes:.2f} minutes")
