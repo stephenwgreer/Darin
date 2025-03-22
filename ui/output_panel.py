@@ -3,6 +3,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QTextCursor
 
 from ui.font_manager import FontManager
+from ui.html_templates import (wrap_in_base_template, create_topic_section,
+                             create_insight_list, create_error_message,
+                             create_status_message)
 
 class OutputPanel(QWidget):
     """Right panel containing transcript and processed output"""
@@ -65,51 +68,106 @@ class OutputPanel(QWidget):
             QTextBrowser {
                 background-color: #1E1E1E;
                 color: #FFFFFF;
+                border: none;
+                padding: 10px;
             }
-            QTextBrowser code {
+            
+            .output-container {
+                margin: 10px;
+                padding: 10px;
+            }
+            
+            .topic-section {
+                margin-bottom: 20px;
+                padding: 15px;
+                background-color: #252526;
+                border-radius: 8px;
+                border-left: 4px solid #3498db;
+            }
+            
+            .topic-title {
+                font-size: 24px;
+                color: #FFFFFF;
+                margin: 0 0 15px 0;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #3498db;
+            }
+            
+            .insight-block {
+                margin: 15px 0;
+                padding: 12px;
+                background-color: #2D2D2D;
+                border-radius: 6px;
+            }
+            
+            .insight-header {
+                font-size: 18px;
+                color: #61AFEF;
+                margin: 0 0 10px 0;
+            }
+            
+            .insight-list {
+                margin: 0;
+                padding-left: 20px;
+            }
+            
+            .insight-item {
+                margin: 8px 0;
+                line-height: 1.5;
+                color: #D4D4D4;
+            }
+            
+            .error-message {
+                margin: 10px 0;
+                padding: 12px;
+                background-color: #442222;
+                border-left: 4px solid #E74C3C;
+                border-radius: 4px;
+            }
+            
+            .error-text {
+                color: #E74C3C;
+                margin: 0;
+            }
+            
+            .status-message {
+                margin: 10px 0;
+                padding: 12px;
+                background-color: #2C3E50;
+                border-left: 4px solid #3498DB;
+                border-radius: 4px;
+            }
+            
+            .status-text {
+                color: #3498DB;
+                margin: 0;
+            }
+            
+            code {
                 background-color: #2D2D2D;
                 padding: 1px 3px;
                 border-radius: 3px;
                 font-family: monospace;
                 color: #D4D4D4;
             }
-            QTextBrowser pre {
+            
+            pre {
                 background-color: #2D2D2D;
                 padding: 8px;
                 border-radius: 5px;
                 margin: 5px 0;
                 border: 1px solid #3E3E3E;
+                overflow-x: auto;
             }
-            QTextBrowser h1 { 
-                font-size: 24px; 
-                margin: 8px 0 4px 0;
-                color: #FFFFFF;
-            }
-            QTextBrowser h2 { 
-                font-size: 20px; 
-                margin: 6px 0 3px 0;
-                color: #FFFFFF;
-            }
-            QTextBrowser h3 { 
-                font-size: 16px; 
-                margin: 4px 0 2px 0;
-                color: #FFFFFF;
-            }
-            QTextBrowser p {
-                margin: 3px 0;
-            }
-            QTextBrowser ul, QTextBrowser ol {
-                margin: 3px 0;
-                padding-left: 20px;
-            }
-            QTextBrowser li {
-                margin: 2px 0;
-            }
-            QTextBrowser a { 
+            
+            a { 
                 color: #61AFEF;
+                text-decoration: none;
             }
-            QTextBrowser a:hover { 
+            
+            a:hover { 
                 color: #89C7F7;
+                text-decoration: underline;
             }
         """)
         
@@ -154,12 +212,20 @@ class OutputPanel(QWidget):
         """Set the output text as HTML"""
         self._current_output = text
         self._user_scrolled = False  # Reset scroll state when setting new content
-        self.html_update.emit(text)
+        self.html_update.emit(wrap_in_base_template(text))
     
     def append_output(self, text):
         """Append text to the current output as HTML"""
         self._current_output += text
-        self.html_update.emit(self._current_output)
+        self.html_update.emit(wrap_in_base_template(self._current_output))
+    
+    def set_error(self, message):
+        """Display an error message"""
+        self.set_output(create_error_message(message))
+    
+    def set_status(self, message):
+        """Display a status message"""
+        self.set_output(create_status_message(message))
     
     @pyqtSlot(str)
     def _update_html_content(self, html):

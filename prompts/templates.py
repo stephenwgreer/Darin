@@ -22,15 +22,22 @@ PRACTITIONER_INSIGHTS_PROMPT = """
 What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. 
 Provide 5 bullets. Respond as if you are the practitioner making a declaritive and explanatory statement. 
 
-The format for the response should exactly what is below:
+The format for the response should be exactly as shown below. Use HTML tags as specified:
 
-## Topic: {topic}
-+ Bullet 1
-+ Bullet 2
-+ Bullet 3
-+ Bullet 4
-+ Bullet 5
+<div class="topic-section">
+    <h2 class="topic-title">{topic}</h2>
+    <div class="insight-block">
+        <ul class="insight-list">
+            <li class="insight-item">Insight 1</li>
+            <li class="insight-item">Insight 2</li>
+            <li class="insight-item">Insight 3</li>
+            <li class="insight-item">Insight 4</li>
+            <li class="insight-item">Insight 5</li>
+        </ul>
+    </div>
+</div>
 
+Return ONLY this HTML structure with your insights. Do not include any other text or formatting.
 """
 
 # Meeting summary prompt
@@ -185,7 +192,23 @@ Transcript:
 FOLLOW_UP_QUESTIONS_PROMPT = """
 Based on the following transcript, generate 5 insightful follow-up questions that would 
 help clarify or expand on the topics discussed.
-Return in markdown syntax to make it pretty formatting.
+
+The format for the response should be exactly as shown below. Use HTML tags as specified:
+
+<div class="topic-section">
+    <h2 class="topic-title">Follow-up Questions</h2>
+    <div class="insight-block">
+        <ul class="insight-list">
+            <li class="insight-item">Question 1</li>
+            <li class="insight-item">Question 2</li>
+            <li class="insight-item">Question 3</li>
+            <li class="insight-item">Question 4</li>
+            <li class="insight-item">Question 5</li>
+        </ul>
+    </div>
+</div>
+
+Return ONLY this HTML structure with your questions. Do not include any other text or formatting.
 
 Text to analyze:
 {transcript}

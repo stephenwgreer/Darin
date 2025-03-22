@@ -32,6 +32,9 @@ class ApiClient:
         else:
             content = text
             
+        print("\n=== Sending prompt to Claude ===")
+        print(f"Content:\n{content}\n")
+            
         try:
             if stream:
                 # Stream the response
@@ -42,9 +45,13 @@ class ApiClient:
                 ) as stream:
                     response_text = ""
                     for text in stream.text_stream:
+                        print(f"Streaming chunk: {text}")  # Debug print
                         response_text += text
                         if callback:
                             callback(text)
+                    print("\n=== Complete response ===")
+                    print(response_text)
+                    print("========================\n")
                     return response_text
             else:
                 # Get complete response

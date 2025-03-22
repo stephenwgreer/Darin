@@ -42,6 +42,12 @@ class MainWindow(QMainWindow):
         self.current_transcript = ""
         self.is_processing = False  # Track if we're currently processing
         
+        # HTML streaming state
+        self._html_buffer = ""  # Buffer for accumulating HTML chunks
+        self._current_element = None  # Track the current HTML element being built
+        self._element_stack = []  # Stack to track nested HTML elements
+        self._is_first_update = True  # Track if this is the first stream update
+        
         # Setup UI
         self.setup_ui()
         
@@ -330,12 +336,10 @@ class MainWindow(QMainWindow):
                     callback=handle_stream
                 )
             
-            # No need for final emit since streaming updates will show the content
-            
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            self.processing_complete.emit({"error": f"Error processing insights: {str(e)}\n\n{error_details}"})
+            self.output_panel.set_error(f"Error processing insights: {str(e)}\n\n{error_details}")
         finally:
             self.is_processing = False
     
@@ -368,34 +372,85 @@ class MainWindow(QMainWindow):
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
         if "error" in result:
-            # Show error
-            self.output_panel.set_output(f"Error: {result['error']}")
+            # Show error using template
+            self.output_panel.set_error(result["error"])
         elif "result" in result:
             # Show result text
             self.output_panel.set_output(result["result"])
         else:
-            # Format the entire result as pretty JSON
-            self.output_panel.set_output_json(result)
+            # Format the result as a topic section
+            content = json.dumps(result, indent=2)
+            self.output_panel.set_output(create_topic_section("Processing Results", f"<pre>{content}</pre>"))
         
         # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
     
+    def _process_html_chunk(self, chunk):
+        """Process a chunk of HTML text and return complete elements if found."""
+        self._html_buffer += chunk
+        
+        # Look for complete HTML elements
+        while True:
+            # If we don't have a current element, look for the start of one
+            if not self._current_element:
+                # Find the next opening tag
+                start_idx = self._html_buffer.find("<div class=\"topic-section\">")
+                if start_idx == -1:
+                    break  # No new element found
+                    
+                # Found a new element
+                self._current_element = "topic-section"
+                self._element_stack.append(self._current_element)
+                
+            # Look for the end of the current element
+            if self._current_element == "topic-section":
+                # Check if we have the complete topic section
+                end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)  # Find second closing div
+                if end_idx == -1:
+                    break  # Element not complete yet
+                    
+                # We found a complete element
+                complete_element = self._html_buffer[:end_idx + 6]  # Include the closing tag
+                self._html_buffer = self._html_buffer[end_idx + 6:]  # Remove the complete element from buffer
+                self._current_element = None
+                self._element_stack.pop()
+                
+                return complete_element
+                
+        return None  # No complete elements found
+
     @pyqtSlot(str)
     def on_stream_update(self, text):
         """Handle streaming updates in a thread-safe way"""
-        # Only append if the text isn't a status message
-        if not text.startswith("Generating insights") and not text.startswith("Processing topic"):
-            self.output_panel.append_output(text)
-    
+        # Skip status messages
+        if text.startswith("Generating insights") or text.startswith("Processing topic"):
+            return
+            
+        # Process the HTML chunk
+        complete_element = self._process_html_chunk(text)
+        
+        if complete_element:
+            # If this is the first update, set the output
+            if self._is_first_update:
+                self.output_panel.set_output(complete_element)
+                self._is_first_update = False
+            else:
+                # Append subsequent elements
+                self.output_panel.append_output(complete_element)
+                
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
-        self.output_panel.set_output(message)
+        self.output_panel.set_status(message)
 
     def clear_output(self):
-        """Clear the output panel"""
+        """Clear the output panel and reset HTML streaming state"""
         self.output_panel.set_output("")
-        self.current_transcript = ""  # Also clear the current transcript
+        self.current_transcript = ""
+        self._html_buffer = ""
+        self._current_element = None
+        self._element_stack = []
+        self._is_first_update = True
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
