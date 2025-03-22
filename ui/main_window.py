@@ -47,6 +47,7 @@ class MainWindow(QMainWindow):
         self._current_element = None  # Track the current HTML element being built
         self._element_stack = []  # Stack to track nested HTML elements
         self._is_first_update = True  # Track if this is the first stream update
+        self._current_list_items = []  # Track list items for the current section
         
         # Setup UI
         self.setup_ui()
@@ -398,26 +399,49 @@ class MainWindow(QMainWindow):
                 if start_idx == -1:
                     break  # No new element found
                     
-                # Found a new element
+                # Found a new element, initialize the section
                 self._current_element = "topic-section"
                 self._element_stack.append(self._current_element)
+                self._current_list_items = []
                 
-            # Look for the end of the current element
+            # Look for complete list items within the current section
             if self._current_element == "topic-section":
-                # Check if we have the complete topic section
-                end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)  # Find second closing div
-                if end_idx == -1:
-                    break  # Element not complete yet
+                # Try to find a complete list item
+                item_start = self._html_buffer.find("<li class=\"insight-item\">")
+                if item_start != -1:
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end != -1:
+                        # Extract the complete list item
+                        item = self._html_buffer[item_start:item_end + 5]
+                        self._current_list_items.append(item)
+                        # Remove the processed item from buffer
+                        self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
+                        
+                        # Return the current section with updated list items
+                        section = f"""<div class="topic-section">
+    <h2 class="topic-title">Follow-up Questions</h2>
+    <div class="insight-block">
+        <ul class="insight-list">
+            {chr(10).join(self._current_list_items)}
+        </ul>
+    </div>
+</div>"""
+                        return section
+                
+                # Check if the section is complete
+                end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
+                if end_idx != -1:
+                    # Section is complete, reset state
+                    complete_element = self._html_buffer[:end_idx + 6]
+                    self._html_buffer = self._html_buffer[end_idx + 6:]
+                    self._current_element = None
+                    self._element_stack.pop()
+                    self._current_list_items = []
+                    return complete_element
                     
-                # We found a complete element
-                complete_element = self._html_buffer[:end_idx + 6]  # Include the closing tag
-                self._html_buffer = self._html_buffer[end_idx + 6:]  # Remove the complete element from buffer
-                self._current_element = None
-                self._element_stack.pop()
-                
-                return complete_element
-                
-        return None  # No complete elements found
+            break  # No complete elements found
+            
+        return None
 
     @pyqtSlot(str)
     def on_stream_update(self, text):
@@ -451,6 +475,7 @@ class MainWindow(QMainWindow):
         self._current_element = None
         self._element_stack = []
         self._is_first_update = True
+        self._current_list_items = []
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
