@@ -396,53 +396,60 @@ class MainWindow(QMainWindow):
         while True:
             # If we don't have a current element, look for the start of one
             if not self._current_element:
-                # Find the next opening tag
+                # Find the next opening tag for a topic section
                 start_idx = self._html_buffer.find("<div class=\"topic-section\">")
                 if start_idx == -1:
-                    break  # No new element found
-                    
-                # Found a new element, initialize the section
-                self._current_element = "topic-section"
-                self._element_stack.append(self._current_element)
-                self._current_list_items = []
+                    # If no topic section, look for individual list items
+                    item_start = self._html_buffer.find("<li class=\"insight-item\">")
+                    if item_start != -1:
+                        item_end = self._html_buffer.find("</li>", item_start)
+                        if item_end != -1:
+                            # Extract the complete list item
+                            item = self._html_buffer[item_start:item_end + 5]
+                            # Remove the processed item from buffer
+                            self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
+                            return item
+                    break  # No new elements found
                 
-            # Look for complete list items within the current section
-            if self._current_element == "topic-section":
-                # Try to find a complete list item
-                item_start = self._html_buffer.find("<li class=\"insight-item\">")
-                if item_start != -1:
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end != -1:
-                        # Extract the complete list item
-                        item = self._html_buffer[item_start:item_end + 5]
-                        self._current_list_items.append(item)
-                        # Remove the processed item from buffer
-                        self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
-                        
-                        # Return the current section with updated list items
-                        section = f"""<div class="topic-section">
-    <h2 class="topic-title">Follow-up Questions</h2>
-    <div class="insight-block">
-        <ul class="insight-list">
-            {chr(10).join(self._current_list_items)}
-        </ul>
-    </div>
-</div>"""
+                # Found a topic section, extract the title if present
+                title_start = self._html_buffer.find("<h2 class=\"topic-title\">", start_idx)
+                title_end = self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
+                
+                if title_start != -1 and title_end != -1:
+                    # Found a title, extract the complete section
+                    section_end = self._html_buffer.find("</div>", title_end)
+                    if section_end != -1:
+                        # Extract the complete section
+                        section = self._html_buffer[start_idx:section_end + 6]
+                        # Remove the processed section from buffer
+                        self._html_buffer = self._html_buffer[:start_idx] + self._html_buffer[section_end + 6:]
                         return section
+                    else:
+                        # Title found but section not complete
+                        self._current_element = {
+                            "type": "topic-section",
+                            "title": self._html_buffer[title_start + len("<h2 class=\"topic-title\">"):title_end].strip()
+                        }
+                else:
+                    # No title found yet, keep accumulating
+                    self._current_element = {"type": "topic-section", "title": None}
                 
-                # Check if the section is complete
+                self._element_stack.append(self._current_element)
+            
+            # If we have a current element, try to complete it
+            if self._current_element and self._current_element["type"] == "topic-section":
+                # Look for the end of the section
                 end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
                 if end_idx != -1:
-                    # Section is complete, reset state
+                    # Section is complete, extract it all
                     complete_element = self._html_buffer[:end_idx + 6]
                     self._html_buffer = self._html_buffer[end_idx + 6:]
                     self._current_element = None
                     self._element_stack.pop()
-                    self._current_list_items = []
                     return complete_element
-                    
-            break  # No complete elements found
             
+            break  # No complete elements found
+        
         return None
 
     @pyqtSlot(str)
@@ -451,7 +458,7 @@ class MainWindow(QMainWindow):
         # Skip status messages
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
-            
+        
         # Process the HTML chunk
         complete_element = self._process_html_chunk(text)
         
@@ -461,9 +468,21 @@ class MainWindow(QMainWindow):
                 self.output_panel.set_output(complete_element)
                 self._is_first_update = False
             else:
-                # Append subsequent elements
-                self.output_panel.append_output(complete_element)
-                
+                # For subsequent elements, we want to append only new content
+                # First, check if this is a new section or a list item
+                if complete_element.startswith("<div class=\"topic-section\">"):
+                    # This is a new section, append it
+                    self.output_panel.append_output(complete_element)
+                elif complete_element.startswith("<li class=\"insight-item\">"):
+                    # This is a list item, append it to the current list
+                    self.output_panel.append_output(
+                        f"""<div class="insight-block">
+        <ul class="insight-list">
+            {complete_element}
+        </ul>
+    </div>"""
+                    )
+    
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
