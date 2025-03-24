@@ -152,39 +152,51 @@ Transcript:
 # Fact checking prompt:
 FACT_CHECKING_PROMPT = """
 Identify and evaluate factual claims in the following transcript.
-Task: Extract specific factual statements and rate their accuracy on a scale of 1-5.
-Respond with the following:
-FACTUAL_CLAIMS:
-
-"[Direct quote of factual claim from transcript]"
-
-Accuracy Score: [1-5]
-Explanation: [Brief explanation of why this score was assigned]
-Correct Information: [The accurate information, if score is <5]
-
-
-"[Direct quote of factual claim from transcript]"
-
-Accuracy Score: [1-5]
-Explanation: [Brief explanation of why this score was assigned]
-Correct Information: [The accurate information, if score is <5]
-
-
-"[Direct quote of factual claim from transcript]"
-
-Accuracy Score: [1-5]
-Explanation: [Brief explanation of why this score was assigned]
-Correct Information: [The accurate information, if score is <5]
-
-
-
-SCORING GUIDE:
+Rate each claim's accuracy on a scale of 1-5 where:
 1 = Not accurate (completely false)
 2 = Mostly inaccurate (contains some truth but is misleading)
 3 = Partially accurate (mix of accurate and inaccurate elements)
 4 = Mostly accurate (generally true with minor errors or omissions)
 5 = Totally accurate (completely true and precise)
-Transcript:
+
+The format for the response should be exactly as shown below. Use HTML tags as specified:
+
+<div class="topic-section">
+    <h2 class="topic-title">Fact Check Analysis</h2>
+    <div class="insight-block">
+        <ul class="insight-list">
+            <li class="insight-item">
+                <strong>Claim 1:</strong> "[Direct quote]"<br>
+                <strong>Accuracy:</strong> [1-5]/5<br>
+                <strong>Correction:</strong> [Accurate information if score < 5]
+            </li>
+            <li class="insight-item">
+                <strong>Claim 2:</strong> "[Direct quote]"<br>
+                <strong>Accuracy:</strong> [1-5]/5<br>
+                <strong>Correction:</strong> [Accurate information if score < 5]
+            </li>
+            <li class="insight-item">
+                <strong>Claim 3:</strong> "[Direct quote]"<br>
+                <strong>Accuracy:</strong> [1-5]/5<br>
+                <strong>Correction:</strong> [Accurate information if score < 5]
+            </li>
+            <li class="insight-item">
+                <strong>Claim 4:</strong> "[Direct quote]"<br>
+                <strong>Accuracy:</strong> [1-5]/5<br>
+                <strong>Correction:</strong> [Accurate information if score < 5]
+            </li>
+            <li class="insight-item">
+                <strong>Claim 5:</strong> "[Direct quote]"<br>
+                <strong>Accuracy:</strong> [1-5]/5<br>
+                <strong>Correction:</strong> [Accurate information if score < 5]
+            </li>
+        </ul>
+    </div>
+</div>
+
+Return ONLY this HTML structure with your analysis. Do not include any other text or formatting.
+
+Text to analyze:
 {transcript}
 """
 
@@ -253,8 +265,24 @@ Text to analyze:
 
 # Topic summary prompt
 TOPIC_SUMMARY_PROMPT = """
-Summarize the following transcript from a work call.
+Analyze the following transcript from a work call and identify the three main topics discussed.
+Focus on topics that are most relevant to banking and financial services.
 
-Text to Summarize:
+The format for the response should be exactly as shown below. Use HTML tags as specified:
+
+<div class="topic-section">
+    <h2 class="topic-title">Key Topics</h2>
+    <div class="insight-block">
+        <ul class="insight-list">
+            <li class="insight-item">[Primary banking/financial topic]</li>
+            <li class="insight-item">[Secondary related topic]</li>
+            <li class="insight-item">[Third related topic]</li>
+        </ul>
+    </div>
+</div>
+
+Return ONLY this HTML structure with your analysis. Do not include any other text or formatting.
+
+Text to analyze:
 {transcript}
 """
