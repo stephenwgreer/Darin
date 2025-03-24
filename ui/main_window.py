@@ -360,7 +360,9 @@ class MainWindow(QMainWindow):
     
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
-        self.output_panel.set_transcript(text)
+        # Display transcript in the output panel
+        self.output_panel.set_output(f"<div class='transcript-text'>{text}</div>")
+        
         # Reset both transcribe buttons
         self.controls_panel.transcribe_button.setText("Transcribe Buffer")
         self.controls_panel.transcribe_button.setEnabled(True)

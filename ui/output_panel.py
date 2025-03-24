@@ -149,6 +149,17 @@ class OutputPanel(QWidget):
                 color: #89C7F7;
                 text-decoration: underline;
             }
+            
+            .transcript-text {
+                font-family: monospace;
+                line-height: 1.5;
+                white-space: pre-wrap;
+                background-color: #252526;
+                padding: 12px;
+                border-radius: 5px;
+                border-left: 4px solid #61AFEF;
+                margin-bottom: 15px;
+            }
         """)
         
         # Also set this panel's background a bit darker than the app's default background
