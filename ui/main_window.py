@@ -268,7 +268,17 @@ class MainWindow(QMainWindow):
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
-            self.output_panel.set_output("")  # Clear the output
+            
+            # Set up the static template based on the prompt type
+            template_type = self._setup_static_template(prompt_template)
+            
+            # Reset HTML streaming state for new dynamic content
+            self._html_buffer = ""
+            self._current_element = None
+            self._element_stack = []
+            self._is_first_update = False  # Already set up the template
+            self._current_list_items = []
+            self._template_type = template_type  # Store the template type for use in streaming
             
             def handle_stream(text):
                 """Callback to handle streaming text"""
@@ -459,29 +469,53 @@ class MainWindow(QMainWindow):
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
         
-        # Process the HTML chunk
-        complete_element = self._process_html_chunk(text)
-        
-        if complete_element:
-            # If this is the first update, set the output
-            if self._is_first_update:
-                self.output_panel.set_output(complete_element)
-                self._is_first_update = False
-            else:
-                # For subsequent elements, we want to append only new content
-                # First, check if this is a new section or a list item
-                if complete_element.startswith("<div class=\"topic-section\">"):
-                    # This is a new section, append it
-                    self.output_panel.append_output(complete_element)
-                elif complete_element.startswith("<li class=\"insight-item\">"):
-                    # This is a list item, append it to the current list
-                    self.output_panel.append_output(
-                        f"""<div class="insight-block">
-        <ul class="insight-list">
-            {complete_element}
-        </ul>
-    </div>"""
-                    )
+        # For follow-up questions, we only care about list items
+        if hasattr(self, '_template_type') and self._template_type == "follow-up-questions":
+            # Look for complete list items
+            self._html_buffer += text
+            
+            # Find and extract complete list items
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                    
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                # Extract the complete item
+                item = self._html_buffer[item_start:item_end + 5]
+                
+                # Remove from buffer
+                self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
+                
+                # Add to output
+                self.output_panel.append_to_dynamic_content(item)
+        else:
+            # Default behavior for other template types
+            complete_element = self._process_html_chunk(text)
+            
+            if complete_element:
+                # If this is the first update, set the output
+                if self._is_first_update:
+                    self.output_panel.set_output(complete_element)
+                    self._is_first_update = False
+                else:
+                    # For subsequent elements, we want to append only new content
+                    # First, check if this is a new section or a list item
+                    if complete_element.startswith("<div class=\"topic-section\">"):
+                        # This is a new section, append it
+                        self.output_panel.append_output(complete_element)
+                    elif complete_element.startswith("<li class=\"insight-item\">"):
+                        # This is a list item, append it to the current list
+                        self.output_panel.append_output(
+                            f"""<div class="insight-block">
+            <ul class="insight-list">
+                {complete_element}
+            </ul>
+        </div>"""
+                        )
     
     @pyqtSlot(str)
     def on_progress_update(self, message):
@@ -516,3 +550,58 @@ class MainWindow(QMainWindow):
         # Start transcription in a separate thread
         threading.Thread(target=self._transcribe_thread, 
                         args=(audio_data, self.recorder.sample_rate)).start()
+
+    def _setup_static_template(self, prompt_template):
+        """Set up a static template based on the prompt type"""
+        if prompt_template == FOLLOW_UP_QUESTIONS_PROMPT:
+            # Static template for follow-up questions
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Follow-up Questions</h2>
+                <div class="insight-block">
+                    <ul class="insight-list" id="dynamic-content">
+                        <!-- Dynamic content will be inserted here -->
+                    </ul>
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "follow-up-questions"
+        elif prompt_template == MEETING_SUMMARY_PROMPT:
+            # Static template for meeting summary
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Meeting Summary</h2>
+                <div class="insight-block" id="dynamic-content">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "meeting-summary"
+        elif prompt_template == TOPIC_SUMMARY_PROMPT:
+            # Static template for topic summary
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Key Topics</h2>
+                <div class="insight-block">
+                    <ul class="insight-list" id="dynamic-content">
+                        <!-- Dynamic content will be inserted here -->
+                    </ul>
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "topic-summary"
+        else:
+            # Generic template for other prompt types
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Results</h2>
+                <div class="insight-block" id="dynamic-content">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "generic"

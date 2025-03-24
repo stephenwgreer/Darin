@@ -232,3 +232,40 @@ class OutputPanel(QWidget):
         """Scroll the output text to the bottom"""
         scrollbar = self.output_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+    
+    def append_to_dynamic_content(self, content):
+        """Append content to the dynamic-content section of the template"""
+        # Get current HTML content
+        current_html = self.output_text.toHtml()
+        
+        # Find the dynamic content placeholder
+        placeholder_start = current_html.find('id="dynamic-content"')
+        if placeholder_start == -1:
+            # Fallback to regular append if placeholder not found
+            self.append_output(content)
+            return
+        
+        # Find the parent element closing tag
+        if "<ul" in current_html[placeholder_start-50:placeholder_start]:
+            # For list items, insert before the </ul> tag
+            closing_tag = "</ul>"
+        else:
+            # For other content, insert before the </div> tag
+            closing_tag = "</div>"
+        
+        # Find position to insert (before the closing tag)
+        parent_end = current_html.find(closing_tag, placeholder_start)
+        if parent_end == -1:
+            # Fallback to regular append if closing tag not found
+            self.append_output(content)
+            return
+        
+        # Insert the new content before the closing tag
+        updated_html = current_html[:parent_end] + content + current_html[parent_end:]
+        
+        # Update the HTML
+        self.output_text.setHtml(updated_html)
+        
+        # Scroll to bottom if auto-scroll is enabled
+        if self._auto_scroll and not self._user_scrolled:
+            self._scroll_to_bottom()
