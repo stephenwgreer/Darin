@@ -1,6 +1,8 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextBrowser, QScrollBar
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 
 from ui.font_manager import FontManager
 from ui.html_templates import (wrap_in_base_template, create_topic_section,
@@ -32,135 +34,83 @@ class OutputPanel(QWidget):
         output_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         layout.addWidget(output_label)
         
-        # Use QTextBrowser for HTML support
-        self.output_text = QTextBrowser()
-        self.output_text.setOpenExternalLinks(True)  # Allow clicking links
-        self.output_text.setReadOnly(True)
-        self.output_text.setFont(FontManager.get_font(12, QFont.Weight.Normal))
+        # Use QWebEngineView for better HTML support
+        self.output_text = QWebEngineView()
+        self.output_text.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        self.output_text.setHtml("")
         
-        # Connect scrollbar signals
-        self.output_text.verticalScrollBar().valueChanged.connect(self._on_scroll)
-        self.output_text.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
-        
-        # Set up the stylesheet for the output text
-        self.output_text.setStyleSheet("""
-            QTextBrowser {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-                border: none;
-                padding: 10px;
-                border-radius: 5px;
-            }
-            
-            .output-container {
-                margin: 10px;
-                padding: 10px;
-            }
-            
-            .topic-section {
-                margin-bottom: 20px;
-                padding: 15px;
-                background-color: #252526;
-                border-radius: 8px;
-                border-left: 4px solid #3498db;
-            }
-            
-            .topic-title {
-                font-size: 24px;
-                color: #FFFFFF;
-                margin: 0 0 15px 0;
-                padding-bottom: 8px;
-                border-bottom: 1px solid #3498db;
-            }
-            
-            .insight-block {
-                margin: 15px 0;
-                padding: 12px;
-                background-color: #2D2D2D;
-                border-radius: 6px;
-            }
-            
-            .insight-header {
-                font-size: 18px;
-                color: #61AFEF;
-                margin: 0 0 10px 0;
-            }
-            
-            .insight-list {
-                margin: 0;
-                padding-left: 20px;
-            }
-            
-            .insight-item {
-                margin: 8px 0;
-                line-height: 1.5;
-                color: #D4D4D4;
-            }
-            
-            .error-message {
-                margin: 10px 0;
-                padding: 12px;
-                background-color: #442222;
-                border-left: 4px solid #E74C3C;
-                border-radius: 4px;
-            }
-            
-            .error-text {
-                color: #E74C3C;
-                margin: 0;
-            }
-            
-            .status-message {
-                margin: 10px 0;
-                padding: 12px;
-                background-color: #2C3E50;
-                border-left: 4px solid #3498DB;
-                border-radius: 4px;
-            }
-            
-            .status-text {
-                color: #3498DB;
-                margin: 0;
-            }
-            
-            code {
-                background-color: #2D2D2D;
-                padding: 1px 3px;
-                border-radius: 3px;
-                font-family: monospace;
-                color: #D4D4D4;
-            }
-            
-            pre {
-                background-color: #2D2D2D;
-                padding: 8px;
-                border-radius: 5px;
-                margin: 5px 0;
-                border: 1px solid #3E3E3E;
-                overflow-x: auto;
-            }
-            
-            a { 
-                color: #61AFEF;
-                text-decoration: none;
-            }
-            
-            a:hover { 
-                color: #89C7F7;
-                text-decoration: underline;
-            }
-            
-            .transcript-text {
-                font-family: monospace;
-                line-height: 1.5;
-                white-space: pre-wrap;
-                background-color: #252526;
-                padding: 12px;
-                border-radius: 5px;
-                border-left: 4px solid #61AFEF;
-                margin-bottom: 15px;
-            }
-        """)
+        # Set up the base HTML with styles
+        base_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {
+                    background-color: #2D2D30;
+                    color: #FFFFFF;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    padding: 10px;
+                    margin: 0;
+                }
+                
+                .output-container {
+                    margin: 10px;
+                    padding: 10px;
+                }
+                
+                .topic-section {
+                    margin-bottom: 20px;
+                    padding: 15px;
+                    background-color: #252526;
+                    border-radius: 8px;
+                    border-left: 4px solid #3498db;
+                }
+                
+                .topic-title {
+                    font-size: 24px;
+                    color: #FFFFFF;
+                    margin: 0 0 15px 0;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #3498db;
+                }
+                
+                .insight-block {
+                    margin: 15px 0;
+                    padding: 12px;
+                    background-color: #2D2D2D;
+                    border-radius: 6px;
+                }
+                
+                .insight-list {
+                    margin: 0;
+                    padding-left: 25px;
+                    list-style-type: disc !important;
+                }
+                
+                .insight-item {
+                    margin: 12px 0;
+                    line-height: 1.5;
+                    color: #D4D4D4;
+                    display: list-item !important;
+                    list-style-type: disc !important;
+                }
+                
+                #dynamic-content {
+                    list-style-type: disc !important;
+                }
+                
+                #dynamic-content li {
+                    display: list-item !important;
+                    list-style-type: disc !important;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="content"></div>
+        </body>
+        </html>
+        """
+        self.output_text.setHtml(base_html)
         
         # Also set this panel's background a bit darker than the app's default background
         self.setStyleSheet("""
@@ -171,26 +121,6 @@ class OutputPanel(QWidget):
         """)
         
         layout.addWidget(self.output_text)
-    
-    def _on_scroll(self, value):
-        """Handle manual scrolling"""
-        scrollbar = self.output_text.verticalScrollBar()
-        # Check if we're not at the bottom
-        self._user_scrolled = value < scrollbar.maximum()
-        
-        # If user scrolls to bottom, resume auto-scrolling
-        if value == scrollbar.maximum():
-            self._user_scrolled = False
-    
-    def _on_range_changed(self, min_val, max_val):
-        """Handle when the scrollbar range changes (new content added)"""
-        scrollbar = self.output_text.verticalScrollBar()
-        if self._user_scrolled:
-            # Calculate and maintain the relative position
-            current_value = scrollbar.value()
-            scrollbar.setValue(current_value)
-        elif self._auto_scroll:
-            self._scroll_to_bottom()
     
     def set_output(self, text):
         """Set the output text as HTML"""
@@ -214,58 +144,24 @@ class OutputPanel(QWidget):
     @pyqtSlot(str)
     def _update_html_content(self, html):
         """Update the HTML content in the main thread"""
-        # Store the current scroll position and whether we were at bottom
-        scrollbar = self.output_text.verticalScrollBar()
-        current_value = scrollbar.value()
-        was_at_bottom = current_value == scrollbar.maximum()
-        
-        # Update content
-        self.output_text.setHtml(html)
-        
-        # Restore scroll position
-        if self._user_scrolled and not was_at_bottom:
-            scrollbar.setValue(current_value)
-        elif was_at_bottom or self._auto_scroll:
-            self._scroll_to_bottom()
-    
-    def _scroll_to_bottom(self):
-        """Scroll the output text to the bottom"""
-        scrollbar = self.output_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        # Update the content div
+        js = f'document.getElementById("content").innerHTML = `{html}`;'
+        self.output_text.page().runJavaScript(js)
     
     def append_to_dynamic_content(self, content):
         """Append content to the dynamic-content section of the template"""
-        # Get current HTML content
-        current_html = self.output_text.toHtml()
+        # Ensure content has proper class and style for formatting
+        if content.startswith("<li"):
+            if "class=" not in content:
+                content = content.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+            elif 'style="' not in content:
+                content = content.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
         
-        # Find the dynamic content placeholder
-        placeholder_start = current_html.find('id="dynamic-content"')
-        if placeholder_start == -1:
-            # Fallback to regular append if placeholder not found
-            self.append_output(content)
-            return
-        
-        # Find the parent element closing tag
-        if "<ul" in current_html[placeholder_start-50:placeholder_start]:
-            # For list items, insert before the </ul> tag
-            closing_tag = "</ul>"
-        else:
-            # For other content, insert before the </div> tag
-            closing_tag = "</div>"
-        
-        # Find position to insert (before the closing tag)
-        parent_end = current_html.find(closing_tag, placeholder_start)
-        if parent_end == -1:
-            # Fallback to regular append if closing tag not found
-            self.append_output(content)
-            return
-        
-        # Insert the new content before the closing tag
-        updated_html = current_html[:parent_end] + content + current_html[parent_end:]
-        
-        # Update the HTML
-        self.output_text.setHtml(updated_html)
-        
-        # Scroll to bottom if auto-scroll is enabled
-        if self._auto_scroll and not self._user_scrolled:
-            self._scroll_to_bottom()
+        # Use JavaScript to append the content to the dynamic-content element
+        js = f'''
+        var dynamicContent = document.getElementById("dynamic-content");
+        if (dynamicContent) {{
+            dynamicContent.insertAdjacentHTML("beforeend", `{content}`);
+        }}
+        '''
+        self.output_text.page().runJavaScript(js)

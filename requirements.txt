@@ -1,5 +1,5 @@
-numpy==2.2.3
-sounddevice==0.5.1
+numpy==1.24.3
+sounddevice==0.4.6
 pyaudio==0.2.14
 soundcard==0.4.3
 comtypes==1.4.10
@@ -8,10 +8,12 @@ keyboard
 google-cloud-speech==2.22.0
 google-cloud-texttospeech==2.14.2
 SpeechRecognition==3.10.4
-deepgram-sdk==3.10.1
+deepgram-sdk==2.12.0
 ipykernel
 jupyter
-python-dotenv
-anthropic==0.49.0
-PyQt6==6.8.1
+python-dotenv==1.0.0
+anthropic==0.3.11
+PyQt6==6.6.1
+PyQt6-WebEngine==6.6.0
 markdown2==2.5.3
+scipy==1.11.1

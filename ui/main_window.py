@@ -388,8 +388,10 @@ class MainWindow(QMainWindow):
             # Show error using template
             self.output_panel.set_error(result["error"])
         elif "result" in result:
-            # Show result text
-            self.output_panel.set_output(result["result"])
+            # For follow-up questions, we don't want to overwrite our formatted content
+            if not hasattr(self, '_template_type') or self._template_type != "follow-up-questions":
+                # Show result text for other types
+                self.output_panel.set_output(result["result"])
         else:
             # Format the result as a topic section
             content = json.dumps(result, indent=2)
@@ -490,6 +492,14 @@ class MainWindow(QMainWindow):
                 # Remove from buffer
                 self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
                 
+                # Add to output - ensure the item has the correct CSS class and style for bullet point formatting
+                if "class=" not in item:
+                    # If no class is specified, add the insight-item class
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item; list-style-type: disc;"')
+                elif 'style="' not in item:
+                    # If class exists but no style, add the style
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item; list-style-type: disc;"')
+                
                 # Add to output
                 self.output_panel.append_to_dynamic_content(item)
         else:
@@ -559,7 +569,7 @@ class MainWindow(QMainWindow):
             <div class="topic-section">
                 <h2 class="topic-title">Follow-up Questions</h2>
                 <div class="insight-block">
-                    <ul class="insight-list" id="dynamic-content">
+                    <ul class="insight-list" id="dynamic-content" style="list-style-type: disc;">
                         <!-- Dynamic content will be inserted here -->
                     </ul>
                 </div>
