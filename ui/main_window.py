@@ -401,6 +401,26 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "brainstorm"
+        elif prompt_template == COMPANY_FIT_PROMPT:
+            # Static template for Company Fit / SAS Viya Alignment
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">KEY TOPICS</h3>
+                <ul id="key-topics-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Key topic items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">SAS VIYA CONNECTIONS</h3>
+                <ul id="viya-connections-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Viya connection items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">MISSING CONSIDERATIONS</h3>
+                <ul id="missing-considerations-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Missing consideration items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "company-fit"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -450,7 +470,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -708,6 +728,33 @@ class MainWindow(QMainWindow):
                     target_list_id = "alternative-frames-list"
                 elif 'class="provocative-idea"' in item:
                     target_list_id = "provocative-ideas-list"
+                
+                if target_list_id:
+                    # Use the method to append to the correct list (non-bold)
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle Company Fit streaming
+        elif hasattr(self, '_template_type') and self._template_type == "company-fit":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Determine target list based on class
+                target_list_id = None
+                if 'class="key-topic"' in item:
+                    target_list_id = "key-topics-list"
+                elif 'class="viya-connection"' in item:
+                    target_list_id = "viya-connections-list"
+                elif 'class="missing-consideration"' in item:
+                    target_list_id = "missing-considerations-list"
                 
                 if target_list_id:
                     # Use the method to append to the correct list (non-bold)

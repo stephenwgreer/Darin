@@ -96,28 +96,23 @@ Transcript:
 # Related a transcript back to SAS Viya capabilities prompt
 COMPANY_FIT_PROMPT = """
 Analyze the following call transcript and identify opportunities to position SAS Viya capabilities as solutions.
-Task: Extract key topics from the conversation and connect them to relevant SAS Viya features and capabilities.
-Respond with the following sections:
-KEY_TOPICS:
+Task: Extract key topics, connect them to relevant SAS Viya features, and identify missing considerations.
 
-[Topic 1 from conversation]
-[Topic 2 from conversation]
-[Topic 3 from conversation]
+Return ONLY the generated points as HTML list items, formatted exactly as follows:
+- For Key Topics: `<li class="key-topic">[Topic 1 from conversation]</li>` (multiple items)
+- For SAS Viya Connections: `<li class="viya-connection">[Topic X]: [How SAS Viya addresses this]</li>` (multiple items, associate with a topic)
+- For Missing Considerations: `<li class="missing-consideration">[Additional capability/opportunity]</li>` (multiple items)
 
-SAS_VIYA_CONNECTIONS:
+Example Output:
+<li class="key-topic">Risk Modeling Accuracy</li>
+<li class="key-topic">Data Integration Challenges</li>
+<li class="viya-connection">Risk Modeling Accuracy: SAS Viya's Model Studio offers automated ML...</li>
+<li class="viya-connection">Data Integration Challenges: SAS Studio Flow provides visual ETL...</li>
+<li class="missing-consideration">Consider Viya's forecasting capabilities for scenario planning.</li>
+<li class="missing-consideration">Explore integration with existing visualization tools via APIs.</li>
 
-Topic 1: [How SAS Viya addresses this specific need/challenge]
-Topic 2: [How SAS Viya addresses this specific need/challenge]
-Topic 3: [How SAS Viya addresses this specific need/challenge]
-
-MISSING_CONSIDERATIONS:
-
-[Additional capability/feature not mentioned that would benefit this customer]
-[Potential integration opportunity not discussed]
-[Business value proposition that wasn't highlighted]
-
-Be specific about how SAS Viya's analytics, AI, data management, and visualization capabilities directly address the customer's expressed needs and challenges.
-Return in markdown syntax to make it pretty formatting.
+Do not include the headings (KEY_TOPICS, SAS_VIYA_CONNECTIONS, MISSING_CONSIDERATIONS) or any other text, wrappers, or formatting.
+Be specific about how SAS Viya's capabilities address expressed needs.
 
 Transcript:
 {transcript}
