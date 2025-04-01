@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         
         # Original prompt buttons
         self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT, title="Key Topics"))
-        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(None, is_insights=True, title="Banking Practitioner Insights"))
+        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PRACTITIONER_INSIGHTS_STREAMING_PROMPT, title="Banking Practitioner Insights"))
         self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT, title="Meeting Summary"))
         self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT, title="Follow-up Questions"))
         self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT, title="Sentiment Analysis"))
@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
     
-    def run_prompt_with_auto_transcribe(self, prompt_template=None, is_insights=False, title=None):
+    def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
         """Auto transcribe and then run a specific prompt"""
         if self.is_processing:
             return
@@ -220,32 +220,34 @@ class MainWindow(QMainWindow):
         
         # If we already have a transcript, use it directly
         if self.current_transcript:
-            if is_insights:
-                self._run_practitioner_insights(self.current_transcript)
-            else:
-                self._run_specific_prompt(self.current_transcript, prompt_template)
+            self._run_specific_prompt(self.current_transcript, prompt_template)
             return
             
-        # Otherwise get audio data from buffer
-        audio_data = self.recorder.save_buffer()
+        # Otherwise get audio data
+        # For practitioner insights, only use last 30s if no transcript exists
+        if prompt_template == PRACTITIONER_INSIGHTS_STREAMING_PROMPT and not self.current_transcript:
+            audio_data = self.recorder.get_last_n_seconds(30)
+            if audio_data is None:
+                QMessageBox.warning(self, "Processing Error", "Not enough audio (last 30s) in buffer to process")
+                self.controls_panel.set_prompt_buttons_enabled(True)
+                self.is_processing = False
+                return
+        else:
+            # For all other prompts, or if insights already has a transcript, use full buffer
+            audio_data = self.recorder.save_buffer()
         
-        if audio_data is None:
+        if audio_data is None and prompt_template != PRACTITIONER_INSIGHTS_STREAMING_PROMPT:
+            # Only show this warning if not using the 30s logic which has its own warning
+            QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
             self.controls_panel.set_prompt_buttons_enabled(True)
             self.is_processing = False
-            QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
             return
         
         # Start transcription and processing in a separate thread
-        if is_insights:
-            threading.Thread(
-                target=self._transcribe_and_insights_thread, 
-                args=(audio_data, self.recorder.sample_rate)
-            ).start()
-        else:
-            threading.Thread(
-                target=self._transcribe_and_process_thread, 
-                args=(audio_data, self.recorder.sample_rate, prompt_template)
-            ).start()
+        threading.Thread(
+            target=self._transcribe_and_process_thread, 
+            args=(audio_data, self.recorder.sample_rate, prompt_template)
+        ).start()
     
     def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
         """Background thread for transcription followed by processing with a specific prompt"""
@@ -262,25 +264,9 @@ class MainWindow(QMainWindow):
             self._run_specific_prompt(text, prompt_template)
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
+        finally:
             self.is_processing = False
             
-    def _transcribe_and_insights_thread(self, audio_data, sample_rate):
-        """Background thread for transcription followed by practitioner insights"""
-        try:
-            # First transcribe
-            self.progress_update.emit("Transcribing audio...")
-            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
-            self.current_transcript = text
-            
-            # Update UI with transcript
-            self.transcription_complete.emit(text)
-            
-            # Then process for insights
-            self._run_practitioner_insights(text)
-        except Exception as e:
-            self.processing_complete.emit({"error": str(e)})
-            self.is_processing = False
-    
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
         try:
@@ -314,63 +300,82 @@ class MainWindow(QMainWindow):
             self.processing_complete.emit({"result": result})
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
-        finally:
-            self.is_processing = False
     
-    def _run_practitioner_insights(self, transcript):
-        """Process transcript to get banking practitioner insights"""
-        try:
-            # Get client from API wrapper
-            self.progress_update.emit("Extracting main topics...")
-            self.output_panel.set_output("")  # Clear the output
-            
-            def handle_stream(text):
-                """Callback to handle streaming text"""
-                self.stream_update.emit(text)
-            
-            # Extract topics first
-            topics_result = self.api_client.process_with_anthropic(
-                transcript, 
-                DEFAULT_TOPIC_EXTRACTION_PROMPT,
-                stream=True,
-                callback=handle_stream
-            )
-            
-            # Parse topics from JSON with better error handling
-            try:
-                topics_data = json.loads(topics_result)
-                
-                # Verify we got a dictionary back
-                if not isinstance(topics_data, dict):
-                    self.progress_update.emit(f"Unexpected response format: {topics_result}")
-                    topics_data = {"topic1": "General banking topics"}
-            except json.JSONDecodeError as e:
-                self.progress_update.emit(f"Error parsing topics: {str(e)}\nRaw response: {topics_result}")
-                # Fallback to a default topic
-                topics_data = {"topic1": "General banking topics"}
-            
-            # Clear any previous status messages
-            self.output_panel.set_output("")
-            
-            # For each topic, get practitioner insights and update UI through signals
-            for key, topic in topics_data.items():
-                # Format the prompt with the topic
-                formatted_prompt = PRACTITIONER_INSIGHTS_PROMPT.format(topic=topic)
-                
-                # Get insights for this topic
-                insight = self.api_client.process_with_anthropic(
-                    transcript, 
-                    formatted_prompt,
-                    stream=True,
-                    callback=handle_stream
-                )
-            
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            self.output_panel.set_error(f"Error processing insights: {str(e)}\n\n{error_details}")
-        finally:
-            self.is_processing = False
+    def _setup_static_template(self, prompt_template):
+        """Set up a static template based on the prompt type"""
+        if prompt_template == FOLLOW_UP_QUESTIONS_PROMPT:
+            # Static template for follow-up questions (matches sentiment analysis style)
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "follow-up-questions"
+        elif prompt_template == MEETING_SUMMARY_PROMPT:
+            # Static template for meeting summary (matches insight block style)
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "meeting-summary"
+        elif prompt_template == TOPIC_SUMMARY_PROMPT:
+            # Static template for topic summary
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Key Topics</h2>
+                <div class="insight-block">
+                    <ul class="insight-list" id="dynamic-content">
+                        <!-- Dynamic content will be inserted here -->
+                    </ul>
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "topic-summary"
+        elif prompt_template == SENTIMENT_ANALYSIS_PROMPT:
+            # Static template for sentiment analysis
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">Overall Sentiment</h3>
+                <p id="overall-sentiment-value" style="margin-left: 10px;"></p> 
+                <h3 style="font-weight: bold; margin-top: 20px;">Key Emotional Moments</h3>
+                <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "sentiment-analysis"
+        elif prompt_template == PRACTITIONER_INSIGHTS_STREAMING_PROMPT:
+            # Static template for practitioner insights (matches insight block style)
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "practitioner-insights"
+        else:
+            # Generic template for other prompt types
+            static_template = """
+            <div class="topic-section">
+                <h2 class="topic-title">Results</h2>
+                <div class="insight-block" id="dynamic-content">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "generic"
     
     # Slots for custom signals
     @pyqtSlot()
@@ -408,7 +413,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -573,6 +578,28 @@ class MainWindow(QMainWindow):
 
                 self.output_panel.append_to_dynamic_content(item)
 
+        # Handle practitioner insights streaming
+        elif hasattr(self, '_template_type') and self._template_type == "practitioner-insights":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Add formatting if needed (ensure class and style, no bold)
+                if "class=" not in item:
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                elif 'style="' not in item:
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                self.output_panel.append_to_dynamic_content(item)
+
         # Default behavior for other template types
         else:
             complete_element = self._process_html_chunk(text)
@@ -632,68 +659,3 @@ class MainWindow(QMainWindow):
         # Start transcription in a separate thread
         threading.Thread(target=self._transcribe_thread, 
                         args=(audio_data, self.recorder.sample_rate)).start()
-
-    def _setup_static_template(self, prompt_template):
-        """Set up a static template based on the prompt type"""
-        if prompt_template == FOLLOW_UP_QUESTIONS_PROMPT:
-            # Static template for follow-up questions (matches sentiment analysis style)
-            static_template = """
-            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
-                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
-                    <!-- Dynamic list items will be inserted here -->
-                 </ul>
-            </div>
-            """
-            self.output_panel.set_output(static_template)
-            return "follow-up-questions"
-        elif prompt_template == MEETING_SUMMARY_PROMPT:
-            # Static template for meeting summary (matches insight block style)
-            static_template = """
-            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
-                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
-                    <!-- Dynamic list items will be inserted here -->
-                 </ul>
-            </div>
-            """
-            self.output_panel.set_output(static_template)
-            return "meeting-summary"
-        elif prompt_template == TOPIC_SUMMARY_PROMPT:
-            # Static template for topic summary
-            static_template = """
-            <div class="topic-section">
-                <h2 class="topic-title">Key Topics</h2>
-                <div class="insight-block">
-                    <ul class="insight-list" id="dynamic-content">
-                        <!-- Dynamic content will be inserted here -->
-                    </ul>
-                </div>
-            </div>
-            """
-            self.output_panel.set_output(static_template)
-            return "topic-summary"
-        elif prompt_template == SENTIMENT_ANALYSIS_PROMPT:
-            # Static template for sentiment analysis
-            static_template = """
-            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
-                <h3 style="font-weight: bold;">Overall Sentiment</h3>
-                <p id="overall-sentiment-value" style="margin-left: 10px;"></p> 
-                <h3 style="font-weight: bold; margin-top: 20px;">Key Emotional Moments</h3>
-                <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
-                    <!-- Dynamic list items will be inserted here -->
-                </ul>
-            </div>
-            """
-            self.output_panel.set_output(static_template)
-            return "sentiment-analysis"
-        else:
-            # Generic template for other prompt types
-            static_template = """
-            <div class="topic-section">
-                <h2 class="topic-title">Results</h2>
-                <div class="insight-block" id="dynamic-content">
-                    <!-- Dynamic content will be inserted here -->
-                </div>
-            </div>
-            """
-            self.output_panel.set_output(static_template)
-            return "generic"

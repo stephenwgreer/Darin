@@ -1,43 +1,25 @@
-# Default topic extraction prompt
-DEFAULT_TOPIC_EXTRACTION_PROMPT = """
-Analyze the following transcript from a work call and summarize the topic three topics discussed 
-in the transcription.
+# Default topic extraction prompt - REMOVED
 
-Read the transcript carefully and decide what is the most relevent topic being discussed that is relevent to banking. That will be topic 1.
-Then create two more sub-topics related to the main topic and based on what was discussed in the transcript.
+# Practitioner insights prompt - OLD VERSION REMOVED
 
-Return the list of topics in JSON format which can be passed on to other applications where the 
-keys are topic 1, topic 2, and topic 3.
-And the values are each of the topics.
+# New Practitioner Insights Prompt (Streaming)
+PRACTITIONER_INSIGHTS_STREAMING_PROMPT = """
+Analyze the provided transcript, focusing on the most recent discussion if possible.
+Identify the single most relevant banking or financial services topic being discussed.
+Then, provide 5 practitioner-level insights related to that specific topic.
 
-Return nothing other than this requested output. 
-Return ONLY formatted JSON with no extra characters.
+Return ONLY the 5 insights as HTML list items, each formatted exactly as:
+<li class="insight-item">[Insight about the identified topic]</li>
 
-Text to analyze:
+Example Output:
+<li class="insight-item">[Insight 1 about the topic]</li>
+<li class="insight-item">[Insight 2 about the topic]</li>
+...
+
+Do not include the topic itself, any headers, wrappers, or other text.
+
+Transcript to analyze:
 {transcript}
-"""
-
-# Practitioner insights prompt
-PRACTITIONER_INSIGHTS_PROMPT = """
-What are some things about {topic} in banking that only a practitioner would know? Give me some practitioner levels of insight. 
-Provide 5 bullets. Respond as if you are the practitioner making a declaritive and explanatory statement. 
-
-The format for the response should be exactly as shown below. Use HTML tags as specified:
-
-<div class="topic-section">
-    <h2 class="topic-title">{topic}</h2>
-    <div class="insight-block">
-        <ul class="insight-list">
-            <li class="insight-item">Insight 1</li>
-            <li class="insight-item">Insight 2</li>
-            <li class="insight-item">Insight 3</li>
-            <li class="insight-item">Insight 4</li>
-            <li class="insight-item">Insight 5</li>
-        </ul>
-    </div>
-</div>
-
-Return ONLY this HTML structure with your insights. Do not include any other text or formatting.
 """
 
 # Meeting summary prompt

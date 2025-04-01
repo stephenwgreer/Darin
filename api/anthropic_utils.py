@@ -1,10 +1,7 @@
 import json
-from prompts.templates import DEFAULT_TOPIC_EXTRACTION_PROMPT
 
-def process_with_anthropic(client, transcript_text, prompt_template=None):
+def process_with_anthropic(client, transcript_text, prompt_template):
     """Process transcript with Anthropic API and return response"""
-    if prompt_template is None:
-        prompt_template = DEFAULT_TOPIC_EXTRACTION_PROMPT
         
     try:
         prompt = prompt_template.format(transcript=transcript_text)
