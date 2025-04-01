@@ -44,8 +44,16 @@ Return ONLY this HTML structure with your insights. Do not include any other tex
 MEETING_SUMMARY_PROMPT = """
 Create a concise summary of the following meeting transcript.
 Include key decisions made, important discussion points, and overall meeting purpose.
-Format as a readable meeting summary that could be shared with team members.
-Return in markdown syntax to make it pretty formatting.
+
+Return ONLY the summary points as HTML list items, each formatted exactly as:
+<li class="insight-item">[Summary point]</li>
+
+Example Output:
+<li class="insight-item">[Key decision 1]</li>
+<li class="insight-item">[Important discussion point]</li>
+...
+
+Do not include any other text, wrappers, headers, or formatting.
 
 Text to analyze:
 {transcript}

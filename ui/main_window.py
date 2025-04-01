@@ -408,7 +408,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -551,6 +551,28 @@ class MainWindow(QMainWindow):
 
                 self.output_panel.append_to_dynamic_content(item)
 
+        # Handle meeting summary streaming
+        elif hasattr(self, '_template_type') and self._template_type == "meeting-summary":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Add formatting if needed (ensure class and style, no bold)
+                if "class=" not in item:
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                elif 'style="' not in item:
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                self.output_panel.append_to_dynamic_content(item)
+
         # Default behavior for other template types
         else:
             complete_element = self._process_html_chunk(text)
@@ -625,13 +647,12 @@ class MainWindow(QMainWindow):
             self.output_panel.set_output(static_template)
             return "follow-up-questions"
         elif prompt_template == MEETING_SUMMARY_PROMPT:
-            # Static template for meeting summary
+            # Static template for meeting summary (matches insight block style)
             static_template = """
-            <div class="topic-section">
-                <h2 class="topic-title">Meeting Summary</h2>
-                <div class="insight-block" id="dynamic-content">
-                    <!-- Dynamic content will be inserted here -->
-                </div>
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
             </div>
             """
             self.output_panel.set_output(static_template)
