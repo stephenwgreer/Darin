@@ -28,11 +28,21 @@ class OutputPanel(QWidget):
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        layout.setSpacing(0)  # Remove spacing
         
-        # Processed output container
-        output_label = QLabel("Output")
-        output_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
-        layout.addWidget(output_label)
+        # Add title label
+        self.title_label = QLabel("Output")
+        self.title_label.setObjectName("output_title")
+        self.title_label.setStyleSheet("""
+            QLabel#output_title {
+                font-size: 28px;
+                color: #FFFFFF;
+                padding: 20px;
+                font-weight: 500;
+            }
+        """)
+        layout.addWidget(self.title_label)
         
         # Use QWebEngineView for better HTML support
         self.output_text = QWebEngineView()
@@ -46,39 +56,41 @@ class OutputPanel(QWidget):
         <head>
             <style>
                 body {
-                    background-color: #2D2D30;
+                    background-color: #252526;
                     color: #FFFFFF;
                     font-family: system-ui, -apple-system, sans-serif;
-                    padding: 10px;
+                    padding: 20px;
                     margin: 0;
+                    font-size: 14px;
                 }
                 
                 .output-container {
-                    margin: 10px;
-                    padding: 10px;
+                    margin: 0;
+                    padding: 0;
                 }
                 
                 .topic-section {
-                    margin-bottom: 20px;
-                    padding: 15px;
-                    background-color: #252526;
+                    margin-bottom: 24px;
+                    padding: 20px;
+                    background-color: #2D2D2D;
                     border-radius: 8px;
                     border-left: 4px solid #3498db;
                 }
                 
                 .topic-title {
-                    font-size: 24px;
+                    font-size: 28px;
                     color: #FFFFFF;
-                    margin: 0 0 15px 0;
-                    padding-bottom: 8px;
+                    margin: 0 0 20px 0;
+                    padding-bottom: 12px;
                     border-bottom: 1px solid #3498db;
+                    font-weight: 500;
                 }
                 
                 .insight-block {
                     margin: 15px 0;
-                    padding: 12px;
+                    padding: 16px;
                     background-color: #2D2D2D;
-                    border-radius: 6px;
+                    border-radius: 8px;
                 }
                 
                 .insight-list {
@@ -88,11 +100,12 @@ class OutputPanel(QWidget):
                 }
                 
                 .insight-item {
-                    margin: 12px 0;
-                    line-height: 1.5;
+                    margin: 16px 0;
+                    line-height: 1.6;
                     color: #D4D4D4;
                     display: list-item !important;
                     list-style-type: disc !important;
+                    font-size: 14px;
                 }
                 
                 #dynamic-content {
@@ -112,11 +125,10 @@ class OutputPanel(QWidget):
         """
         self.output_text.setHtml(base_html)
         
-        # Also set this panel's background a bit darker than the app's default background
+        # Remove the panel background
         self.setStyleSheet("""
             QWidget#OutputPanel {
-                background-color: #252526;
-                border-radius: 5px;
+                background-color: transparent;
             }
         """)
         
@@ -127,6 +139,10 @@ class OutputPanel(QWidget):
         self._current_output = text
         self._user_scrolled = False  # Reset scroll state when setting new content
         self.html_update.emit(wrap_in_base_template(text))
+    
+    def set_title(self, title):
+        """Update the output panel title"""
+        self.title_label.setText(title)
     
     def append_output(self, text):
         """Append text to the current output as HTML"""
@@ -140,6 +156,11 @@ class OutputPanel(QWidget):
     def set_status(self, message):
         """Display a status message"""
         self.set_output(create_status_message(message))
+    
+    def set_overall_sentiment(self, sentiment_value):
+        """Update the overall sentiment value in the sentiment analysis template"""
+        js = f'document.getElementById("overall-sentiment-value").innerText = "{sentiment_value}";'
+        self.output_text.page().runJavaScript(js)
     
     @pyqtSlot(str)
     def _update_html_content(self, html):

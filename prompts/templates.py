@@ -224,31 +224,18 @@ Transcript:
 # Sentiment analysis prompt
 SENTIMENT_ANALYSIS_PROMPT = """
 Analyze the sentiment and emotional tone of this conversation transcript.
-Identify any tensions, positive moments, or shifts in tone throughout the discussion.
 
-The format for the response should be exactly as shown below. Use HTML tags as specified:
+First, return ONLY the overall sentiment value (Positive, Negative, or Neutral) on a single line.
+Then, on subsequent lines, return ONLY the 5 key emotional moments as HTML list items, each formatted exactly as:
+<li class="insight-item">[Key moment description with emotional context]</li>
 
-<div class="topic-section">
-    <h2 class="topic-title">Sentiment Analysis</h2>
-    <div class="insight-block">
-        <div class="sentiment-overview">
-            <h3>Overall Sentiment</h3>
-            <p class="sentiment-value">[Positive/Negative/Neutral]</p>
-        </div>
-        <div class="key-moments">
-            <h3>Key Emotional Moments</h3>
-            <ul class="insight-list">
-                <li class="insight-item">[First key moment with emotional context]</li>
-                <li class="insight-item">[Second key moment with emotional context]</li>
-                <li class="insight-item">[Third key moment with emotional context]</li>
-                <li class="insight-item">[Fourth key moment with emotional context]</li>
-                <li class="insight-item">[Fifth key moment with emotional context]</li>
-            </ul>
-        </div>
-    </div>
-</div>
+Example Output:
+Neutral
+<li class="insight-item">[First key moment with emotional context]</li>
+<li class="insight-item">[Second key moment with emotional context]</li>
+... (up to 5 items)
 
-Return ONLY this HTML structure with your analysis. Do not include any other text or formatting.
+Do not include any other text, wrappers, headers, or formatting.
 
 Text to analyze:
 {transcript}

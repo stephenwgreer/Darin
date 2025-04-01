@@ -48,6 +48,10 @@ class MainWindow(QMainWindow):
         self._element_stack = []  # Stack to track nested HTML elements
         self._is_first_update = True  # Track if this is the first stream update
         self._current_list_items = []  # Track list items for the current section
+        self._template_type = None # Track the current template type
+
+        # Sentiment analysis specific state
+        self._overall_sentiment_received = False
         
         # Setup UI
         self.setup_ui()
@@ -61,18 +65,21 @@ class MainWindow(QMainWindow):
         ########################
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)  
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)  # Add some padding around the edges
+        main_layout.setSpacing(10)  # Space between elements
         
         ########################
         # Header section
         ########################
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
         # Add logo on left
         logo_label = QLabel()
-        small_logo = QPixmap("assets/Darin_Round.png")  # Create assets folder with your logo
-        small_logo = small_logo.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio)
+        small_logo = QPixmap("assets/Darin_Round.png")
+        small_logo = small_logo.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio)
         logo_label.setPixmap(small_logo)
         header_layout.addWidget(logo_label)
         
@@ -81,6 +88,7 @@ class MainWindow(QMainWindow):
         
         # App title with typing animation
         app_title = AnimatedLabel("Welcome to Darin, your intern")
+        app_title.setFont(FontManager.get_font(24, QFont.Weight.Medium))
         header_layout.addWidget(app_title)
         
         header_layout.addStretch()
@@ -91,10 +99,11 @@ class MainWindow(QMainWindow):
         # Content section with splitter
         ########################
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.content_splitter.setHandleWidth(5)  # Make splitter handle more visible
+        self.content_splitter.setHandleWidth(1)  # Make splitter handle less visible
         
         # Left panel (controls)
         self.controls_panel = ControlsPanel()
+        self.controls_panel.setMaximumWidth(300)  # Limit the width of controls panel
         
         # Right panel (output)
         self.output_panel = OutputPanel()
@@ -103,15 +112,20 @@ class MainWindow(QMainWindow):
         self.content_splitter.addWidget(self.controls_panel)
         self.content_splitter.addWidget(self.output_panel)
         
-        # Set the proportions
-        self.content_splitter.setStretchFactor(0, 1)  # Controls take 1/3
-        self.content_splitter.setStretchFactor(1, 2)  # Output takes 2/3
+        # Set the proportions (25% controls, 75% output)
+        self.content_splitter.setStretchFactor(0, 1)  # Controls take 1 part
+        self.content_splitter.setStretchFactor(1, 3)  # Output takes 3 parts
+        
+        # Set initial sizes
+        total_width = self.width()
+        self.content_splitter.setSizes([int(total_width * 0.25), int(total_width * 0.75)])
         
         main_layout.addWidget(self.content_splitter)
         
         # Footer
         footer = QLabel("© 2025 Darin Listening Assistant")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setStyleSheet("color: #666666; font-size: 11px;")
         main_layout.addWidget(footer)
     
     def setup_connections(self):
@@ -122,17 +136,17 @@ class MainWindow(QMainWindow):
         self.controls_panel.clear_output_clicked.connect(self.clear_output)
         
         # Original prompt buttons
-        self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT))
-        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(None, is_insights=True))
-        self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT))
-        self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT))
-        self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT))
+        self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT, title="Key Topics"))
+        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(None, is_insights=True, title="Banking Practitioner Insights"))
+        self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT, title="Meeting Summary"))
+        self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT, title="Follow-up Questions"))
+        self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT, title="Sentiment Analysis"))
         
         # New prompt buttons
-        self.controls_panel.fill_gaps_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FILL_IN_GAPS_PROMPT))
-        self.controls_panel.brainstorm_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(BRAINSTORM_PROMPT))
-        self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT))
-        self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT))
+        self.controls_panel.fill_gaps_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FILL_IN_GAPS_PROMPT, title="Gaps in Reasoning"))
+        self.controls_panel.brainstorm_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(BRAINSTORM_PROMPT, title="Brainstorm Questions"))
+        self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT, title="SAS Viya Alignment"))
+        self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT, title="Fact Check Analysis"))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -184,7 +198,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
     
-    def run_prompt_with_auto_transcribe(self, prompt_template=None, is_insights=False):
+    def run_prompt_with_auto_transcribe(self, prompt_template=None, is_insights=False, title=None):
         """Auto transcribe and then run a specific prompt"""
         if self.is_processing:
             return
@@ -196,6 +210,10 @@ class MainWindow(QMainWindow):
         
         # Clear output before running new prompt
         self.clear_output()
+        
+        # Set the output panel title if provided
+        if title:
+            self.output_panel.set_title(title)
         
         # Update output to show progress
         self.output_panel.set_output("Capturing audio and transcribing...")
@@ -388,9 +406,10 @@ class MainWindow(QMainWindow):
             # Show error using template
             self.output_panel.set_error(result["error"])
         elif "result" in result:
-            # For follow-up questions, we don't want to overwrite our formatted content
-            if not hasattr(self, '_template_type') or self._template_type != "follow-up-questions":
-                # Show result text for other types
+            # For specific streaming types, we don't want to overwrite our formatted content
+            # as the final output might be raw text without the template structure.
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis"]:
+                # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
             # Format the result as a topic section
@@ -471,41 +490,70 @@ class MainWindow(QMainWindow):
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
         
-        # For follow-up questions, we only care about list items
+        # Handle follow-up questions streaming
         if hasattr(self, '_template_type') and self._template_type == "follow-up-questions":
-            # Look for complete list items
             self._html_buffer += text
-            
-            # Find and extract complete list items
             while True:
                 item_start = self._html_buffer.find("<li")
                 if item_start == -1:
                     break
-                    
                 item_end = self._html_buffer.find("</li>", item_start)
                 if item_end == -1:
                     break
                     
-                # Extract the complete item
                 item = self._html_buffer[item_start:item_end + 5]
-                
-                # Remove from buffer
-                self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
-                
-                # Add to output - ensure the item has the correct CSS class and style for bullet point formatting
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Add formatting if needed (ensure class and style)
                 if "class=" not in item:
-                    # If no class is specified, add the insight-item class
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item; list-style-type: disc;"')
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
                 elif 'style="' not in item:
-                    # If class exists but no style, add the style
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item; list-style-type: disc;"')
-                
-                # Add to output
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+
                 self.output_panel.append_to_dynamic_content(item)
+        
+        # Handle sentiment analysis streaming
+        elif hasattr(self, '_template_type') and self._template_type == "sentiment-analysis":
+            if not self._overall_sentiment_received:
+                # First line should be the overall sentiment
+                lines = text.split('\n', 1)
+                overall_sentiment = lines[0].strip()
+                if overall_sentiment in ["Positive", "Negative", "Neutral"]:
+                    self.output_panel.set_overall_sentiment(overall_sentiment)
+                    self._overall_sentiment_received = True
+                    # Process the rest of the text if any
+                    if len(lines) > 1:
+                        text = lines[1]
+                    else:
+                        return # Wait for next chunk
+                else:
+                    # If first line isn't sentiment, buffer it for list item processing
+                    pass # Fall through to list item processing
+
+            # Process subsequent lines as list items
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Add formatting if needed (ensure class and style)
+                if "class=" not in item:
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                elif 'style="' not in item:
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+
+                self.output_panel.append_to_dynamic_content(item)
+
+        # Default behavior for other template types
         else:
-            # Default behavior for other template types
             complete_element = self._process_html_chunk(text)
-            
             if complete_element:
                 # If this is the first update, set the output
                 if self._is_first_update:
@@ -535,12 +583,14 @@ class MainWindow(QMainWindow):
     def clear_output(self):
         """Clear the output panel and reset HTML streaming state"""
         self.output_panel.set_output("")
+        self.output_panel.set_title("Output")  # Reset title to default
         self.current_transcript = ""
         self._html_buffer = ""
         self._current_element = None
         self._element_stack = []
         self._is_first_update = True
         self._current_list_items = []
+        self._overall_sentiment_received = False # Reset sentiment flag
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
@@ -564,15 +614,12 @@ class MainWindow(QMainWindow):
     def _setup_static_template(self, prompt_template):
         """Set up a static template based on the prompt type"""
         if prompt_template == FOLLOW_UP_QUESTIONS_PROMPT:
-            # Static template for follow-up questions
+            # Static template for follow-up questions (matches sentiment analysis style)
             static_template = """
-            <div class="topic-section">
-                <h2 class="topic-title">Follow-up Questions</h2>
-                <div class="insight-block">
-                    <ul class="insight-list" id="dynamic-content" style="list-style-type: disc;">
-                        <!-- Dynamic content will be inserted here -->
-                    </ul>
-                </div>
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
             </div>
             """
             self.output_panel.set_output(static_template)
@@ -603,6 +650,20 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "topic-summary"
+        elif prompt_template == SENTIMENT_ANALYSIS_PROMPT:
+            # Static template for sentiment analysis
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">Overall Sentiment</h3>
+                <p id="overall-sentiment-value" style="margin-left: 10px;"></p> 
+                <h3 style="font-weight: bold; margin-top: 20px;">Key Emotional Moments</h3>
+                <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "sentiment-analysis"
         else:
             # Generic template for other prompt types
             static_template = """
