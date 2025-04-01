@@ -421,6 +421,18 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "company-fit"
+        elif prompt_template == FACT_CHECKING_PROMPT:
+            # Static template for Fact Checking
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">Fact Check Analysis</h3>
+                <ul id="fact-check-list" style="list-style-type: none; margin-top: 0; padding-left: 0;"> 
+                    <!-- Fact check items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "fact-check"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -470,7 +482,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -759,6 +771,27 @@ class MainWindow(QMainWindow):
                 if target_list_id:
                     # Use the method to append to the correct list (non-bold)
                     self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle Fact Checking streaming
+        elif hasattr(self, '_template_type') and self._template_type == "fact-check":
+            self._html_buffer += text
+            while True:
+                # Fact check items can be multi-line, look for the start and end <li> tags
+                item_start = self._html_buffer.find("<li class=\"fact-check-item\">") 
+                if item_start == -1:
+                    item_start = self._html_buffer.find("<li class='fact-check-item'>") # Check single quotes too
+                    if item_start == -1:
+                       break # No start tag found
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # End tag not found yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Append the complete item to the fact-check list
+                self.output_panel.append_to_list_by_id("fact-check-list", item)
 
         # Default behavior for other template types
         else:

@@ -120,50 +120,34 @@ Transcript:
 
 # Fact checking prompt:
 FACT_CHECKING_PROMPT = """
-Identify and evaluate factual claims in the following transcript.
+Identify factual claims in the following transcript and evaluate their accuracy.
 Rate each claim's accuracy on a scale of 1-5 where:
-1 = Not accurate (completely false)
-2 = Mostly inaccurate (contains some truth but is misleading)
-3 = Partially accurate (mix of accurate and inaccurate elements)
-4 = Mostly accurate (generally true with minor errors or omissions)
-5 = Totally accurate (completely true and precise)
+1 = Not accurate
+2 = Mostly inaccurate
+3 = Partially accurate
+4 = Mostly accurate
+5 = Totally accurate
 
-The format for the response should be exactly as shown below. Use HTML tags as specified:
+Return ONLY the analysis for each claim (up to 5) as HTML list items, formatted exactly as:
+<li class="fact-check-item">
+    <strong>Claim X:</strong> "[Direct quote]"<br>
+    <strong>Accuracy:</strong> [1-5]/5<br>
+    <strong>Correction:</strong> [Accurate information if score < 5, otherwise "N/A"]
+</li>
 
-<div class="topic-section">
-    <h2 class="topic-title">Fact Check Analysis</h2>
-    <div class="insight-block">
-        <ul class="insight-list">
-            <li class="insight-item">
-                <strong>Claim 1:</strong> "[Direct quote]"<br>
-                <strong>Accuracy:</strong> [1-5]/5<br>
-                <strong>Correction:</strong> [Accurate information if score < 5]
-            </li>
-            <li class="insight-item">
-                <strong>Claim 2:</strong> "[Direct quote]"<br>
-                <strong>Accuracy:</strong> [1-5]/5<br>
-                <strong>Correction:</strong> [Accurate information if score < 5]
-            </li>
-            <li class="insight-item">
-                <strong>Claim 3:</strong> "[Direct quote]"<br>
-                <strong>Accuracy:</strong> [1-5]/5<br>
-                <strong>Correction:</strong> [Accurate information if score < 5]
-            </li>
-            <li class="insight-item">
-                <strong>Claim 4:</strong> "[Direct quote]"<br>
-                <strong>Accuracy:</strong> [1-5]/5<br>
-                <strong>Correction:</strong> [Accurate information if score < 5]
-            </li>
-            <li class="insight-item">
-                <strong>Claim 5:</strong> "[Direct quote]"<br>
-                <strong>Accuracy:</strong> [1-5]/5<br>
-                <strong>Correction:</strong> [Accurate information if score < 5]
-            </li>
-        </ul>
-    </div>
-</div>
+Example Output:
+<li class="fact-check-item">
+    <strong>Claim 1:</strong> "The sky is green."<br>
+    <strong>Accuracy:</strong> 1/5<br>
+    <strong>Correction:</strong> The sky is typically blue due to Rayleigh scattering.
+</li>
+<li class="fact-check-item">
+    <strong>Claim 2:</strong> "Water boils at 100C at sea level."<br>
+    <strong>Accuracy:</strong> 5/5<br>
+    <strong>Correction:</strong> N/A
+</li>
 
-Return ONLY this HTML structure with your analysis. Do not include any other text or formatting.
+Do not include any other text, wrappers (like <ul> or <div>), headers, or formatting.
 
 Text to analyze:
 {transcript}

@@ -188,17 +188,25 @@ class OutputPanel(QWidget):
         self.output_text.page().runJavaScript(js)
 
     def append_to_list_by_id(self, list_id, item_html):
-        """Append an HTML list item to a specific list using its ID."""
-        # Ensure content has proper styling (non-bold for fill-gaps)
-        if "class=" not in item_html:
-            item_html = item_html.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-        elif 'style="' not in item_html:
-             # Add default style if only class exists
-             item_html = item_html.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-        elif "font-weight: bold" in item_html:
-             # Remove bold if it exists (specific case for potential copy-paste from other sections)
-             item_html = item_html.replace(" font-weight: bold !important;", "")
-             item_html = item_html.replace("font-weight: bold !important;", "")
+        """Append an HTML list item to a specific list using its ID, preserving internal HTML."""
+        # Ensure it has a base class if none is provided, but preserve existing classes.
+        if 'class="' not in item_html:
+            item_html = item_html.replace("<li", '<li class="insight-item"')
+
+        # Basic styling for all list items appended this way
+        base_style = "display: list-item !important; margin-bottom: 10px;" # Added margin-bottom
+        
+        # Inject base style, preserving existing styles if any
+        if 'style="' in item_html:
+            # Insert base style after existing style attribute
+             item_html = item_html.replace('style="', f'style="{base_style} ', 1)
+        else:
+            # Add style attribute with base style
+            if 'class="' in item_html:
+                 item_html = item_html.replace('class="', f'style="{base_style}" class="', 1)
+            else:
+                 # Should not happen due to class check above, but as fallback
+                 item_html = item_html.replace("<li", f'<li style="{base_style}"')
 
         # Escape the item_html for safe insertion into JavaScript string
         escaped_item_html = item_html.replace('`', '\\`').replace('$', '\$')
