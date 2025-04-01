@@ -45,30 +45,23 @@ Text to analyze:
 FILL_IN_GAPS_PROMPT = """
 You are analyzing a transcript to identify thinking patterns and gaps in reasoning.
 Task: Review the following transcript and identify:
+1. Core thinking patterns present (as a single summary point).
+2. Specific gaps in the reasoning (as bullet points).
+3. Recommendations to make the analysis more complete (as bullet points).
 
-Core thinking patterns present
-Specific gaps in the reasoning
-Recommendations to make the analysis more complete
+Return ONLY the identified points as HTML list items, formatted exactly as follows:
+- For Core Thinking: `<li class="core-thinking">[Single summary of core thinking]</li>`
+- For Gaps: `<li class="gap-item">[Gap 1 description]</li>` (multiple items)
+- For Recommendations: `<li class="recommendation-item">[Recommendation 1]</li>` (multiple items)
 
-Respond with the following sections:
-CORE_THINKING:
+Example Output:
+<li class="core-thinking">The core thinking focused heavily on feature conversion feasibility.</li>
+<li class="gap-item">Gap 1: Consideration of data scaling issues was missing.</li>
+<li class="gap-item">Gap 2: Alternative modeling approaches weren't explored.</li>
+<li class="recommendation-item">Recommendation 1: Evaluate data volume impact.</li>
+<li class="recommendation-item">Recommendation 2: Benchmark against simpler models.</li>
 
-Brief summary of primary thought processes demonstrated
-
-GAPS:
-
-Gap 1: [Brief description of missing consideration]
-Gap 2: [Brief description of missing consideration]
-Gap 3: [Brief description of missing consideration]
-
-RECOMMENDATIONS:
-
-[Concise recommendation 1]
-[Concise recommendation 2]
-[Concise recommendation 3]
-
-Keep your analysis objective, concise, and focused on improving the thinking rather than criticizing it.
-Return in markdown syntax to make it pretty formatting.
+Do not include the headings (CORE_THINKING, GAPS, RECOMMENDATIONS) or any other text, wrappers, or formatting.
 
 Transcript:
 {transcript}
@@ -78,32 +71,23 @@ Transcript:
 BRAINSTORM_PROMPT = """
 Analyze the following transcript and generate thought-provoking questions that challenge assumptions and encourage new perspectives.
 Task: Review the transcript and create:
+1. Questions that challenge core assumptions.
+2. Alternatives that reframe the problem.
+3. Provocative ideas to expand thinking.
 
-Questions that challenge core assumptions
-Alternatives that reframe the problem
-Provocative ideas to expand thinking
+Return ONLY the generated points as HTML list items, formatted exactly as follows:
+- For Challenge Questions: `<li class="challenge-question">[Specific question]</li>` (multiple items)
+- For Alternative Frames: `<li class="alternative-frame">[Alternative view]</li>` (multiple items)
+- For Provocative Ideas: `<li class="provocative-idea">[Unexpected approach]</li>` (multiple items)
 
-Respond with the following sections:
-CHALLENGE_QUESTIONS:
+Example Output:
+<li class="challenge-question">What if the core assumption about X is wrong?</li>
+<li class="challenge-question">How might Y be influencing this outcome?</li>
+<li class="alternative-frame">Could we view this not as a problem, but an opportunity?</li>
+<li class="provocative-idea">What if we applied principles from Z field here?</li>
 
-[Specific question that challenges a key assumption]
-[Question exploring an unconsidered angle]
-[Question addressing potential blind spots]
-
-ALTERNATIVE_FRAMES:
-
-[Alternative way to view the problem]
-[Different perspective that shifts the paradigm]
-[Reframing that questions fundamental assumptions]
-
-PROVOCATIVE_IDEAS:
-
-[Unexpected approach or solution]
-[Counterintuitive concept worth exploring]
-[Novel connection or insight]
-
-Keep questions constructive, focused on generating new insights rather than criticism. Phrase questions to invite collaborative brainstorming.
-Return in markdown syntax to make it pretty formatting.
+Do not include the headings (CHALLENGE_QUESTIONS, ALTERNATIVE_FRAMES, PROVOCATIVE_IDEAS) or any other text, wrappers, or formatting.
+Keep questions constructive and focused on generating new insights.
 
 Transcript:
 {transcript}
@@ -240,20 +224,15 @@ TOPIC_SUMMARY_PROMPT = """
 Analyze the following transcript from a work call and identify the three main topics discussed.
 Focus on topics that are most relevant to banking and financial services.
 
-The format for the response should be exactly as shown below. Use HTML tags as specified:
+Return ONLY the 3 topics as HTML list items, each formatted exactly as:
+<li class="insight-item">[Topic name]</li>
 
-<div class="topic-section">
-    <h2 class="topic-title">Key Topics</h2>
-    <div class="insight-block">
-        <ul class="insight-list">
-            <li class="insight-item">[Primary banking/financial topic]</li>
-            <li class="insight-item">[Secondary related topic]</li>
-            <li class="insight-item">[Third related topic]</li>
-        </ul>
-    </div>
-</div>
+Example Output:
+<li class="insight-item">[Primary banking/financial topic]</li>
+<li class="insight-item">[Secondary related topic]</li>
+<li class="insight-item">[Third related topic]</li>
 
-Return ONLY this HTML structure with your analysis. Do not include any other text or formatting.
+Do not include any other text, wrappers, headers, or formatting.
 
 Text to analyze:
 {transcript}

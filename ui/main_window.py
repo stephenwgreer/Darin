@@ -326,15 +326,12 @@ class MainWindow(QMainWindow):
             self.output_panel.set_output(static_template)
             return "meeting-summary"
         elif prompt_template == TOPIC_SUMMARY_PROMPT:
-            # Static template for topic summary
+            # Static template for topic summary (matches insight block style)
             static_template = """
-            <div class="topic-section">
-                <h2 class="topic-title">Key Topics</h2>
-                <div class="insight-block">
-                    <ul class="insight-list" id="dynamic-content">
-                        <!-- Dynamic content will be inserted here -->
-                    </ul>
-                </div>
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Dynamic list items will be inserted here -->
+                 </ul>
             </div>
             """
             self.output_panel.set_output(static_template)
@@ -364,6 +361,46 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "practitioner-insights"
+        elif prompt_template == FILL_IN_GAPS_PROMPT:
+            # Static template for Fill Gaps in Reasoning
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">CORE THINKING</h3>
+                <ul id="core-thinking-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Core thinking item will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">GAPS</h3>
+                <ul id="gaps-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Gap items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">RECOMMENDATIONS</h3>
+                <ul id="recommendations-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Recommendation items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "fill-gaps"
+        elif prompt_template == BRAINSTORM_PROMPT:
+            # Static template for Brainstorm Questions
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">CHALLENGE QUESTIONS</h3>
+                <ul id="challenge-questions-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Challenge question items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">ALTERNATIVE FRAMES</h3>
+                <ul id="alternative-frames-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Alternative frame items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">PROVOCATIVE IDEAS</h3>
+                <ul id="provocative-ideas-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Provocative idea items will be inserted here -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "brainstorm"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -413,7 +450,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -599,6 +636,82 @@ class MainWindow(QMainWindow):
                     item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
 
                 self.output_panel.append_to_dynamic_content(item)
+
+        # Handle topic summary streaming
+        elif hasattr(self, '_template_type') and self._template_type == "topic-summary":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Add formatting if needed (ensure class and style, no bold)
+                if "class=" not in item:
+                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                elif 'style="' not in item:
+                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                self.output_panel.append_to_dynamic_content(item)
+
+        # Handle Fill Gaps streaming
+        elif hasattr(self, '_template_type') and self._template_type == "fill-gaps":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Determine target list based on class
+                target_list_id = None
+                if 'class="core-thinking"' in item:
+                    target_list_id = "core-thinking-list"
+                elif 'class="gap-item"' in item:
+                    target_list_id = "gaps-list"
+                elif 'class="recommendation-item"' in item:
+                    target_list_id = "recommendations-list"
+                
+                if target_list_id:
+                    # Use the new method to append to the correct list
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle Brainstorm Questions streaming
+        elif hasattr(self, '_template_type') and self._template_type == "brainstorm":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li")
+                if item_start == -1:
+                    break
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break
+                    
+                item = self._html_buffer[item_start:item_end + 5]
+                self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                # Determine target list based on class
+                target_list_id = None
+                if 'class="challenge-question"' in item:
+                    target_list_id = "challenge-questions-list"
+                elif 'class="alternative-frame"' in item:
+                    target_list_id = "alternative-frames-list"
+                elif 'class="provocative-idea"' in item:
+                    target_list_id = "provocative-ideas-list"
+                
+                if target_list_id:
+                    # Use the method to append to the correct list (non-bold)
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Default behavior for other template types
         else:
