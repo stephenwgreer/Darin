@@ -194,6 +194,31 @@ Text to analyze:
 {transcript}
 """
 
+# Answer Question Prompt (New)
+ANSWER_QUESTION_PROMPT = """
+Analyze the provided transcript, paying close attention to the END of the text.
+Identify the single LAST question asked by any speaker in the transcript.
+
+If a question is found, generate 3-5 concise, relevant suggestions or points that could be included in an answer to that specific question.
+If no question is found near the end, state that clearly as the only output.
+
+Return ONLY the suggested answer points as HTML list items, formatted exactly as:
+<li class="answer-item">[Suggested answer point]</li>
+
+Example Output (if question found):
+<li class="answer-item">Start by acknowledging the core concern about X.</li>
+<li class="answer-item">Mention the mitigation strategy Y.</li>
+<li class="answer-item">Reference the data point Z as evidence.</li>
+
+Example Output (if no question found):
+<li class="answer-item">No clear question identified at the end of the transcript.</li>
+
+Do not include the identified question itself, any headers, wrappers, or other text.
+
+Transcript:
+{transcript}
+"""
+
 ##############################
 ## Extra prompts
 ##############################

@@ -147,6 +147,7 @@ class MainWindow(QMainWindow):
         self.controls_panel.brainstorm_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(BRAINSTORM_PROMPT, title="Brainstorm Questions"))
         self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT, title="SAS Viya Alignment"))
         self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT, title="Fact Check Analysis"))
+        self.controls_panel.answer_question_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(ANSWER_QUESTION_PROMPT, title="Answer Question"))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -224,8 +225,10 @@ class MainWindow(QMainWindow):
             return
             
         # Otherwise get audio data
-        # For practitioner insights, only use last 30s if no transcript exists
-        if prompt_template == PRACTITIONER_INSIGHTS_STREAMING_PROMPT and not self.current_transcript:
+        # For specific prompts, only use last 30s if no transcript exists
+        use_last_30s = prompt_template in [PRACTITIONER_INSIGHTS_STREAMING_PROMPT, ANSWER_QUESTION_PROMPT]
+        
+        if use_last_30s and not self.current_transcript:
             audio_data = self.recorder.get_last_n_seconds(30)
             if audio_data is None:
                 QMessageBox.warning(self, "Processing Error", "Not enough audio (last 30s) in buffer to process")
@@ -233,10 +236,10 @@ class MainWindow(QMainWindow):
                 self.is_processing = False
                 return
         else:
-            # For all other prompts, or if insights already has a transcript, use full buffer
+            # For all other prompts, or if insights/answer already has a transcript, use full buffer
             audio_data = self.recorder.save_buffer()
         
-        if audio_data is None and prompt_template != PRACTITIONER_INSIGHTS_STREAMING_PROMPT:
+        if audio_data is None and not (use_last_30s and not self.current_transcript):
             # Only show this warning if not using the 30s logic which has its own warning
             QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
             self.controls_panel.set_prompt_buttons_enabled(True)
@@ -433,6 +436,17 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "fact-check"
+        elif prompt_template == ANSWER_QUESTION_PROMPT:
+            # Static template for Answer Question
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                 <ul id="answer-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Answer items will be inserted here -->
+                 </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "answer-question"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -482,7 +496,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -792,6 +806,26 @@ class MainWindow(QMainWindow):
 
                 # Append the complete item to the fact-check list
                 self.output_panel.append_to_list_by_id("fact-check-list", item)
+
+        # Handle Answer Question streaming
+        elif hasattr(self, '_template_type') and self._template_type == "answer-question":
+            self._html_buffer += text
+            while True:
+                item_start = self._html_buffer.find("<li class=\"answer-item\">")
+                if item_start == -1:
+                   item_start = self._html_buffer.find("<li class='answer-item'>") # Check single quotes
+                   if item_start == -1:
+                      break # No start tag
+                
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Append the complete item to the answer list
+                self.output_panel.append_to_list_by_id("answer-list", item)
 
         # Default behavior for other template types
         else:
