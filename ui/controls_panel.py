@@ -23,6 +23,7 @@ class ControlsPanel(QWidget):
     company_fit_clicked = pyqtSignal()
     fact_check_clicked = pyqtSignal()
     answer_question_clicked = pyqtSignal()
+    problem_solving_clicked = pyqtSignal()
     clear_output_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
@@ -137,6 +138,13 @@ class ControlsPanel(QWidget):
         self.brainstorm_button.setEnabled(False)
         layout.addWidget(self.brainstorm_button)
         
+        # Issue Tree Logic (Problem Solving) button (New)
+        self.problem_solving_button = QPushButton("Issue Tree Logic")
+        self.problem_solving_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
+        self.problem_solving_button.clicked.connect(self.problem_solving_clicked.emit)
+        self.problem_solving_button.setEnabled(False)
+        layout.addWidget(self.problem_solving_button)
+        
         # Company fit
         self.company_fit_button = QPushButton("SAS Viya Alignment")
         self.company_fit_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
@@ -195,6 +203,7 @@ class ControlsPanel(QWidget):
         self.questions_button.setEnabled(enabled)
         self.fill_gaps_button.setEnabled(enabled)
         self.brainstorm_button.setEnabled(enabled)
+        self.problem_solving_button.setEnabled(enabled)
         self.company_fit_button.setEnabled(enabled)
         self.fact_check_button.setEnabled(enabled)
         self.answer_question_button.setEnabled(enabled)

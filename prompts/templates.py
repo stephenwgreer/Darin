@@ -199,24 +199,76 @@ ANSWER_QUESTION_PROMPT = """
 Analyze the provided transcript, paying close attention to the END of the text.
 Identify the single LAST question asked by any speaker in the transcript.
 
-If a question is found, generate 3-5 concise, relevant suggestions or points that could be included in an answer to that specific question.
-If no question is found near the end, state that clearly as the only output.
+If a question is found, generate:
+1.  3-5 concise, relevant points for the ANSWER.
+2.  Exactly 2 points explaining the RATIONALE behind the answer.
+3.  2-3 concrete EXAMPLES illustrating the answer, if applicable. If examples are not applicable, provide ONE item stating that.
 
-Return ONLY the suggested answer points as HTML list items, formatted exactly as:
-<li class="answer-item">[Suggested answer point]</li>
+Return ONLY the generated points as HTML list items, formatted exactly as follows:
+-   For Answer points: `<li class="answer-item">[Suggested answer point]</li>`
+-   For Rationale points: `<li class="rationale-item">[Rationale point]</li>`
+-   For Example points: `<li class="example-item">[Concrete example or 'N/A']</li>`
+
+If no question is found near the end, return ONLY ONE list item: `<li class="answer-item">No clear question identified at the end of the transcript.</li>`
 
 Example Output (if question found):
 <li class="answer-item">Start by acknowledging the core concern about X.</li>
 <li class="answer-item">Mention the mitigation strategy Y.</li>
-<li class="answer-item">Reference the data point Z as evidence.</li>
-
-Example Output (if no question found):
-<li class="answer-item">No clear question identified at the end of the transcript.</li>
+<li class="rationale-item">This addresses the user's primary worry directly.</li>
+<li class="rationale-item">It demonstrates proactive problem-solving.</li>
+<li class="example-item">For instance, in project Z, we used Y to reduce risk by 20%.</li>
+<li class="example-item">Another case is client A, where Y improved stability significantly.</li>
 
 Do not include the identified question itself, any headers, wrappers, or other text.
 
 Transcript:
 {transcript}
+"""
+
+PROBLEM_SOLVING_PROMPT = """
+**Act as a Management Consultant specializing in Structured Problem Solving.**
+
+Your task is to rigorously analyze the following transcript. Your goal is to deconstruct the core topic or problem being discussed, challenge the underlying thinking, identify gaps, and reframe the issue to facilitate better problem-solving, using the principles of an Issue Tree / Logic Tree.
+
+**Instructions & Output Format:**
+
+Analyze the transcript and generate ONLY HTML list items (`<li>`) based on the sections below. Assign the specified CSS class to each list item.
+
+1.  **Core Problem/Objective:**
+    *   Identify the central question, problem, goal, or decision.
+    *   Format: `<li class="core-problem">[Your summary of the core problem/objective]</li>` (Should be just one item)
+
+2.  **Logic Tree Components:**
+    *   Break down the core problem into its primary components/drivers based *only* on the transcript.
+    *   Format: `<li class="logic-tree-component">[Component/Driver Name/Sub-Question]</li>` (Generate multiple items as needed, use text indentation like '- ' or '  - ' within the item if hierarchy needs to be shown)
+
+3.  **Evaluation:**
+    *   Assess MECE (Mutually Exclusive, Collectively Exhaustive) based on transcript content. Note gaps/overlaps.
+        *   Format: `<li class="evaluation-mece">[MECE Assessment point]</li>` (Multiple items possible)
+    *   Identify key stated or unstated assumptions.
+        *   Format: `<li class="evaluation-assumption">[Identified Assumption]</li>` (Multiple items possible)
+    *   Assess logical connections discussed.
+        *   Format: `<li class="evaluation-logic">[Assessment of logical link]</li>` (Multiple items possible)
+    *   Note where claims lack supporting evidence in the transcript.
+        *   Format: `<li class="evaluation-data">[Observation about missing data/evidence]</li>` (Multiple items possible)
+
+4.  **Challenge & Reframe:**
+    *   Highlight the weakest points identified.
+        *   Format: `<li class="challenge-weakness">[Identified Weakness]</li>` (Multiple items possible)
+    *   Identify 2-3 critical questions not addressed.
+        *   Format: `<li class="challenge-question">[Critical Unasked Question]</li>` (Generate 2-3 items)
+    *   Suggest alternative ways to frame the problem/structure.
+        *   Format: `<li class="challenge-reframe">[Alternative Frame/Structure Suggestion]</li>` (Multiple items possible)
+
+**Important:** Return *ONLY* the HTML `<li>` items with the specified classes. Do not include headings, explanations, wrappers (`<ul>`, `<div>`), or any other text outside the `<li>` tags.
+
+**Transcript to Analyze:**
+
+---
+{transcript}
+---
+
+**Begin Analysis (Return only list items below):**
 """
 
 ##############################

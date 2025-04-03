@@ -148,6 +148,7 @@ class MainWindow(QMainWindow):
         self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT, title="SAS Viya Alignment"))
         self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT, title="Fact Check Analysis"))
         self.controls_panel.answer_question_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(ANSWER_QUESTION_PROMPT, title="Answer Question"))
+        self.controls_panel.problem_solving_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PROBLEM_SOLVING_PROMPT, title="Issue Tree Logic"))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -437,16 +438,49 @@ class MainWindow(QMainWindow):
             self.output_panel.set_output(static_template)
             return "fact-check"
         elif prompt_template == ANSWER_QUESTION_PROMPT:
-            # Static template for Answer Question
+            # Static template for Answer Question with sections
             static_template = """
             <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
-                 <ul id="answer-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                <h3 style="font-weight: bold;">ANSWER</h3>
+                <ul id="answer-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
                     <!-- Answer items will be inserted here -->
-                 </ul>
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">RATIONALE</h3>
+                <ul id="rationale-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Rationale items will be inserted here -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">EXAMPLES</h3>
+                <ul id="examples-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Example items will be inserted here -->
+                </ul>
             </div>
             """
             self.output_panel.set_output(static_template)
             return "answer-question"
+        elif prompt_template == PROBLEM_SOLVING_PROMPT:
+            # Static template for Problem Solving / Issue Tree Logic
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">CORE PROBLEM/OBJECTIVE</h3>
+                <ul id="core-problem-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Core problem item -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">LOGIC TREE COMPONENTS</h3>
+                <ul id="logic-tree-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Logic tree components -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">EVALUATION</h3>
+                <ul id="evaluation-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Evaluation items (MECE, Assumptions, Logic, Data) -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">CHALLENGE & REFRAME</h3>
+                <ul id="challenge-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Challenge items (Weakness, Questions, Reframe) -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "problem-solving"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -496,7 +530,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -811,12 +845,25 @@ class MainWindow(QMainWindow):
         elif hasattr(self, '_template_type') and self._template_type == "answer-question":
             self._html_buffer += text
             while True:
-                item_start = self._html_buffer.find("<li class=\"answer-item\">")
-                if item_start == -1:
-                   item_start = self._html_buffer.find("<li class='answer-item'>") # Check single quotes
-                   if item_start == -1:
-                      break # No start tag
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = ["answer-item", "rationale-item", "example-item"]
+                start_positions = {}
+                for cls in possible_classes:
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                    if pos_double != -1:
+                        start_positions[pos_double] = cls
+                    if pos_single != -1:
+                        start_positions[pos_single] = cls
                 
+                if not start_positions:
+                    break # No relevant item start found
+                
+                # Find the earliest starting position
+                item_start = min(start_positions.keys())
+                item_class = start_positions[item_start]
+
                 item_end = self._html_buffer.find("</li>", item_start)
                 if item_end == -1:
                     break # No end tag yet
@@ -824,8 +871,83 @@ class MainWindow(QMainWindow):
                 item = self._html_buffer[item_start : item_end + 5]
                 self._html_buffer = self._html_buffer[item_end + 5 :]
 
-                # Append the complete item to the answer list
-                self.output_panel.append_to_list_by_id("answer-list", item)
+                # Determine target list based on class
+                target_list_id = None
+                if item_class == "answer-item":
+                    target_list_id = "answer-list"
+                elif item_class == "rationale-item":
+                    target_list_id = "rationale-list"
+                elif item_class == "example-item":
+                    target_list_id = "examples-list"
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle Problem Solving / Issue Tree Logic streaming
+        elif hasattr(self, '_template_type') and self._template_type == "problem-solving":
+            self._html_buffer += text
+            while True:
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = [
+                    "core-problem", "logic-tree-component", 
+                    "evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data",
+                    "challenge-weakness", "challenge-question", "challenge-reframe"
+                ]
+                start_positions = {}
+                for cls in possible_classes:
+                    # Check for class="cls" and class='cls'
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>') # Use \ to escape single quote in f-string
+                    
+                    current_pos = -1
+                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                        current_pos = pos_double
+                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                        current_pos = pos_single
+                        
+                    if current_pos != -1:
+                         # Store the earliest found position for this class
+                         if cls not in start_positions or current_pos < start_positions[cls][0]:
+                              start_positions[cls] = (current_pos, cls)
+                
+                if not start_positions:
+                    break # No relevant item start found
+                
+                # Find the earliest starting position among all found classes
+                earliest_pos = -1
+                item_class = None
+                for cls, (pos, _) in start_positions.items():
+                     if earliest_pos == -1 or pos < earliest_pos:
+                          earliest_pos = pos
+                          item_class = cls
+                
+                item_start = earliest_pos
+                if item_start == -1: # Should not happen if start_positions is not empty
+                     break
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Determine target list based on class
+                target_list_id = None
+                if item_class == "core-problem":
+                    target_list_id = "core-problem-list"
+                elif item_class == "logic-tree-component":
+                    target_list_id = "logic-tree-list"
+                elif item_class in ["evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data"]:
+                    target_list_id = "evaluation-list"
+                elif item_class in ["challenge-weakness", "challenge-question", "challenge-reframe"]:
+                    target_list_id = "challenge-list"
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Default behavior for other template types
         else:
