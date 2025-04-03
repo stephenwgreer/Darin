@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
         
         # App title with typing animation
         app_title = AnimatedLabel("Welcome to Darin, your intern")
-        app_title.setFont(FontManager.get_font(24, QFont.Weight.Medium))
+        app_title.setFont(FontManager.get_font(18, QFont.Weight.Bold))
         header_layout.addWidget(app_title)
         
         header_layout.addStretch()
