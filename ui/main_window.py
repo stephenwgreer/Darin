@@ -27,7 +27,7 @@ from prompts.templates import (
     ANSWER_QUESTION_PROMPT
 )
 # Import from new logic_templates file
-from prompts.logic_templates import PROBLEM_SOLVING_PROMPT, SCQA_PROMPT
+from prompts.logic_templates import PROBLEM_SOLVING_PROMPT, SCQA_PROMPT, HYPOTHESIS_DRIVEN_PROMPT, FIRST_PRINCIPLES_PROMPT, REFRAMING_PROMPT
 
 class MainWindow(QMainWindow):
     # Custom signals
@@ -164,6 +164,9 @@ class MainWindow(QMainWindow):
         self.controls_panel.answer_question_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(ANSWER_QUESTION_PROMPT, title="Answer Question"))
         self.controls_panel.problem_solving_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PROBLEM_SOLVING_PROMPT, title="Issue Tree Logic"))
         self.controls_panel.scqa_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SCQA_PROMPT, title="SCQA Framework"))
+        self.controls_panel.hypothesis_driven_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(HYPOTHESIS_DRIVEN_PROMPT, title="Hypothesis Thinking"))
+        self.controls_panel.first_principles_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FIRST_PRINCIPLES_PROMPT, title="First Principles"))
+        self.controls_panel.reframing_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(REFRAMING_PROMPT, title="Reframing"))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -241,6 +244,7 @@ class MainWindow(QMainWindow):
             return
             
         # Otherwise get audio data
+        audio_data = None # Initialize audio_data
         # For specific prompts, only use last 30s if no transcript exists
         use_last_30s = prompt_template in [PRACTITIONER_INSIGHTS_STREAMING_PROMPT, ANSWER_QUESTION_PROMPT]
         
@@ -250,18 +254,20 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Processing Error", "Not enough audio (last 30s) in buffer to process")
                 self.controls_panel.set_prompt_buttons_enabled(True)
                 self.is_processing = False
-                return
-        else:
-            # For all other prompts, or if insights/answer already has a transcript, use full buffer
+                return # Return early if 30s failed
+        
+        # If we didn't get 30s audio (either not applicable or it succeeded but we proceed),
+        # get the full buffer instead.
+        if audio_data is None: # This means we need the full buffer
             audio_data = self.recorder.save_buffer()
+            if audio_data is None:
+                 # Check if getting the full buffer failed
+                 QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
+                 self.controls_panel.set_prompt_buttons_enabled(True)
+                 self.is_processing = False
+                 return # Return early if full buffer failed
         
-        if audio_data is None and not (use_last_30s and not self.current_transcript):
-            # Only show this warning if not using the 30s logic which has its own warning
-            QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
-            self.controls_panel.set_prompt_buttons_enabled(True)
-            self.is_processing = False
-            return
-        
+        # We should now have valid audio_data (either 30s or full buffer)
         # Start transcription and processing in a separate thread
         threading.Thread(
             target=self._transcribe_and_process_thread, 
@@ -285,7 +291,7 @@ class MainWindow(QMainWindow):
             self.processing_complete.emit({"error": str(e)})
         finally:
             self.is_processing = False
-            
+    
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
         try:
@@ -528,6 +534,94 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "scqa"
+        elif prompt_template == HYPOTHESIS_DRIVEN_PROMPT:
+            # Static template for Hypothesis Driven Thinking
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">PROBLEM STATEMENT</h3>
+                <ul id="hypothesis-problem-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Problem statement item -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">HYPOTHESES</h3>
+                <ul id="hypothesis-hypothesis-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Hypothesis items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">EVIDENCE ANALYSIS</h3>
+                <ul id="hypothesis-evidence-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Evidence items (Support, Contradict, Missing) -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">HYPOTHESIS PRIORITIZATION</h3>
+                <ul id="hypothesis-priority-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Priority items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">TESTING PLAN</h3>
+                <ul id="hypothesis-testing-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Testing plan items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">DECISION FRAMEWORK</h3>
+                <ul id="hypothesis-decision-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Decision framework items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">TRANSCRIPT ASSESSMENT</h3>
+                <ul id="hypothesis-assessment-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Assessment items -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "hypothesis-driven"
+        elif prompt_template == FIRST_PRINCIPLES_PROMPT:
+            # Static template for First Principles Thinking
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">CONVENTIONAL THINKING</h3>
+                <ul id="fp-conventional-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Conventional thinking items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">FUNDAMENTALS</h3>
+                <ul id="fp-fundamental-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Fundamental truths -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">ASSUMPTION CHALLENGES</h3>
+                <ul id="fp-assumption-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Assumption challenges -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">REBUILD FROM FIRST PRINCIPLES</h3>
+                <ul id="fp-rebuild-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Rebuilt approaches -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">NOVEL INSIGHTS</h3>
+                <ul id="fp-insight-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Novel insights -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">IMPLEMENTATION FRAMEWORK</h3>
+                <ul id="fp-implementation-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Implementation steps -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">METACOGNITIVE ASSESSMENT</h3>
+                <ul id="fp-metacognitive-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Metacognitive points -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "first-principles"
+        elif prompt_template == REFRAMING_PROMPT:
+            # Static template for Reframing
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">REFRAMED STATEMENT</h3>
+                <ul id="reframing-statement-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Reframed statement item -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">SUPPORTING POINTS</h3>
+                <ul id="reframing-point-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Supporting point items -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "reframing"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -577,7 +671,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving", "scqa"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving", "scqa", "hypothesis-driven", "first-principles", "reframing"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -761,7 +855,7 @@ class MainWindow(QMainWindow):
                     item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
                 elif 'style="' not in item:
                     item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-
+                
                 self.output_panel.append_to_dynamic_content(item)
 
         # Handle topic summary streaming
@@ -1049,7 +1143,171 @@ class MainWindow(QMainWindow):
                 if target_list_id:
                     self.output_panel.append_to_list_by_id(target_list_id, item)
 
-        # Default behavior for other template types
+        # Handle Hypothesis Driven Thinking streaming
+        elif hasattr(self, '_template_type') and self._template_type == "hypothesis-driven":
+            self._html_buffer += text
+            while True:
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = [
+                    "hypothesis-problem", "hypothesis-hypothesis", 
+                    "hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing",
+                    "hypothesis-priority", "hypothesis-testing", "hypothesis-decision", "hypothesis-assessment"
+                ]
+                start_positions = {}
+                for cls in possible_classes:
+                    # Check for class="cls" and class='cls'
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                    
+                    current_pos = -1
+                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                        current_pos = pos_double
+                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                        current_pos = pos_single
+                        
+                    if current_pos != -1:
+                         if cls not in start_positions or current_pos < start_positions[cls][0]:
+                              start_positions[cls] = (current_pos, cls)
+                
+                if not start_positions:
+                    break # No relevant item start found
+                
+                earliest_pos = -1
+                item_class = None
+                for cls, (pos, _) in start_positions.items():
+                     if earliest_pos == -1 or pos < earliest_pos:
+                          earliest_pos = pos
+                          item_class = cls
+                
+                item_start = earliest_pos
+                if item_start == -1: break
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Determine target list based on class
+                target_list_id = None
+                if item_class == "hypothesis-problem": target_list_id = "hypothesis-problem-list"
+                elif item_class == "hypothesis-hypothesis": target_list_id = "hypothesis-hypothesis-list"
+                elif item_class in ["hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing"]: target_list_id = "hypothesis-evidence-list"
+                elif item_class == "hypothesis-priority": target_list_id = "hypothesis-priority-list"
+                elif item_class == "hypothesis-testing": target_list_id = "hypothesis-testing-list"
+                elif item_class == "hypothesis-decision": target_list_id = "hypothesis-decision-list"
+                elif item_class == "hypothesis-assessment": target_list_id = "hypothesis-assessment-list"
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle First Principles Thinking streaming
+        elif hasattr(self, '_template_type') and self._template_type == "first-principles":
+            self._html_buffer += text
+            while True:
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = [
+                    "fp-conventional", "fp-fundamental", "fp-assumption", 
+                    "fp-rebuild", "fp-insight", "fp-implementation", "fp-metacognitive"
+                ]
+                start_positions = {}
+                for cls in possible_classes:
+                    # Check for class="cls" and class='cls'
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                    
+                    current_pos = -1
+                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                        current_pos = pos_double
+                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                        current_pos = pos_single
+                        
+                    if current_pos != -1:
+                         if cls not in start_positions or current_pos < start_positions[cls][0]:
+                              start_positions[cls] = (current_pos, cls)
+                
+                if not start_positions:
+                    break # No relevant item start found
+                
+                earliest_pos = -1
+                item_class = None
+                for cls, (pos, _) in start_positions.items():
+                     if earliest_pos == -1 or pos < earliest_pos:
+                          earliest_pos = pos
+                          item_class = cls
+                
+                item_start = earliest_pos
+                if item_start == -1: break
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Determine target list based on class (map class directly to list ID)
+                target_list_id = f"{item_class}-list"
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle Reframing streaming
+        elif hasattr(self, '_template_type') and self._template_type == "reframing":
+            self._html_buffer += text
+            while True:
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = ["reframing-statement", "reframing-point"]
+                start_positions = {}
+                for cls in possible_classes:
+                    # Check for class="cls" and class='cls'
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                    
+                    current_pos = -1
+                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                        current_pos = pos_double
+                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                        current_pos = pos_single
+                        
+                    if current_pos != -1:
+                         if cls not in start_positions or current_pos < start_positions[cls][0]:
+                              start_positions[cls] = (current_pos, cls)
+                
+                if not start_positions:
+                    break # No relevant item start found
+                
+                earliest_pos = -1
+                item_class = None
+                for cls, (pos, _) in start_positions.items():
+                     if earliest_pos == -1 or pos < earliest_pos:
+                          earliest_pos = pos
+                          item_class = cls
+                
+                item_start = earliest_pos
+                if item_start == -1: break
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Determine target list based on class
+                target_list_id = f"{item_class}-list" # Map class directly to list ID
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+            # Default behavior for other template types
         else:
             complete_element = self._process_html_chunk(text)
             if complete_element:
