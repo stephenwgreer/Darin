@@ -13,7 +13,21 @@ from ui.controls_panel import ControlsPanel
 from ui.output_panel import OutputPanel
 from ui.animated_label import AnimatedLabel
 from ui.font_manager import FontManager
-from prompts.templates import *
+# Explicit imports from prompts.templates
+from prompts.templates import (
+    PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
+    MEETING_SUMMARY_PROMPT,
+    FILL_IN_GAPS_PROMPT,
+    BRAINSTORM_PROMPT,
+    COMPANY_FIT_PROMPT,
+    FACT_CHECKING_PROMPT,
+    FOLLOW_UP_QUESTIONS_PROMPT,
+    SENTIMENT_ANALYSIS_PROMPT,
+    TOPIC_SUMMARY_PROMPT,
+    ANSWER_QUESTION_PROMPT
+)
+# Import from new logic_templates file
+from prompts.logic_templates import PROBLEM_SOLVING_PROMPT, SCQA_PROMPT
 
 class MainWindow(QMainWindow):
     # Custom signals

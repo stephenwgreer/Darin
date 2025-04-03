@@ -112,14 +112,14 @@ class ControlsPanel(QWidget):
         # --- End Transcript Processing Menu --- 
         
         # Banking insights
-        self.insights_button = QPushButton("Banking Practitioner Insights")
+        self.insights_button = QPushButton("Practitioner Insights")
         self.insights_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.insights_button.clicked.connect(self.insights_clicked.emit)
         self.insights_button.setEnabled(False)
         layout.addWidget(self.insights_button)
         
         # Follow-up questions
-        self.questions_button = QPushButton("Generate Follow-up Questions")
+        self.questions_button = QPushButton("Follow-up Questions")
         self.questions_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.questions_button.clicked.connect(self.questions_clicked.emit)
         self.questions_button.setEnabled(False)
@@ -133,14 +133,14 @@ class ControlsPanel(QWidget):
         layout.addWidget(self.scqa_button)
         
         # Fill in gaps in reasoning
-        self.fill_gaps_button = QPushButton("Fill Gaps in Reasoning")
+        self.fill_gaps_button = QPushButton("Gaps in Reasoning")
         self.fill_gaps_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.fill_gaps_button.clicked.connect(self.fill_gaps_clicked.emit)
         self.fill_gaps_button.setEnabled(False)
         layout.addWidget(self.fill_gaps_button)
         
         # Brainstorm
-        self.brainstorm_button = QPushButton("Brainstorm Questions")
+        self.brainstorm_button = QPushButton("Brainstorming")
         self.brainstorm_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.brainstorm_button.clicked.connect(self.brainstorm_clicked.emit)
         self.brainstorm_button.setEnabled(False)
@@ -161,7 +161,7 @@ class ControlsPanel(QWidget):
         layout.addWidget(self.company_fit_button)
         
         # Fact checking
-        self.fact_check_button = QPushButton("Fact Check Transcript")
+        self.fact_check_button = QPushButton("Fact Check")
         self.fact_check_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.fact_check_button.clicked.connect(self.fact_check_clicked.emit)
         self.fact_check_button.setEnabled(False)
