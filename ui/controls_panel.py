@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, 
-                         QProgressBar, QSpacerItem, QSizePolicy)
+                         QProgressBar, QSpacerItem, QSizePolicy, QMenu)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QAction
 from datetime import datetime
 
 from ui.font_manager import FontManager
@@ -22,6 +22,7 @@ class ControlsPanel(QWidget):
     brainstorm_clicked = pyqtSignal()
     company_fit_clicked = pyqtSignal()
     fact_check_clicked = pyqtSignal()
+    answer_question_clicked = pyqtSignal()
     clear_output_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
@@ -82,19 +83,31 @@ class ControlsPanel(QWidget):
         prompt_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         layout.addWidget(prompt_label)
         
-        # Topic extraction
-        self.topic_button = QPushButton("Extract Topics")
-        self.topic_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.topic_button.clicked.connect(self.topics_clicked.emit)
-        self.topic_button.setEnabled(False)
-        layout.addWidget(self.topic_button)
+        # --- Transcript Processing Menu Button --- 
+        self.processing_menu_button = QPushButton("Transcript Processing")
+        self.processing_menu_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         
-        # Meeting summary
-        self.summary_button = QPushButton("Meeting Summary")
-        self.summary_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.summary_button.clicked.connect(self.summary_clicked.emit)
-        self.summary_button.setEnabled(False)
-        layout.addWidget(self.summary_button)
+        processing_menu = QMenu(self)
+        
+        # Extract Topics Action
+        self.topic_action = QAction("Extract Topics", self)
+        self.topic_action.triggered.connect(self.topics_clicked.emit)
+        processing_menu.addAction(self.topic_action)
+        
+        # Meeting Summary Action
+        self.summary_action = QAction("Meeting Summary", self)
+        self.summary_action.triggered.connect(self.summary_clicked.emit)
+        processing_menu.addAction(self.summary_action)
+        
+        # Sentiment Analysis Action
+        self.sentiment_action = QAction("Sentiment Analysis", self)
+        self.sentiment_action.triggered.connect(self.sentiment_clicked.emit)
+        processing_menu.addAction(self.sentiment_action)
+        
+        self.processing_menu_button.setMenu(processing_menu)
+        self.processing_menu_button.setEnabled(False) # Start disabled
+        layout.addWidget(self.processing_menu_button)
+        # --- End Transcript Processing Menu --- 
         
         # Banking insights
         self.insights_button = QPushButton("Banking Practitioner Insights")
@@ -109,13 +122,6 @@ class ControlsPanel(QWidget):
         self.questions_button.clicked.connect(self.questions_clicked.emit)
         self.questions_button.setEnabled(False)
         layout.addWidget(self.questions_button)
-        
-        # Sentiment analysis
-        self.sentiment_button = QPushButton("Sentiment Analysis")
-        self.sentiment_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.sentiment_button.clicked.connect(self.sentiment_clicked.emit)
-        self.sentiment_button.setEnabled(False)
-        layout.addWidget(self.sentiment_button)
         
         # Fill in gaps in reasoning
         self.fill_gaps_button = QPushButton("Fill Gaps in Reasoning")
@@ -144,6 +150,13 @@ class ControlsPanel(QWidget):
         self.fact_check_button.clicked.connect(self.fact_check_clicked.emit)
         self.fact_check_button.setEnabled(False)
         layout.addWidget(self.fact_check_button)
+
+        # Answer Question button (New)
+        self.answer_question_button = QPushButton("Answer Question")
+        self.answer_question_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
+        self.answer_question_button.clicked.connect(self.answer_question_clicked.emit)
+        self.answer_question_button.setEnabled(False)
+        layout.addWidget(self.answer_question_button)
         
         # Add stretch at the bottom
         layout.addStretch()
@@ -174,12 +187,14 @@ class ControlsPanel(QWidget):
     
     def set_prompt_buttons_enabled(self, enabled):
         """Enable or disable all prompt buttons"""
-        self.topic_button.setEnabled(enabled)
+        # Enable/disable the new menu button
+        self.processing_menu_button.setEnabled(enabled)
+        
+        # Enable/disable other buttons as before
         self.insights_button.setEnabled(enabled)
-        self.summary_button.setEnabled(enabled)
         self.questions_button.setEnabled(enabled)
-        self.sentiment_button.setEnabled(enabled)
         self.fill_gaps_button.setEnabled(enabled)
         self.brainstorm_button.setEnabled(enabled)
         self.company_fit_button.setEnabled(enabled)
         self.fact_check_button.setEnabled(enabled)
+        self.answer_question_button.setEnabled(enabled)
