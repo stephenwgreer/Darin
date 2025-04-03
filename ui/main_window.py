@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
         self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT, title="Fact Check Analysis"))
         self.controls_panel.answer_question_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(ANSWER_QUESTION_PROMPT, title="Answer Question"))
         self.controls_panel.problem_solving_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PROBLEM_SOLVING_PROMPT, title="Issue Tree Logic"))
+        self.controls_panel.scqa_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SCQA_PROMPT, title="SCQA Framework"))
         
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
@@ -481,6 +482,38 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "problem-solving"
+        elif prompt_template == SCQA_PROMPT:
+            # Static template for SCQA Framework
+            static_template = """
+            <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+                <h3 style="font-weight: bold;">SITUATION</h3>
+                <ul id="scqa-situation-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Situation items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">COMPLICATION</h3>
+                <ul id="scqa-complication-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Complication items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">QUESTION</h3>
+                <ul id="scqa-question-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Question item -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">ANSWER</h3>
+                <ul id="scqa-answer-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+                    <!-- Answer items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">CRITICAL ASSESSMENT</h3>
+                <ul id="scqa-assessment-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Assessment items -->
+                </ul>
+                <h3 style="font-weight: bold; margin-top: 20px;">IMPLEMENTATION ROADMAP</h3>
+                <ul id="scqa-roadmap-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+                    <!-- Roadmap items -->
+                </ul>
+            </div>
+            """
+            self.output_panel.set_output(static_template)
+            return "scqa"
         else:
             # Generic template for other prompt types
             static_template = """
@@ -530,7 +563,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving"]:
+            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving", "scqa"]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
@@ -944,6 +977,59 @@ class MainWindow(QMainWindow):
                     target_list_id = "evaluation-list"
                 elif item_class in ["challenge-weakness", "challenge-question", "challenge-reframe"]:
                     target_list_id = "challenge-list"
+
+                # Append the complete item to the correct list
+                if target_list_id:
+                    self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Handle SCQA Framework streaming
+        elif hasattr(self, '_template_type') and self._template_type == "scqa":
+            self._html_buffer += text
+            while True:
+                # Find the start of any relevant list item
+                item_start = -1
+                possible_classes = [
+                    "scqa-situation", "scqa-complication", "scqa-question", 
+                    "scqa-answer", "scqa-assessment", "scqa-roadmap"
+                ]
+                start_positions = {}
+                for cls in possible_classes:
+                    # Check for class="cls" and class='cls'
+                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                    
+                    current_pos = -1
+                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                        current_pos = pos_double
+                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                        current_pos = pos_single
+                        
+                    if current_pos != -1:
+                         if cls not in start_positions or current_pos < start_positions[cls][0]:
+                              start_positions[cls] = (current_pos, cls)
+                
+                if not start_positions:
+                    break # No relevant item start found
+                
+                earliest_pos = -1
+                item_class = None
+                for cls, (pos, _) in start_positions.items():
+                     if earliest_pos == -1 or pos < earliest_pos:
+                          earliest_pos = pos
+                          item_class = cls
+                
+                item_start = earliest_pos
+                if item_start == -1: break
+
+                item_end = self._html_buffer.find("</li>", item_start)
+                if item_end == -1:
+                    break # No end tag yet
+                    
+                item = self._html_buffer[item_start : item_end + 5]
+                self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                # Determine target list based on class
+                target_list_id = f"{item_class}-list" # Map class directly to list ID
 
                 # Append the complete item to the correct list
                 if target_list_id:

@@ -24,6 +24,7 @@ class ControlsPanel(QWidget):
     fact_check_clicked = pyqtSignal()
     answer_question_clicked = pyqtSignal()
     problem_solving_clicked = pyqtSignal()
+    scqa_clicked = pyqtSignal()
     clear_output_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
@@ -124,6 +125,13 @@ class ControlsPanel(QWidget):
         self.questions_button.setEnabled(False)
         layout.addWidget(self.questions_button)
         
+        # SCQA Framework button (New)
+        self.scqa_button = QPushButton("SCQA Framework")
+        self.scqa_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
+        self.scqa_button.clicked.connect(self.scqa_clicked.emit)
+        self.scqa_button.setEnabled(False)
+        layout.addWidget(self.scqa_button)
+        
         # Fill in gaps in reasoning
         self.fill_gaps_button = QPushButton("Fill Gaps in Reasoning")
         self.fill_gaps_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
@@ -201,9 +209,10 @@ class ControlsPanel(QWidget):
         # Enable/disable other buttons as before
         self.insights_button.setEnabled(enabled)
         self.questions_button.setEnabled(enabled)
+        self.scqa_button.setEnabled(enabled)
+        self.problem_solving_button.setEnabled(enabled)
         self.fill_gaps_button.setEnabled(enabled)
         self.brainstorm_button.setEnabled(enabled)
-        self.problem_solving_button.setEnabled(enabled)
         self.company_fit_button.setEnabled(enabled)
         self.fact_check_button.setEnabled(enabled)
         self.answer_question_button.setEnabled(enabled)
