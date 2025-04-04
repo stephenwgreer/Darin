@@ -38,10 +38,11 @@ class OutputPanel(QWidget):
             QLabel#output_title {
                 font-size: 28px;
                 color: #FFFFFF;
-                padding: 20px;
+                padding: 5px;
                 font-weight: 500;
             }
         """)
+        self.title_label.setMaximumHeight(50)
         layout.addWidget(self.title_label)
         
         # Use QWebEngineView for better HTML support
@@ -59,7 +60,7 @@ class OutputPanel(QWidget):
                     background-color: #252526;
                     color: #FFFFFF;
                     font-family: system-ui, -apple-system, sans-serif;
-                    padding: 20px;
+                    padding: 0px;
                     margin: 0;
                     font-size: 14px;
                 }
