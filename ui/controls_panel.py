@@ -113,6 +113,37 @@ class ControlsPanel(QWidget):
         self.processing_menu_button.setEnabled(False) # Start disabled
         layout.addWidget(self.processing_menu_button)
         # --- End Transcript Processing Menu --- 
+
+        # --- Logic Menu Button ---
+        self.logic_menu_button = QPushButton("Logic")
+        self.logic_menu_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
+        
+        logic_menu = QMenu(self)
+        
+        # First Principles Action
+        self.first_principles_action = QAction("First Principles", self)
+        self.first_principles_action.triggered.connect(self.first_principles_clicked.emit)
+        logic_menu.addAction(self.first_principles_action)
+        
+        # SCQA Framework Action
+        self.scqa_action = QAction("SCQA Framework", self)
+        self.scqa_action.triggered.connect(self.scqa_clicked.emit)
+        logic_menu.addAction(self.scqa_action)
+        
+        # Hypothesis Thinking Action
+        self.hypothesis_action = QAction("Hypothesis Thinking", self)
+        self.hypothesis_action.triggered.connect(self.hypothesis_driven_clicked.emit)
+        logic_menu.addAction(self.hypothesis_action)
+        
+        # Issue Tree Logic Action
+        self.problem_solving_action = QAction("Issue Tree Logic", self)
+        self.problem_solving_action.triggered.connect(self.problem_solving_clicked.emit)
+        logic_menu.addAction(self.problem_solving_action)
+        
+        self.logic_menu_button.setMenu(logic_menu)
+        self.logic_menu_button.setEnabled(False) # Start disabled
+        layout.addWidget(self.logic_menu_button)
+        # --- End Logic Menu ---
         
         # Banking insights
         self.insights_button = QPushButton("Practitioner Insights")
@@ -128,33 +159,12 @@ class ControlsPanel(QWidget):
         self.questions_button.setEnabled(False)
         layout.addWidget(self.questions_button)
         
-        # First Principles button
-        self.first_principles_button = QPushButton("First Principles")
-        self.first_principles_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.first_principles_button.clicked.connect(self.first_principles_clicked.emit)
-        self.first_principles_button.setEnabled(False)
-        layout.addWidget(self.first_principles_button)
-        
         # Reframing button (New)
         self.reframing_button = QPushButton("Reframing")
         self.reframing_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
         self.reframing_button.clicked.connect(self.reframing_clicked.emit)
         self.reframing_button.setEnabled(False)
         layout.addWidget(self.reframing_button)
-        
-        # SCQA Framework button
-        self.scqa_button = QPushButton("SCQA Framework")
-        self.scqa_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.scqa_button.clicked.connect(self.scqa_clicked.emit)
-        self.scqa_button.setEnabled(False)
-        layout.addWidget(self.scqa_button)
-        
-        # Hypothesis Thinking button
-        self.hypothesis_button = QPushButton("Hypothesis Thinking")
-        self.hypothesis_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.hypothesis_button.clicked.connect(self.hypothesis_driven_clicked.emit)
-        self.hypothesis_button.setEnabled(False)
-        layout.addWidget(self.hypothesis_button)
         
         # Fill in gaps in reasoning
         self.fill_gaps_button = QPushButton("Gaps in Reasoning")
@@ -169,13 +179,6 @@ class ControlsPanel(QWidget):
         self.brainstorm_button.clicked.connect(self.brainstorm_clicked.emit)
         self.brainstorm_button.setEnabled(False)
         layout.addWidget(self.brainstorm_button)
-        
-        # Issue Tree Logic (Problem Solving) button
-        self.problem_solving_button = QPushButton("Issue Tree Logic")
-        self.problem_solving_button.setFont(FontManager.get_font(12, QFont.Weight.Light))
-        self.problem_solving_button.clicked.connect(self.problem_solving_clicked.emit)
-        self.problem_solving_button.setEnabled(False)
-        layout.addWidget(self.problem_solving_button)
         
         # Company fit
         self.company_fit_button = QPushButton("SAS Viya Alignment")
@@ -227,17 +230,14 @@ class ControlsPanel(QWidget):
     
     def set_prompt_buttons_enabled(self, enabled):
         """Enable or disable all prompt buttons"""
-        # Enable/disable the new menu button
+        # Enable/disable the menu buttons
         self.processing_menu_button.setEnabled(enabled)
+        self.logic_menu_button.setEnabled(enabled)
         
         # Enable/disable other buttons as before
         self.insights_button.setEnabled(enabled)
         self.questions_button.setEnabled(enabled)
-        self.first_principles_button.setEnabled(enabled)
         self.reframing_button.setEnabled(enabled)
-        self.scqa_button.setEnabled(enabled)
-        self.hypothesis_button.setEnabled(enabled)
-        self.problem_solving_button.setEnabled(enabled)
         self.fill_gaps_button.setEnabled(enabled)
         self.brainstorm_button.setEnabled(enabled)
         self.company_fit_button.setEnabled(enabled)
