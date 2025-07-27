@@ -16,20 +16,27 @@ import {
   Download,
   Settings,
   Volume2,
-  VolumeX
+  VolumeX,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
+
+import useWebSocket from './hooks/useWebSocket';
+import { apiClient, type PromptInfo } from './api/client';
 
 interface TranscriptionSegment {
   id: string;
   text: string;
   timestamp: number;
   speaker?: string;
+  duration_type?: 'full_buffer' | 'last_30_seconds';
 }
 
 interface AnalysisResult {
   type: string;
   content: string;
   timestamp: number;
+  isStreaming?: boolean;
 }
 
 const AudioVisualizer = ({ isRecording, audioLevel = 0 }: { isRecording: boolean; audioLevel: number }) => {
@@ -53,8 +60,17 @@ const AudioVisualizer = ({ isRecording, audioLevel = 0 }: { isRecording: boolean
   );
 };
 
-const StatusIndicator = ({ status, message }: { status: 'idle' | 'recording' | 'processing' | 'error'; message: string }) => {
+const StatusIndicator = ({ 
+  status, 
+  message, 
+  isConnected 
+}: { 
+  status: 'idle' | 'recording' | 'processing' | 'error'; 
+  message: string;
+  isConnected: boolean;
+}) => {
   const getStatusColor = () => {
+    if (!isConnected) return 'text-red-400';
     switch (status) {
       case 'recording': return 'text-red-400';
       case 'processing': return 'text-yellow-400';
@@ -64,18 +80,21 @@ const StatusIndicator = ({ status, message }: { status: 'idle' | 'recording' | '
   };
 
   const getStatusIcon = () => {
+    if (!isConnected) return <WifiOff className="w-4 h-4 text-red-400" />;
     switch (status) {
       case 'recording': return <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />;
       case 'processing': return <div className="w-2 h-2 bg-yellow-400 rounded-full animate-spin" />;
       case 'error': return <AlertCircle className="w-4 h-4 text-red-400" />;
-      default: return <div className="w-2 h-2 bg-slate-400 rounded-full" />;
+      default: return <Wifi className="w-4 h-4 text-green-400" />;
     }
   };
+
+  const displayMessage = !isConnected ? 'Disconnected' : message;
 
   return (
     <div className="flex items-center space-x-2">
       {getStatusIcon()}
-      <span className={`text-sm ${getStatusColor()}`}>{message}</span>
+      <span className={`text-sm ${getStatusColor()}`}>{displayMessage}</span>
     </div>
   );
 };
@@ -142,18 +161,37 @@ const TranscriptionPanel = ({ segments }: { segments: TranscriptionSegment[] }) 
   );
 };
 
-const AnalysisPanel = ({ analyses, onAnalyze }: { 
+const AnalysisPanel = ({ 
+  analyses, 
+  onAnalyze, 
+  prompts, 
+  isLoading 
+}: { 
   analyses: AnalysisResult[]; 
-  onAnalyze: (type: string) => void;
+  onAnalyze: (promptId: string, promptLabel: string) => void;
+  prompts: PromptInfo[];
+  isLoading: boolean;
 }) => {
-  const analysisTypes = [
-    { id: 'summary', label: 'Meeting Summary', icon: Users },
-    { id: 'questions', label: 'Follow-up Questions', icon: MessageSquare },
-    { id: 'topics', label: 'Topic Analysis', icon: Brain },
-    { id: 'sentiment', label: 'Sentiment Analysis', icon: Zap },
-    { id: 'facts', label: 'Fact Checking', icon: CheckCircle },
-    { id: 'gaps', label: 'Gap Analysis', icon: AlertCircle }
-  ];
+  const getIconForPrompt = (promptId: string) => {
+    const iconMap: Record<string, any> = {
+      'meeting_summary': Users,
+      'follow_up_questions': MessageSquare,
+      'topic_summary': Brain,
+      'sentiment_analysis': Zap,
+      'fact_check': CheckCircle,
+      'gaps_reasoning': AlertCircle,
+      'brainstorming': MessageSquare,
+      'scqa': Brain,
+      'hypothesis_driven': Brain,
+      'first_principles': Brain,
+      'company_fit': CheckCircle,
+      'answer_question': MessageSquare,
+      'practitioner_insights': Brain,
+      'issue_tree': Brain,
+      'reframing': Brain
+    };
+    return iconMap[promptId] || Brain;
+  };
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-white/10 p-6 h-96">
@@ -164,21 +202,36 @@ const AnalysisPanel = ({ analyses, onAnalyze }: {
         </h3>
       </div>
       
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        {analysisTypes.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => onAnalyze(id)}
-            className="p-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl border border-white/5 hover:border-white/10 transition-all duration-200 group"
-          >
-            <div className="flex items-center space-x-2">
-              <Icon className="w-4 h-4 text-slate-400 group-hover:text-teal-400 transition-colors duration-200" />
-              <span className="text-sm text-slate-300 group-hover:text-white transition-colors duration-200">
-                {label}
-              </span>
-            </div>
-          </button>
-        ))}
+      <div className="grid grid-cols-2 gap-2 mb-6 max-h-48 overflow-y-auto">
+        {isLoading ? (
+          <div className="col-span-2 flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-400"></div>
+            <span className="ml-2 text-slate-400">Loading prompts...</span>
+          </div>
+        ) : prompts.length === 0 ? (
+          <div className="col-span-2 text-center py-8 text-slate-500">
+            No prompts available
+          </div>
+        ) : (
+          prompts.map((prompt) => {
+            const Icon = getIconForPrompt(prompt.id);
+            return (
+              <button
+                key={prompt.id}
+                onClick={() => onAnalyze(prompt.id, prompt.button_text)}
+                className="p-2 bg-slate-700/50 hover:bg-slate-700 rounded-lg border border-white/5 hover:border-white/10 transition-all duration-200 group"
+                title={prompt.output_title}
+              >
+                <div className="flex items-center space-x-2">
+                  <Icon className="w-3 h-3 text-slate-400 group-hover:text-teal-400 transition-colors duration-200 flex-shrink-0" />
+                  <span className="text-xs text-slate-300 group-hover:text-white transition-colors duration-200 truncate">
+                    {prompt.button_text}
+                  </span>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
       
       <div className="h-48 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
@@ -191,17 +244,31 @@ const AnalysisPanel = ({ analyses, onAnalyze }: {
           </div>
         ) : (
           analyses.map((analysis, index) => (
-            <div key={index} className="bg-slate-700/30 rounded-xl p-4 border border-white/5">
+            <div key={index} className={`bg-slate-700/30 rounded-xl p-4 border ${
+              analysis.isStreaming ? 'border-teal-400/30 bg-teal-900/10' : 'border-white/5'
+            }`}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-teal-400 capitalize">
-                  {analysis.type}
-                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-teal-400 capitalize">
+                    {analysis.type}
+                  </span>
+                  {analysis.isStreaming && (
+                    <div className="flex items-center space-x-1">
+                      <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse"></div>
+                      <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse delay-75"></div>
+                      <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse delay-150"></div>
+                    </div>
+                  )}
+                </div>
                 <span className="text-xs text-slate-500">
                   {new Date(analysis.timestamp).toLocaleTimeString()}
                 </span>
               </div>
               <p className="text-slate-200 text-sm leading-relaxed">
                 {analysis.content}
+                {analysis.isStreaming && (
+                  <span className="inline-block w-2 h-4 bg-teal-400 ml-1 animate-pulse"></span>
+                )}
               </p>
             </div>
           ))
@@ -212,39 +279,149 @@ const AnalysisPanel = ({ analyses, onAnalyze }: {
 };
 
 function App() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  // WebSocket connection
+  const {
+    connectionStatus,
+    recordingStatus,
+    startRecording,
+    stopRecording,
+    pauseRecording,
+    transcribeBuffer,
+    transcribeLast30,
+    analyzeTranscript,
+    onMessage
+  } = useWebSocket();
+
+  // UI state
   const [isMuted, setIsMuted] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [bufferTime, setBufferTime] = useState(0);
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing' | 'error'>('idle');
-  const [statusMessage, setStatusMessage] = useState('Ready to record');
+  const [statusMessage, setStatusMessage] = useState('Connecting...');
   
+  // Data state
   const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
   const [analyses, setAnalyses] = useState<AnalysisResult[]>([]);
+  const [prompts, setPrompts] = useState<PromptInfo[]>([]);
+  const [promptsLoading, setPromptsLoading] = useState(true);
+  
+  // Current streaming analysis
+  const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null);
   
   const recordingInterval = useRef<NodeJS.Timeout>();
-  const bufferInterval = useRef<NodeJS.Timeout>();
 
+  // Load prompts on mount
   useEffect(() => {
-    if (isRecording && !isPaused) {
+    const loadPrompts = async () => {
+      try {
+        const response = await apiClient.getPrompts();
+        setPrompts(response.prompts);
+        setPromptsLoading(false);
+      } catch (error) {
+        console.error('Failed to load prompts:', error);
+        setPromptsLoading(false);
+      }
+    };
+
+    loadPrompts();
+  }, []);
+
+  // Update status based on connection and recording state
+  useEffect(() => {
+    if (!connectionStatus.isConnected) {
+      setStatus('error');
+      setStatusMessage(connectionStatus.error || 'Disconnected');
+    } else if (recordingStatus.is_recording) {
+      setStatus('recording');
+      setStatusMessage(recordingStatus.is_paused ? 'Recording paused' : 'Recording audio...');
+    } else {
+      setStatus('idle');
+      setStatusMessage('Ready to record');
+    }
+  }, [connectionStatus, recordingStatus]);
+
+  // Recording timer effect
+  useEffect(() => {
+    if (recordingStatus.is_recording && !recordingStatus.is_paused) {
       recordingInterval.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
-      
-      bufferInterval.current = setInterval(() => {
-        setBufferTime(prev => Math.min(prev + 1, 180)); // 3 minute max buffer
-      }, 1000);
     } else {
       if (recordingInterval.current) clearInterval(recordingInterval.current);
-      if (bufferInterval.current) clearInterval(bufferInterval.current);
+      if (!recordingStatus.is_recording) {
+        setRecordingTime(0);
+      }
     }
 
     return () => {
       if (recordingInterval.current) clearInterval(recordingInterval.current);
-      if (bufferInterval.current) clearInterval(bufferInterval.current);
     };
-  }, [isRecording, isPaused]);
+  }, [recordingStatus.is_recording, recordingStatus.is_paused]);
+
+  // WebSocket message handlers
+  useEffect(() => {
+    const unsubscribeTranscription = onMessage('transcription_result', (data) => {
+      const newSegment: TranscriptionSegment = {
+        id: Date.now().toString(),
+        text: data.transcript,
+        timestamp: data.timestamp * 1000, // Convert to milliseconds
+        duration_type: data.duration_type
+      };
+      setTranscriptionSegments(prev => [...prev, newSegment]);
+      setStatus('idle');
+      setStatusMessage('Transcription complete');
+    });
+
+    const unsubscribeAnalysis = onMessage('analysis_result', (data) => {
+      if (currentAnalysis) {
+        // Finalize the streaming analysis
+        setAnalyses(prev => [...prev, {
+          type: data.analysis_type,
+          content: data.result,
+          timestamp: data.timestamp * 1000,
+          isStreaming: false
+        }]);
+        setCurrentAnalysis(null);
+      }
+      setStatus('idle');
+      setStatusMessage('Analysis complete');
+    });
+
+    const unsubscribeStream = onMessage('stream_chunk', (data) => {
+      if (currentAnalysis) {
+        // Update streaming content
+        setCurrentAnalysis(prev => prev ? {
+          ...prev,
+          content: prev.content + data.chunk
+        } : null);
+      } else {
+        // Start new streaming analysis
+        setCurrentAnalysis({
+          type: data.analysis_type,
+          content: data.chunk,
+          timestamp: Date.now(),
+          isStreaming: true
+        });
+      }
+    });
+
+    const unsubscribeStatus = onMessage('status_update', (data) => {
+      setStatusMessage(data.message);
+    });
+
+    const unsubscribeError = onMessage('error', (data) => {
+      setStatus('error');
+      setStatusMessage(data.message);
+      setCurrentAnalysis(null);
+    });
+
+    return () => {
+      unsubscribeTranscription();
+      unsubscribeAnalysis();
+      unsubscribeStream();
+      unsubscribeStatus();
+      unsubscribeError();
+    };
+  }, [onMessage, currentAnalysis]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -253,90 +430,48 @@ function App() {
   };
 
   const handleStartRecording = () => {
-    setIsRecording(true);
-    setIsPaused(false);
-    setStatus('recording');
-    setStatusMessage('Recording audio...');
-    setRecordingTime(0);
-    setBufferTime(0);
+    startRecording();
   };
 
   const handleStopRecording = () => {
-    setIsRecording(false);
-    setIsPaused(false);
-    setStatus('idle');
-    setStatusMessage('Recording stopped');
-    setRecordingTime(0);
-    setBufferTime(0);
+    stopRecording();
   };
 
   const handlePauseRecording = () => {
-    setIsPaused(!isPaused);
-    setStatus(isPaused ? 'recording' : 'idle');
-    setStatusMessage(isPaused ? 'Recording resumed' : 'Recording paused');
+    pauseRecording();
   };
 
-  const handleTranscribeBuffer = async () => {
+  const handleTranscribeBuffer = () => {
     setStatus('processing');
-    setStatusMessage('Transcribing audio buffer...');
-    
-    // Simulate transcription process
-    setTimeout(() => {
-      const newSegment: TranscriptionSegment = {
-        id: Date.now().toString(),
-        text: "This is a simulated transcription of the audio buffer. In a real implementation, this would be the actual transcribed text from the recorded audio using a service like Deepgram or OpenAI Whisper.",
-        timestamp: Date.now(),
-        speaker: "Speaker 1"
-      };
-      
-      setTranscriptionSegments(prev => [...prev, newSegment]);
-      setStatus('idle');
-      setStatusMessage('Transcription complete');
-    }, 2000);
+    transcribeBuffer();
   };
 
-  const handleTranscribeLast30s = async () => {
+  const handleTranscribeLast30s = () => {
     setStatus('processing');
-    setStatusMessage('Transcribing last 30 seconds...');
-    
-    setTimeout(() => {
-      const newSegment: TranscriptionSegment = {
-        id: Date.now().toString(),
-        text: "This is a transcription of the last 30 seconds of audio. The system maintains a rolling buffer to capture recent conversations.",
-        timestamp: Date.now(),
-        speaker: "Speaker 2"
-      };
-      
-      setTranscriptionSegments(prev => [...prev, newSegment]);
-      setStatus('idle');
-      setStatusMessage('Recent transcription complete');
-    }, 1500);
+    transcribeLast30();
   };
 
-  const handleAnalyze = async (type: string) => {
+  const handleAnalyze = (promptId: string, promptLabel: string) => {
+    if (transcriptionSegments.length === 0) {
+      setStatus('error');
+      setStatusMessage('No transcript available for analysis');
+      return;
+    }
+
+    // Get the latest transcript or combine all transcripts
+    const fullTranscript = transcriptionSegments
+      .map(segment => segment.text)
+      .join(' ');
+
+    if (!fullTranscript.trim()) {
+      setStatus('error');
+      setStatusMessage('No transcript content available');
+      return;
+    }
+
     setStatus('processing');
-    setStatusMessage(`Generating ${type} analysis...`);
-    
-    const analysisContent = {
-      summary: "Key discussion points: Project timeline, resource allocation, and next steps. Main decisions made include moving forward with the proposed solution and scheduling follow-up meetings.",
-      questions: "1. What are the specific resource requirements? 2. When is the expected completion date? 3. Who will be responsible for each deliverable?",
-      topics: "Main topics discussed: Project management, timeline planning, resource allocation, team coordination, and risk assessment.",
-      sentiment: "Overall sentiment: Positive and collaborative. Participants showed enthusiasm for the project with constructive engagement throughout the discussion.",
-      facts: "All mentioned dates and figures have been verified. Project timeline aligns with company standards and resource availability has been confirmed.",
-      gaps: "Potential gaps identified: Need for clearer communication protocols and more detailed risk mitigation strategies."
-    };
-    
-    setTimeout(() => {
-      const newAnalysis: AnalysisResult = {
-        type,
-        content: analysisContent[type as keyof typeof analysisContent] || "Analysis completed successfully.",
-        timestamp: Date.now()
-      };
-      
-      setAnalyses(prev => [...prev, newAnalysis]);
-      setStatus('idle');
-      setStatusMessage('Analysis complete');
-    }, 3000);
+    setStatusMessage(`Generating ${promptLabel} analysis...`);
+    analyzeTranscript(fullTranscript, promptId, promptLabel);
   };
 
   return (
@@ -358,7 +493,11 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <StatusIndicator status={status} message={statusMessage} />
+              <StatusIndicator 
+                status={status} 
+                message={statusMessage} 
+                isConnected={connectionStatus.isConnected} 
+              />
               <button className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200">
                 <Settings className="w-5 h-5 text-slate-400" />
               </button>
@@ -374,7 +513,7 @@ function App() {
             <div className="flex flex-col lg:flex-row items-center justify-between space-y-6 lg:space-y-0">
               {/* Audio Visualizer */}
               <div className="flex-1">
-                <AudioVisualizer isRecording={isRecording && !isPaused} />
+                <AudioVisualizer isRecording={recordingStatus.is_recording && !recordingStatus.is_paused} />
               </div>
               
               {/* Recording Info */}
@@ -383,12 +522,12 @@ function App() {
                   {formatTime(recordingTime)}
                 </div>
                 <div className="text-sm text-slate-400">
-                  Buffer: {formatTime(bufferTime)} / 03:00
+                  Buffer: {formatTime(recordingStatus.buffer_duration)} / {formatTime(recordingStatus.buffer_max_duration)}
                 </div>
                 <div className="w-64 bg-slate-700 rounded-full h-2">
                   <div 
                     className="bg-gradient-to-r from-teal-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(bufferTime / 180) * 100}%` }}
+                    style={{ width: `${(recordingStatus.buffer_duration / recordingStatus.buffer_max_duration) * 100}%` }}
                   />
                 </div>
               </div>
@@ -406,12 +545,13 @@ function App() {
                   )}
                 </button>
                 
-                {isRecording && (
+                {recordingStatus.is_recording && (
                   <button
                     onClick={handlePauseRecording}
                     className="p-3 bg-yellow-500 hover:bg-yellow-600 rounded-xl transition-colors duration-200"
+                    disabled={!connectionStatus.isConnected}
                   >
-                    {isPaused ? (
+                    {recordingStatus.is_paused ? (
                       <Play className="w-5 h-5 text-white" />
                     ) : (
                       <Pause className="w-5 h-5 text-white" />
@@ -420,14 +560,15 @@ function App() {
                 )}
                 
                 <button
-                  onClick={isRecording ? handleStopRecording : handleStartRecording}
-                  className={`p-4 rounded-xl transition-all duration-200 ${
-                    isRecording 
+                  onClick={recordingStatus.is_recording ? handleStopRecording : handleStartRecording}
+                  disabled={!connectionStatus.isConnected}
+                  className={`p-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    recordingStatus.is_recording 
                       ? 'bg-red-500 hover:bg-red-600' 
                       : 'bg-gradient-to-r from-teal-500 to-blue-500 hover:shadow-lg hover:shadow-teal-500/25 hover:scale-105'
                   }`}
                 >
-                  {isRecording ? (
+                  {recordingStatus.is_recording ? (
                     <Square className="w-6 h-6 text-white" />
                   ) : (
                     <Mic className="w-6 h-6 text-white" />
@@ -440,7 +581,7 @@ function App() {
             <div className="flex flex-col sm:flex-row gap-4 mt-6 pt-6 border-t border-white/10">
               <button
                 onClick={handleTranscribeBuffer}
-                disabled={status === 'processing'}
+                disabled={status === 'processing' || !connectionStatus.isConnected}
                 className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
               >
                 <FileText className="w-4 h-4" />
@@ -449,7 +590,7 @@ function App() {
               
               <button
                 onClick={handleTranscribeLast30s}
-                disabled={status === 'processing'}
+                disabled={status === 'processing' || !connectionStatus.isConnected}
                 className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
               >
                 <Clock className="w-4 h-4" />
@@ -462,7 +603,12 @@ function App() {
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-2 gap-8">
           <TranscriptionPanel segments={transcriptionSegments} />
-          <AnalysisPanel analyses={analyses} onAnalyze={handleAnalyze} />
+          <AnalysisPanel 
+            analyses={[...analyses, ...(currentAnalysis ? [currentAnalysis] : [])]} 
+            onAnalyze={handleAnalyze} 
+            prompts={prompts}
+            isLoading={promptsLoading}
+          />
         </div>
       </div>
     </div>
