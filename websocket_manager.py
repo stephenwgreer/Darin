@@ -23,6 +23,8 @@ class MessageType(str, Enum):
     # Transcription Messages
     TRANSCRIBE_BUFFER = "transcribe_buffer"
     TRANSCRIBE_LAST_30 = "transcribe_last_30"
+    GET_AUDIO_BUFFER = "get_audio_buffer"
+    LOAD_TEST_AUDIO = "load_test_audio"
     
     # Analysis Messages
     ANALYZE_TRANSCRIPT = "analyze_transcript"
@@ -31,6 +33,7 @@ class MessageType(str, Enum):
     RECORDING_STATUS = "recording_status"
     TRANSCRIPTION_RESULT = "transcription_result"
     ANALYSIS_RESULT = "analysis_result"
+    AUDIO_BUFFER_RESULT = "audio_buffer_result"
     STREAM_CHUNK = "stream_chunk"
     ERROR = "error"
     STATUS_UPDATE = "status_update"
@@ -146,6 +149,12 @@ class WebSocketManager:
             elif message_type == MessageType.TRANSCRIBE_LAST_30:
                 await self._handle_transcribe_last_30(websocket)
             
+            elif message_type == MessageType.GET_AUDIO_BUFFER:
+                await self._handle_get_audio_buffer(websocket)
+            
+            elif message_type == MessageType.LOAD_TEST_AUDIO:
+                await self._handle_load_test_audio(websocket)
+            
             # Analysis messages
             elif message_type == MessageType.ANALYZE_TRANSCRIPT:
                 await self._handle_analyze_transcript(websocket, payload)
@@ -257,6 +266,87 @@ class WebSocketManager:
             
         except Exception as e:
             await self._send_error(websocket, f"Transcription error: {str(e)}")
+    
+    async def _handle_get_audio_buffer(self, websocket: WebSocket):
+        """Handle get audio buffer request"""
+        try:
+            await self._send_status_update(websocket, "Retrieving audio buffer...")
+            
+            # Get audio data from recorder
+            audio_data = self.audio_recorder.get_full_buffer()
+            if audio_data is None:
+                await self._send_error(websocket, "No audio data in buffer")
+                return
+            
+            # Convert numpy array to bytes (WAV format)
+            import io
+            import soundfile as sf
+            
+            # Create WAV file in memory
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_data, self.audio_recorder.sample_rate, format='WAV')
+            wav_bytes = buffer.getvalue()
+            buffer.close()
+            
+            # Convert to base64 for transmission
+            import base64
+            audio_base64 = base64.b64encode(wav_bytes).decode('utf-8')
+            
+            # Send result
+            await self._send_message(websocket, MessageType.AUDIO_BUFFER_RESULT, {
+                "audio_data": audio_base64,
+                "sample_rate": self.audio_recorder.sample_rate,
+                "duration": len(audio_data) / self.audio_recorder.sample_rate,
+                "timestamp": asyncio.get_event_loop().time()
+            })
+            
+            await self._send_status_update(websocket, "Audio buffer ready")
+            
+        except Exception as e:
+            await self._send_error(websocket, f"Audio buffer error: {str(e)}")
+    
+    async def _handle_load_test_audio(self, websocket: WebSocket):
+        """Handle load test audio request"""
+        try:
+            await self._send_status_update(websocket, "Loading test audio...")
+            
+            # Load test audio file
+            import soundfile as sf
+            import os
+            from pathlib import Path
+            
+            test_audio_path = Path("test_audio/out2.wav")
+            if not test_audio_path.exists():
+                await self._send_error(websocket, f"Test audio file not found: {test_audio_path}")
+                return
+            
+            # Read audio file
+            audio_data, sample_rate = sf.read(str(test_audio_path))
+            
+            # Ensure mono audio (take first channel if stereo)
+            if len(audio_data.shape) > 1:
+                audio_data = audio_data[:, 0]
+            
+            # Resample if needed to match recorder sample rate
+            if sample_rate != self.audio_recorder.sample_rate:
+                import scipy.signal
+                # Calculate new length
+                new_length = int(len(audio_data) * self.audio_recorder.sample_rate / sample_rate)
+                audio_data = scipy.signal.resample(audio_data, new_length)
+                print(f"🔄 Resampled audio from {sample_rate}Hz to {self.audio_recorder.sample_rate}Hz")
+            
+            # Load into audio recorder buffer
+            success = await self.audio_recorder.load_test_audio(audio_data)
+            
+            if success:
+                # Send recording status update
+                await self._send_recording_status(websocket)
+                await self._send_status_update(websocket, f"Test audio loaded ({len(audio_data)/self.audio_recorder.sample_rate:.1f}s)")
+            else:
+                await self._send_error(websocket, "Failed to load test audio into buffer")
+            
+        except Exception as e:
+            await self._send_error(websocket, f"Test audio loading error: {str(e)}")
     
     # Analysis Handlers
     

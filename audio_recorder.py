@@ -280,3 +280,44 @@ class AsyncAudioRecorder:
             "buffer_chunks": len(self.audio_buffer),
             "max_chunks": self.max_chunks
         }
+    
+    async def load_test_audio(self, audio_data: np.ndarray) -> bool:
+        """
+        Load test audio data into the buffer for testing purposes.
+        
+        Args:
+            audio_data: Audio data array
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Clear existing buffer
+            with self.buffer_lock:
+                self.audio_buffer.clear()
+                
+                # Convert to chunks and add to buffer
+                chunk_size = self.sample_rate * self.chunk_seconds
+                num_chunks = len(audio_data) // chunk_size
+                
+                for i in range(num_chunks):
+                    start_idx = i * chunk_size
+                    end_idx = start_idx + chunk_size
+                    chunk = audio_data[start_idx:end_idx]
+                    self.audio_buffer.append(chunk)
+                
+                # Add remaining data as final chunk if any
+                remaining = len(audio_data) % chunk_size
+                if remaining > 0:
+                    final_chunk = audio_data[-remaining:]
+                    # Pad to full chunk size
+                    padded_chunk = np.zeros(chunk_size)
+                    padded_chunk[:remaining] = final_chunk
+                    self.audio_buffer.append(padded_chunk)
+            
+            print(f"✅ Test audio loaded: {len(self.audio_buffer)} chunks, {self.get_buffer_duration():.1f}s")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to load test audio: {e}")
+            return False

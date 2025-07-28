@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from config import (
@@ -80,6 +81,15 @@ app = FastAPI(
     description="Real-time audio recording and AI analysis",
     version="2.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware for local browser UI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Local-only app, browser is just the UI
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -241,5 +251,5 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=8000,
         log_level="info",
-        access_log=False  # Reduce noise in development
+        access_log=False,  # Reduce noise in development
     )

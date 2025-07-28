@@ -18,7 +18,10 @@ import {
   Volume2,
   VolumeX,
   Wifi,
-  WifiOff
+  WifiOff,
+  RefreshCw,
+  PlayCircle,
+  Upload
 } from 'lucide-react';
 
 import useWebSocket from './hooks/useWebSocket';
@@ -279,6 +282,28 @@ const AnalysisPanel = ({
 };
 
 function App() {
+  // Icon mapping for prompts
+  const getIconForPrompt = (promptId: string) => {
+    const iconMap: Record<string, any> = {
+      'meeting_summary': Users,
+      'follow_up_questions': MessageSquare,
+      'topic_summary': Brain,
+      'sentiment_analysis': Zap,
+      'fact_check': CheckCircle,
+      'gaps_reasoning': AlertCircle,
+      'brainstorming': MessageSquare,
+      'scqa': Brain,
+      'hypothesis_driven': Brain,
+      'first_principles': Brain,
+      'company_fit': CheckCircle,
+      'answer_question': MessageSquare,
+      'practitioner_insights': Brain,
+      'issue_tree': Brain,
+      'reframing': Brain
+    };
+    return iconMap[promptId] || Brain;
+  };
+
   // WebSocket connection
   const {
     connectionStatus,
@@ -289,7 +314,10 @@ function App() {
     transcribeBuffer,
     transcribeLast30,
     analyzeTranscript,
-    onMessage
+    onMessage,
+    connect,
+    getAudioBuffer,
+    loadTestAudio
   } = useWebSocket();
 
   // UI state
@@ -307,17 +335,24 @@ function App() {
   // Current streaming analysis
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null);
   
+  // Audio playback
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  
   const recordingInterval = useRef<NodeJS.Timeout>();
 
   // Load prompts on mount
   useEffect(() => {
     const loadPrompts = async () => {
+      console.log('🔄 Loading prompts from API...');
       try {
         const response = await apiClient.getPrompts();
+        console.log('✅ Prompts loaded:', response.prompts.length);
         setPrompts(response.prompts);
         setPromptsLoading(false);
       } catch (error) {
-        console.error('Failed to load prompts:', error);
+        console.error('❌ Failed to load prompts:', error);
         setPromptsLoading(false);
       }
     };
@@ -327,9 +362,12 @@ function App() {
 
   // Update status based on connection and recording state
   useEffect(() => {
-    if (!connectionStatus.isConnected) {
+    if (connectionStatus.isConnecting) {
+      setStatus('processing');
+      setStatusMessage('Connecting to server...');
+    } else if (!connectionStatus.isConnected) {
       setStatus('error');
-      setStatusMessage(connectionStatus.error || 'Disconnected');
+      setStatusMessage(connectionStatus.error || 'Disconnected - Check server');
     } else if (recordingStatus.is_recording) {
       setStatus('recording');
       setStatusMessage(recordingStatus.is_paused ? 'Recording paused' : 'Recording audio...');
@@ -414,12 +452,35 @@ function App() {
       setCurrentAnalysis(null);
     });
 
+    const unsubscribeAudioBuffer = onMessage('audio_buffer_result', (data) => {
+      if (data.audio_data) {
+        // Convert base64 audio data to blob URL
+        try {
+          const audioBlob = new Blob([Uint8Array.from(atob(data.audio_data), c => c.charCodeAt(0))], { 
+            type: 'audio/wav' 
+          });
+          const url = URL.createObjectURL(audioBlob);
+          setAudioUrl(url);
+          setStatus('idle');
+          setStatusMessage('Audio buffer ready to play');
+        } catch (error) {
+          console.error('Failed to process audio buffer:', error);
+          setStatus('error');
+          setStatusMessage('Failed to load audio buffer');
+        }
+      } else {
+        setStatus('error');
+        setStatusMessage('No audio data in buffer');
+      }
+    });
+
     return () => {
       unsubscribeTranscription();
       unsubscribeAnalysis();
       unsubscribeStream();
       unsubscribeStatus();
       unsubscribeError();
+      unsubscribeAudioBuffer();
     };
   }, [onMessage, currentAnalysis]);
 
@@ -474,141 +535,344 @@ function App() {
     analyzeTranscript(fullTranscript, promptId, promptLabel);
   };
 
+  const handlePlayBuffer = () => {
+    setStatus('processing');
+    setStatusMessage('Loading audio buffer...');
+    getAudioBuffer();
+  };
+
+  const handleLoadTestAudio = () => {
+    setStatus('processing');
+    setStatusMessage('Loading test audio...');
+    loadTestAudio();
+  };
+
+  const handlePlayAudio = () => {
+    if (audioRef.current && audioUrl) {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Header */}
-      <header className="border-b border-white/10 bg-slate-900/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-blue-500 rounded-xl flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-teal-400 to-blue-400 bg-clip-text text-transparent">
-                  Darin
-                </h1>
-                <p className="text-xs text-slate-400">AI Conversation Assistant</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      {/* Top Navbar */}
+      <div className="border-b border-white/10 bg-slate-900/50 backdrop-blur-sm p-4">
+        <div className="flex items-center justify-between max-w-screen-xl mx-auto">
+          {/* Left: Darin Branding */}
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-blue-500 rounded-xl flex items-center justify-center">
+              <MessageSquare className="w-6 h-6 text-white" />
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <StatusIndicator 
-                status={status} 
-                message={statusMessage} 
-                isConnected={connectionStatus.isConnected} 
-              />
-              <button className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <Settings className="w-5 h-5 text-slate-400" />
-              </button>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-teal-400 to-blue-400 bg-clip-text text-transparent">
+                Darin
+              </h1>
+              <p className="text-xs text-slate-400">AI Audio Assistant</p>
             </div>
           </div>
-        </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Recording Controls */}
-        <div className="mb-8">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-white/10 p-8">
-            <div className="flex flex-col lg:flex-row items-center justify-between space-y-6 lg:space-y-0">
-              {/* Audio Visualizer */}
-              <div className="flex-1">
+          {/* Center: Recording Controls and Buffer */}
+          <div className="flex items-center space-x-6">
+            {/* Recording Controls */}
+            <div className="flex items-center space-x-3">
+              <div className="h-4 w-16 opacity-70">
                 <AudioVisualizer isRecording={recordingStatus.is_recording && !recordingStatus.is_paused} />
               </div>
               
-              {/* Recording Info */}
-              <div className="text-center space-y-2">
-                <div className="text-3xl font-mono text-white">
+              <button
+                onClick={recordingStatus.is_recording ? handleStopRecording : handleStartRecording}
+                disabled={!connectionStatus.isConnected}
+                className={`p-3 rounded-full transition-all duration-200 disabled:opacity-50 ${
+                  recordingStatus.is_recording 
+                    ? 'bg-red-500 hover:bg-red-600' 
+                    : 'bg-gradient-to-r from-teal-500 to-blue-500 hover:scale-105'
+                }`}
+              >
+                {recordingStatus.is_recording ? (
+                  <Square className="w-5 h-5 text-white" />
+                ) : (
+                  <Mic className="w-5 h-5 text-white" />
+                )}
+              </button>
+              
+              {recordingStatus.is_recording && (
+                <button
+                  onClick={handlePauseRecording}
+                  className="p-3 bg-yellow-500 hover:bg-yellow-600 rounded-full transition-colors duration-200"
+                  disabled={!connectionStatus.isConnected}
+                >
+                  {recordingStatus.is_paused ? (
+                    <Play className="w-4 h-4 text-white" />
+                  ) : (
+                    <Pause className="w-4 h-4 text-white" />
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Buffer Info */}
+            <div className="bg-slate-800/50 rounded-lg px-4 py-2">
+              <div className="flex items-center space-x-4">
+                <div className="text-sm font-mono text-white">
                   {formatTime(recordingTime)}
                 </div>
-                <div className="text-sm text-slate-400">
+                <div className="text-xs text-slate-400">
                   Buffer: {formatTime(recordingStatus.buffer_duration)} / {formatTime(recordingStatus.buffer_max_duration)}
                 </div>
-                <div className="w-64 bg-slate-700 rounded-full h-2">
+                <div className="w-20 bg-slate-700 rounded-full h-2">
                   <div 
                     className="bg-gradient-to-r from-teal-500 to-blue-500 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${(recordingStatus.buffer_duration / recordingStatus.buffer_max_duration) * 100}%` }}
                   />
                 </div>
               </div>
-              
-              {/* Control Buttons */}
-              <div className="flex items-center space-x-4">
+            </div>
+          </div>
+
+          {/* Right: Status */}
+          <div className="flex items-center space-x-4">
+            <StatusIndicator 
+              status={status} 
+              message={statusMessage} 
+              isConnected={connectionStatus.isConnected} 
+            />
+            
+            {!connectionStatus.isConnected && (
+              <button
+                onClick={() => connect()}
+                disabled={connectionStatus.isConnecting}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-xs rounded disabled:opacity-50"
+              >
+                {connectionStatus.isConnecting ? 'Connecting...' : 'Retry'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex">
+        {/* Left Sidebar - Controls */}
+        <div className="w-80 max-w-sm border-r border-white/10 bg-slate-900/50 backdrop-blur-sm flex flex-col flex-shrink-0">
+          {/* Sidebar Content */}
+          <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+            {/* Test Audio */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-slate-300">Test Mode</h4>
+              <button
+                onClick={handleLoadTestAudio}
+                disabled={status === 'processing' || !connectionStatus.isConnected}
+                className="w-full py-2 px-4 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center space-x-2"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Load Test Audio</span>
+              </button>
+            </div>
+            
+            {/* Buffer Controls */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-slate-300">Buffer Actions</h4>
+              <div className="space-y-2">
                 <button
-                  onClick={isMuted ? () => setIsMuted(false) : () => setIsMuted(true)}
-                  className="p-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-colors duration-200"
+                  onClick={handleTranscribeBuffer}
+                  disabled={status === 'processing' || !connectionStatus.isConnected}
+                  className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center space-x-2"
                 >
-                  {isMuted ? (
-                    <VolumeX className="w-5 h-5 text-slate-400" />
-                  ) : (
-                    <Volume2 className="w-5 h-5 text-slate-400" />
-                  )}
+                  <FileText className="w-4 h-4" />
+                  <span>Transcribe Buffer</span>
                 </button>
                 
-                {recordingStatus.is_recording && (
-                  <button
-                    onClick={handlePauseRecording}
-                    className="p-3 bg-yellow-500 hover:bg-yellow-600 rounded-xl transition-colors duration-200"
-                    disabled={!connectionStatus.isConnected}
-                  >
-                    {recordingStatus.is_paused ? (
-                      <Play className="w-5 h-5 text-white" />
-                    ) : (
-                      <Pause className="w-5 h-5 text-white" />
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={handleTranscribeLast30s}
+                  disabled={status === 'processing' || !connectionStatus.isConnected}
+                  className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Last 30s</span>
+                </button>
                 
                 <button
-                  onClick={recordingStatus.is_recording ? handleStopRecording : handleStartRecording}
-                  disabled={!connectionStatus.isConnected}
-                  className={`p-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    recordingStatus.is_recording 
-                      ? 'bg-red-500 hover:bg-red-600' 
-                      : 'bg-gradient-to-r from-teal-500 to-blue-500 hover:shadow-lg hover:shadow-teal-500/25 hover:scale-105'
-                  }`}
+                  onClick={handlePlayBuffer}
+                  disabled={status === 'processing' || !connectionStatus.isConnected}
+                  className="w-full py-2 px-4 bg-teal-700 hover:bg-teal-600 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center space-x-2"
                 >
-                  {recordingStatus.is_recording ? (
-                    <Square className="w-6 h-6 text-white" />
-                  ) : (
-                    <Mic className="w-6 h-6 text-white" />
-                  )}
+                  <PlayCircle className="w-4 h-4" />
+                  <span>Play Buffer</span>
                 </button>
               </div>
             </div>
             
-            {/* Transcription Controls */}
-            <div className="flex flex-col sm:flex-row gap-4 mt-6 pt-6 border-t border-white/10">
-              <button
-                onClick={handleTranscribeBuffer}
-                disabled={status === 'processing' || !connectionStatus.isConnected}
-                className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Transcribe Buffer</span>
-              </button>
-              
-              <button
-                onClick={handleTranscribeLast30s}
-                disabled={status === 'processing' || !connectionStatus.isConnected}
-                className="flex-1 py-3 px-6 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
-              >
-                <Clock className="w-4 h-4" />
-                <span>Transcribe Last 30s</span>
-              </button>
+            {/* Audio Playback */}
+            {audioUrl && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-slate-300">Playback</h4>
+                <button
+                  onClick={handlePlayAudio}
+                  className="w-full py-2 px-4 bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                >
+                  {isPlaying ? (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      <span>Pause</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      <span>Play</span>
+                    </>
+                  )}
+                </button>
+                <audio ref={audioRef} src={audioUrl} onEnded={handleAudioEnded} className="hidden" />
+              </div>
+            )}
+            
+            {/* AI Analysis Prompts */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-slate-300">AI Analysis</h4>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {promptsLoading ? (
+                  <div className="text-center py-4 text-slate-500">Loading prompts...</div>
+                ) : prompts.length === 0 ? (
+                  <div className="text-center py-4 text-slate-500">No prompts available</div>
+                ) : (
+                  prompts.map((prompt) => {
+                    const Icon = getIconForPrompt(prompt.id);
+                    return (
+                      <button
+                        key={prompt.id}
+                        onClick={() => handleAnalyze(prompt.id, prompt.button_text)}
+                        className="w-full p-2 bg-slate-700/50 hover:bg-slate-700 rounded-lg border border-white/5 hover:border-white/10 transition-all duration-200 group text-left"
+                        title={prompt.output_title}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Icon className="w-3 h-3 text-slate-400 group-hover:text-teal-400 transition-colors flex-shrink-0" />
+                          <span className="text-xs text-slate-300 group-hover:text-white transition-colors">
+                            {prompt.button_text}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          <TranscriptionPanel segments={transcriptionSegments} />
-          <AnalysisPanel 
-            analyses={[...analyses, ...(currentAnalysis ? [currentAnalysis] : [])]} 
-            onAnalyze={handleAnalyze} 
-            prompts={prompts}
-            isLoading={promptsLoading}
-          />
+        
+        {/* Right Content Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Transcription Area (Top) */}
+          <div className="flex-1 p-6">
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-white/10 p-6 h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                  <FileText className="w-5 h-5" />
+                  <span>Live Transcription</span>
+                </h3>
+                <button className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                  <Download className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                {transcriptionSegments.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-slate-500">
+                    <div className="text-center">
+                      <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>Transcription will appear here...</p>
+                    </div>
+                  </div>
+                ) : (
+                  transcriptionSegments.map((segment) => (
+                    <div key={segment.id} className="group">
+                      <div className="flex items-start space-x-3">
+                        <div className="text-xs text-slate-500 mt-1 min-w-[60px]">
+                          {new Date(segment.timestamp).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
+                        </div>
+                        <div className="flex-1">
+                          {segment.speaker && (
+                            <div className="text-xs text-teal-400 mb-1 font-medium">
+                              {segment.speaker}
+                            </div>
+                          )}
+                          <p className="text-slate-200 leading-relaxed group-hover:text-white transition-colors duration-200">
+                            {segment.text}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Analysis Results Area (Bottom) */}
+          <div className="flex-1 p-6 pt-0">
+            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-white/10 p-6 h-full flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                  <Brain className="w-5 h-5" />
+                  <span>Analysis Results</span>
+                </h3>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                {[...analyses, ...(currentAnalysis ? [currentAnalysis] : [])].length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-slate-500">
+                    <div className="text-center">
+                      <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p>Analysis results will appear here...</p>
+                    </div>
+                  </div>
+                ) : (
+                  [...analyses, ...(currentAnalysis ? [currentAnalysis] : [])].map((analysis, index) => (
+                    <div key={index} className={`rounded-xl p-4 border ${
+                      analysis.isStreaming ? 'border-teal-400/30 bg-teal-900/10' : 'border-white/5 bg-slate-700/30'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-teal-400 capitalize">
+                            {analysis.type}
+                          </span>
+                          {analysis.isStreaming && (
+                            <div className="flex items-center space-x-1">
+                              <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse"></div>
+                              <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse delay-75"></div>
+                              <div className="w-1 h-1 bg-teal-400 rounded-full animate-pulse delay-150"></div>
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-500">
+                          {new Date(analysis.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p className="text-slate-200 text-sm leading-relaxed">
+                        {analysis.content}
+                        {analysis.isStreaming && (
+                          <span className="inline-block w-2 h-4 bg-teal-400 ml-1 animate-pulse"></span>
+                        )}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

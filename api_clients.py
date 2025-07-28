@@ -76,56 +76,63 @@ class APIClients:
             return "Error: No audio data provided"
         
         try:
-            # Create temporary file for audio data
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_path = temp_file.name
-                
-                # Write audio to temporary file
-                sf.write(temp_path, audio_data, sample_rate)
-                
-                # Transcribe using Deepgram API
-                transcript = await self._call_deepgram_api(temp_path)
-                
-                # Cleanup temporary file
-                try:
-                    os.unlink(temp_path)
-                except Exception as e:
-                    print(f"⚠️ Failed to cleanup temp file: {e}")
-                
-                return transcript
+            # Ensure audio is in correct format for Deepgram
+            # Convert to float32 and normalize if needed
+            if audio_data.dtype != np.float32:
+                if audio_data.dtype == np.int16:
+                    # Convert int16 to float32 (normalize)
+                    audio_data = audio_data.astype(np.float32) / 32768.0
+                else:
+                    audio_data = audio_data.astype(np.float32)
+            
+            # Ensure audio is mono
+            if audio_data.ndim > 1:
+                audio_data = audio_data[:, 0]
+            
+            # Create WAV data in memory
+            import io
+            audio_buffer = io.BytesIO()
+            sf.write(audio_buffer, audio_data, sample_rate, format='WAV', subtype='PCM_16')
+            wav_data = audio_buffer.getvalue()
+            audio_buffer.close()
+            
+            print(f"🎵 Audio prepared: {len(audio_data)/sample_rate:.1f}s, {sample_rate}Hz, {len(wav_data)} bytes")
+            
+            # Transcribe using Deepgram API with in-memory data
+            transcript = await self._call_deepgram_api_direct(wav_data)
+            
+            return transcript
                 
         except Exception as e:
             return f"Transcription error: {str(e)}"
     
-    async def _call_deepgram_api(self, audio_file_path: str) -> str:
+    async def _call_deepgram_api_direct(self, wav_data: bytes) -> str:
         """
-        Call Deepgram API with audio file.
+        Call Deepgram API with in-memory audio data.
         
         Args:
-            audio_file_path: Path to audio file
+            wav_data: WAV audio data as bytes
             
         Returns:
             str: Transcribed text
         """
         url = "https://api.deepgram.com/v1/listen"
         headers = {
-            "Authorization": f"Token {self.deepgram_api_key}"
+            "Authorization": f"Token {self.deepgram_api_key}",
+            "Content-Type": "audio/wav"
         }
         params = {
             "punctuate": "true",
-            "model": "general",
+            "model": "general", 
             "language": "en-US",
-            "smart_format": "true"  # Better formatting
+            "smart_format": "true"
         }
         
         session = await self.get_aiohttp_session()
         
         try:
-            with open(audio_file_path, "rb") as audio_file:
-                data = aiohttp.FormData()
-                data.add_field("audio", audio_file, content_type="audio/wav")
-                
-                async with session.post(url, headers=headers, params=params, data=data) as response:
+            # Send WAV data directly as request body
+            async with session.post(url, headers=headers, params=params, data=wav_data) as response:
                     if response.status == 200:
                         response_json = await response.json()
                         

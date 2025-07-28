@@ -11,10 +11,13 @@ export type MessageType =
   | 'pause_recording'
   | 'transcribe_buffer'
   | 'transcribe_last_30'
+  | 'get_audio_buffer'
+  | 'load_test_audio'
   | 'analyze_transcript'
   | 'recording_status'
   | 'transcription_result'
   | 'analysis_result'
+  | 'audio_buffer_result'
   | 'stream_chunk'
   | 'status_update'
   | 'error';
@@ -97,14 +100,22 @@ export const useWebSocket = (url: string = 'ws://127.0.0.1:8000/ws') => {
       return;
     }
 
+    // Close existing connection if any
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+
     setConnectionStatus(prev => ({ 
       ...prev, 
       isConnecting: true, 
       error: null 
     }));
 
-    try {
-      ws.current = new WebSocket(url);
+    // Add a small delay to ensure backend is ready
+    setTimeout(() => {
+      try {
+        ws.current = new WebSocket(url);
 
       ws.current.onopen = () => {
         console.log('🔌 WebSocket connected');
@@ -140,24 +151,25 @@ export const useWebSocket = (url: string = 'ws://127.0.0.1:8000/ws') => {
         }
       };
 
-      ws.current.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        ws.current.onerror = (error) => {
+          console.error('❌ WebSocket error:', error);
+          setConnectionStatus(prev => ({
+            ...prev,
+            isConnected: false,
+            isConnecting: false,
+            error: 'Connection failed'
+          }));
+        };
+
+      } catch (error) {
+        console.error('❌ Failed to create WebSocket connection:', error);
         setConnectionStatus(prev => ({
           ...prev,
-          isConnected: false,
           isConnecting: false,
-          error: 'Connection failed'
+          error: 'Failed to connect'
         }));
-      };
-
-    } catch (error) {
-      console.error('❌ Failed to create WebSocket connection:', error);
-      setConnectionStatus(prev => ({
-        ...prev,
-        isConnecting: false,
-        error: 'Failed to connect'
-      }));
-    }
+      }
+    }, 100); // 100ms delay to ensure backend is ready
   }, [url]);
 
   const scheduleReconnect = useCallback(() => {
@@ -267,11 +279,27 @@ export const useWebSocket = (url: string = 'ws://127.0.0.1:8000/ws') => {
     });
   }, [sendMessage]);
 
-  // Initialize connection on mount
-  useEffect(() => {
-    connect();
+  const getAudioBuffer = useCallback(() => {
+    return sendMessage('get_audio_buffer');
+  }, [sendMessage]);
 
+  const loadTestAudio = useCallback(() => {
+    return sendMessage('load_test_audio');
+  }, [sendMessage]);
+
+  // Initialize connection on mount with retry logic
+  useEffect(() => {
+    // Initial connection attempt
+    const initialConnect = () => {
+      connect();
+    };
+
+    // Small delay on mount to handle page refresh scenarios
+    const mountTimer = setTimeout(initialConnect, 200);
+
+    // Cleanup function
     return () => {
+      clearTimeout(mountTimer);
       disconnect();
     };
   }, [connect, disconnect]);
@@ -304,7 +332,9 @@ export const useWebSocket = (url: string = 'ws://127.0.0.1:8000/ws') => {
     pauseRecording,
     transcribeBuffer,
     transcribeLast30,
-    analyzeTranscript
+    analyzeTranscript,
+    getAudioBuffer,
+    loadTestAudio
   };
 };
 
