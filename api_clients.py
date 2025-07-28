@@ -44,7 +44,10 @@ class APIClients:
     def anthropic_client(self) -> anthropic.Anthropic:
         """Lazy-load Anthropic client when needed"""
         if not self._anthropic_client and self.anthropic_api_key:
-            self._anthropic_client = anthropic.Anthropic(api_key=self.anthropic_api_key)
+            self._anthropic_client = anthropic.Anthropic(
+                api_key=self.anthropic_api_key,
+                timeout=60.0  # 60 second timeout
+            )
         return self._anthropic_client
     
     async def get_aiohttp_session(self) -> aiohttp.ClientSession:
@@ -212,32 +215,28 @@ class APIClients:
         client = self.anthropic_client
         
         try:
-            # Run Claude streaming in executor to avoid blocking
-            loop = asyncio.get_event_loop()
+            response_text = ""
             
-            def stream_sync():
-                """Sync function to handle Claude streaming"""
-                response_text = ""
-                
-                with client.messages.stream(
-                    model=CLAUDE_MODEL,
-                    max_tokens=MAX_TOKENS,
-                    temperature=TEMPERATURE,
-                    messages=[{"role": "user", "content": content}]
-                ) as stream:
-                    for text in stream.text_stream:
-                        response_text += text
-                        # Call callback in sync context (will be awaited in async context)
-                        if stream_callback:
+            # Use direct streaming without thread executor since the callback needs to be async
+            with client.messages.stream(
+                model=CLAUDE_MODEL,
+                max_tokens=MAX_TOKENS,
+                temperature=TEMPERATURE,
+                messages=[{"role": "user", "content": content}]
+            ) as stream:
+                for text in stream.text_stream:
+                    response_text += text
+                    # Call async callback directly
+                    if stream_callback:
+                        # Since stream_callback is actually async (from websocket_manager), 
+                        # we need to await it
+                        if asyncio.iscoroutinefunction(stream_callback):
+                            await stream_callback(text)
+                        else:
                             stream_callback(text)
-                
-                return response_text
             
-            # Run streaming in thread pool
-            result = await loop.run_in_executor(None, stream_sync)
-            
-            print(f"✅ Claude streaming complete: {len(result)} characters")
-            return result
+            print(f"✅ Claude streaming complete: {len(response_text)} characters")
+            return response_text
             
         except Exception as e:
             error_msg = f"Claude streaming error: {str(e)}"

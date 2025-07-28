@@ -25,7 +25,7 @@ SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "48000"))
 CHUNK_SECONDS = int(os.getenv("CHUNK_SECONDS", "1"))
 
 # AI Model Settings
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-7-sonnet-20250219")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0"))
 
