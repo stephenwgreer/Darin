@@ -19,6 +19,7 @@ dependencies = [
     "PyQt6-WebEngine-Qt6>=6.6.0,<6.7",
     "markdown2==2.5.3",
     "scipy",
+    "pytest>=9.0.2",
 ]
 
 [dependency-groups]

@@ -1,5 +1,6 @@
 import sys
 import traceback
+import threading
 from PyQt6.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 
 # Assuming api.client and audio.recorder are structured appropriately
@@ -86,8 +87,23 @@ class AnalysisController(QObject):
         super().__init__(parent)
         self.api_client = api_client
         self.recorder = recorder
-        self.current_transcript = ""
+        # Thread-safe transcript storage
+        self._current_transcript = ""
+        self._transcript_lock = threading.Lock()
         self._is_processing = False # Internal flag to prevent concurrent operations
+
+    # Thread-safe properties
+    @property
+    def current_transcript(self):
+        """Thread-safe property for current transcript"""
+        with self._transcript_lock:
+            return self._current_transcript
+
+    @current_transcript.setter
+    def current_transcript(self, value):
+        """Thread-safe setter for current transcript"""
+        with self._transcript_lock:
+            self._current_transcript = value
 
     @property
     def is_processing(self):

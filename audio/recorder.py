@@ -15,13 +15,26 @@ class ContinuousRecorder:
         # Create a circular buffer to store audio (deque for O(1) operations)
         self.audio_buffer = deque(maxlen=self.buffer_chunks)
         self.buffer_lock = threading.Lock()
-        
-        # Recording control
-        self.is_recording = False
+
+        # Recording control - using private variable with lock for thread safety
+        self._is_recording = False
+        self._recording_lock = threading.Lock()
         self.record_thread = None
-        
+
         # Setup microphone
         self.mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
+
+    @property
+    def is_recording(self):
+        """Thread-safe property for recording state"""
+        with self._recording_lock:
+            return self._is_recording
+
+    @is_recording.setter
+    def is_recording(self, value):
+        """Thread-safe setter for recording state"""
+        with self._recording_lock:
+            self._is_recording = value
     
     def start_recording(self):
         """Start the recording process in a separate thread"""
@@ -44,10 +57,15 @@ class ContinuousRecorder:
     def _record_loop(self):
         """Main recording loop that continuously captures audio in chunks"""
         with self.mic.recorder(samplerate=self.sample_rate) as recorder:
-            while self.is_recording:
+            while True:
+                # Check recording state with lock
+                with self._recording_lock:
+                    if not self._is_recording:
+                        break
+
                 # Record a chunk of audio
                 data = recorder.record(numframes=self.chunk_frames)
-                
+
                 # Add to the circular buffer
                 with self.buffer_lock:
                     # deque with maxlen automatically drops oldest when full

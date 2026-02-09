@@ -54,9 +54,16 @@ class MainWindow(QMainWindow):
         # Initialize components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
-        self.current_transcript = ""
-        self.is_processing = False  # Track if we're currently processing
-        
+
+        # Threading locks for shared state protection
+        self._transcript_lock = threading.Lock()
+        self._processing_lock = threading.Lock()
+        self._html_state_lock = threading.Lock()
+
+        # Thread-safe shared state (private variables with property access)
+        self._current_transcript = ""
+        self._is_processing = False
+
         # HTML streaming state
         self._html_buffer = ""  # Buffer for accumulating HTML chunks
         self._current_element = None  # Track the current HTML element being built
@@ -70,10 +77,35 @@ class MainWindow(QMainWindow):
         
         # Setup UI
         self.setup_ui()
-        
+
         # Connect signals to slots
         self.setup_connections()
-    
+
+    # Thread-safe properties for shared state
+    @property
+    def current_transcript(self):
+        """Thread-safe property for current transcript"""
+        with self._transcript_lock:
+            return self._current_transcript
+
+    @current_transcript.setter
+    def current_transcript(self, value):
+        """Thread-safe setter for current transcript"""
+        with self._transcript_lock:
+            self._current_transcript = value
+
+    @property
+    def is_processing(self):
+        """Thread-safe property for processing state"""
+        with self._processing_lock:
+            return self._is_processing
+
+    @is_processing.setter
+    def is_processing(self, value):
+        """Thread-safe setter for processing state"""
+        with self._processing_lock:
+            self._is_processing = value
+
     def setup_ui(self):
         ########################
         # Main widget and layout
@@ -211,37 +243,43 @@ class MainWindow(QMainWindow):
                         args=(audio_data, self.recorder.sample_rate)).start()
     
     def _transcribe_thread(self, audio_data, sample_rate):
-        """Background thread for transcription"""
+        """Background thread for transcription - emits signal, doesn't write directly"""
         try:
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
-            self.current_transcript = text
+            # Emit signal to update transcript in GUI thread (thread-safe)
             self.transcription_complete.emit(text)
         except Exception as e:
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
     
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
         """Auto transcribe and then run a specific prompt"""
-        if self.is_processing:
-            return
-            
-        self.is_processing = True
-        
+        # Atomic check-and-set for processing state
+        with self._processing_lock:
+            if self._is_processing:
+                return
+            self._is_processing = True
+
         # Disable all prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(False)
-        
+
         # Clear output before running new prompt
         self.clear_output()
-        
+
         # Set the output panel title if provided
         if title:
             self.output_panel.set_title(title)
-        
+
         # Update output to show progress
         self.output_panel.set_output("Capturing audio and transcribing...")
-        
+
         # If we already have a transcript, use it directly
-        if self.current_transcript:
-            self._run_specific_prompt(self.current_transcript, prompt_template)
+        # Read atomically to avoid race condition
+        with self._transcript_lock:
+            has_transcript = bool(self._current_transcript)
+            transcript_copy = self._current_transcript if has_transcript else None
+
+        if has_transcript:
+            self._run_specific_prompt(transcript_copy, prompt_template)
             return
             
         # Otherwise get audio data
@@ -254,9 +292,9 @@ class MainWindow(QMainWindow):
             if audio_data is None:
                 QMessageBox.warning(self, "Processing Error", "Not enough audio (last 30s) in buffer to process")
                 self.controls_panel.set_prompt_buttons_enabled(True)
-                self.is_processing = False
+                self.is_processing = False  # Property handles locking
                 return # Return early if 30s failed
-        
+
         # If we didn't get 30s audio (either not applicable or it succeeded but we proceed),
         # get the full buffer instead.
         if audio_data is None: # This means we need the full buffer
@@ -265,7 +303,7 @@ class MainWindow(QMainWindow):
                  # Check if getting the full buffer failed
                  QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
                  self.controls_panel.set_prompt_buttons_enabled(True)
-                 self.is_processing = False
+                 self.is_processing = False  # Property handles locking
                  return # Return early if full buffer failed
         
         # We should now have valid audio_data (either 30s or full buffer)
@@ -281,17 +319,19 @@ class MainWindow(QMainWindow):
             # First transcribe
             self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
-            self.current_transcript = text
-            
-            # Update UI with transcript
+
+            # Update UI with transcript via signal (thread-safe)
+            # The slot handler will set self.current_transcript
             self.transcription_complete.emit(text)
-            
+
             # Then process with the specific prompt
             self._run_specific_prompt(text, prompt_template)
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
         finally:
-            self.is_processing = False
+            # Emit signal to update processing state in GUI thread (thread-safe)
+            # We need to emit processing_complete which will handle this
+            pass  # is_processing will be set to False by on_processing_complete slot
     
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
@@ -301,14 +341,15 @@ class MainWindow(QMainWindow):
             
             # Set up the static template based on the prompt type
             template_type = self._setup_static_template(prompt_template)
-            
+
             # Reset HTML streaming state for new dynamic content
-            self._html_buffer = ""
-            self._current_element = None
-            self._element_stack = []
-            self._is_first_update = False  # Already set up the template
-            self._current_list_items = []
-            self._template_type = template_type  # Store the template type for use in streaming
+            with self._html_state_lock:
+                self._html_buffer = ""
+                self._current_element = None
+                self._element_stack = []
+                self._is_first_update = False  # Already set up the template
+                self._current_list_items = []
+                self._template_type = template_type  # Store the template type for use in streaming
             
             def handle_stream(text):
                 """Callback to handle streaming text"""
@@ -652,20 +693,26 @@ class MainWindow(QMainWindow):
     
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
+        # Update transcript in GUI thread (thread-safe via property)
+        self.current_transcript = text
+
         # Display transcript in the output panel
         self.output_panel.set_output(f"<div class='transcript-text'>{text}</div>")
-        
+
         # Reset both transcribe buttons
         self.controls_panel.transcribe_button.setText("Transcribe Buffer")
         self.controls_panel.transcribe_button.setEnabled(True)
         self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
         self.controls_panel.transcribe_last_30_button.setEnabled(True)
-        
+
         # Enable all prompt buttons when we have a transcript
         self.controls_panel.set_prompt_buttons_enabled(True)
     
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
+        # Reset processing state in GUI thread (thread-safe)
+        self.is_processing = False
+
         if "error" in result:
             # Show error using template
             self.output_panel.set_error(result["error"])
@@ -679,73 +726,74 @@ class MainWindow(QMainWindow):
             # Format the result as a topic section
             content = json.dumps(result, indent=2)
             self.output_panel.set_output(create_topic_section("Processing Results", f"<pre>{content}</pre>"))
-        
+
         # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
     
     def _process_html_chunk(self, chunk):
         """Process a chunk of HTML text and return complete elements if found."""
-        self._html_buffer += chunk
-        
-        # Look for complete HTML elements
-        while True:
-            # If we don't have a current element, look for the start of one
-            if not self._current_element:
-                # Find the next opening tag for a topic section
-                start_idx = self._html_buffer.find("<div class=\"topic-section\">")
-                if start_idx == -1:
-                    # If no topic section, look for individual list items
-                    item_start = self._html_buffer.find("<li class=\"insight-item\">")
-                    if item_start != -1:
-                        item_end = self._html_buffer.find("</li>", item_start)
-                        if item_end != -1:
-                            # Extract the complete list item
-                            item = self._html_buffer[item_start:item_end + 5]
-                            # Remove the processed item from buffer
-                            self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
-                            return item
-                    break  # No new elements found
-                
-                # Found a topic section, extract the title if present
-                title_start = self._html_buffer.find("<h2 class=\"topic-title\">", start_idx)
-                title_end = self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
-                
-                if title_start != -1 and title_end != -1:
-                    # Found a title, extract the complete section
-                    section_end = self._html_buffer.find("</div>", title_end)
-                    if section_end != -1:
-                        # Extract the complete section
-                        section = self._html_buffer[start_idx:section_end + 6]
-                        # Remove the processed section from buffer
-                        self._html_buffer = self._html_buffer[:start_idx] + self._html_buffer[section_end + 6:]
-                        return section
+        with self._html_state_lock:
+            self._html_buffer += chunk
+
+            # Look for complete HTML elements
+            while True:
+                # If we don't have a current element, look for the start of one
+                if not self._current_element:
+                    # Find the next opening tag for a topic section
+                    start_idx = self._html_buffer.find("<div class=\"topic-section\">")
+                    if start_idx == -1:
+                        # If no topic section, look for individual list items
+                        item_start = self._html_buffer.find("<li class=\"insight-item\">")
+                        if item_start != -1:
+                            item_end = self._html_buffer.find("</li>", item_start)
+                            if item_end != -1:
+                                # Extract the complete list item
+                                item = self._html_buffer[item_start:item_end + 5]
+                                # Remove the processed item from buffer
+                                self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
+                                return item
+                        break  # No new elements found
+
+                    # Found a topic section, extract the title if present
+                    title_start = self._html_buffer.find("<h2 class=\"topic-title\">", start_idx)
+                    title_end = self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
+
+                    if title_start != -1 and title_end != -1:
+                        # Found a title, extract the complete section
+                        section_end = self._html_buffer.find("</div>", title_end)
+                        if section_end != -1:
+                            # Extract the complete section
+                            section = self._html_buffer[start_idx:section_end + 6]
+                            # Remove the processed section from buffer
+                            self._html_buffer = self._html_buffer[:start_idx] + self._html_buffer[section_end + 6:]
+                            return section
+                        else:
+                            # Title found but section not complete
+                            self._current_element = {
+                                "type": "topic-section",
+                                "title": self._html_buffer[title_start + len("<h2 class=\"topic-title\">"):title_end].strip()
+                            }
                     else:
-                        # Title found but section not complete
-                        self._current_element = {
-                            "type": "topic-section",
-                            "title": self._html_buffer[title_start + len("<h2 class=\"topic-title\">"):title_end].strip()
-                        }
-                else:
-                    # No title found yet, keep accumulating
-                    self._current_element = {"type": "topic-section", "title": None}
-                
-                self._element_stack.append(self._current_element)
-            
-            # If we have a current element, try to complete it
-            if self._current_element and self._current_element["type"] == "topic-section":
-                # Look for the end of the section
-                end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
-                if end_idx != -1:
-                    # Section is complete, extract it all
-                    complete_element = self._html_buffer[:end_idx + 6]
-                    self._html_buffer = self._html_buffer[end_idx + 6:]
-                    self._current_element = None
-                    self._element_stack.pop()
-                    return complete_element
-            
-            break  # No complete elements found
-        
-        return None
+                        # No title found yet, keep accumulating
+                        self._current_element = {"type": "topic-section", "title": None}
+
+                    self._element_stack.append(self._current_element)
+
+                # If we have a current element, try to complete it
+                if self._current_element and self._current_element["type"] == "topic-section":
+                    # Look for the end of the section
+                    end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
+                    if end_idx != -1:
+                        # Section is complete, extract it all
+                        complete_element = self._html_buffer[:end_idx + 6]
+                        self._html_buffer = self._html_buffer[end_idx + 6:]
+                        self._current_element = None
+                        self._element_stack.pop()
+                        return complete_element
+
+                break  # No complete elements found
+
+            return None
 
     @pyqtSlot(str)
     def on_stream_update(self, text):
@@ -753,569 +801,675 @@ class MainWindow(QMainWindow):
         # Skip status messages
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
-        
+
+        # Get template type with lock
+        with self._html_state_lock:
+            template_type = self._template_type if hasattr(self, '_template_type') else None
+
         # Handle follow-up questions streaming
-        if hasattr(self, '_template_type') and self._template_type == "follow-up-questions":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        if template_type == "follow-up-questions":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Add formatting if needed (ensure class and style)
-                if "class=" not in item:
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
-                elif 'style="' not in item:
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
 
+                    # Add formatting if needed (ensure class and style)
+                    if "class=" not in item:
+                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                    elif 'style="' not in item:
+                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
-        
+
+
         # Handle sentiment analysis streaming
-        elif hasattr(self, '_template_type') and self._template_type == "sentiment-analysis":
-            if not self._overall_sentiment_received:
-                # First line should be the overall sentiment
-                lines = text.split('\n', 1)
-                overall_sentiment = lines[0].strip()
-                if overall_sentiment in ["Positive", "Negative", "Neutral"]:
-                    self.output_panel.set_overall_sentiment(overall_sentiment)
-                    self._overall_sentiment_received = True
-                    # Process the rest of the text if any
-                    if len(lines) > 1:
-                        text = lines[1]
+        elif template_type == "sentiment-analysis":
+            overall_sentiment_value = None
+            items_to_append = []
+
+            with self._html_state_lock:
+                if not self._overall_sentiment_received:
+                    # First line should be the overall sentiment
+                    lines = text.split('\n', 1)
+                    overall_sentiment = lines[0].strip()
+                    if overall_sentiment in ["Positive", "Negative", "Neutral"]:
+                        overall_sentiment_value = overall_sentiment
+                        self._overall_sentiment_received = True
+                        # Process the rest of the text if any
+                        if len(lines) > 1:
+                            text = lines[1]
+                        else:
+                            # Will set sentiment below and return
+                            pass
                     else:
-                        return # Wait for next chunk
-                else:
-                    # If first line isn't sentiment, buffer it for list item processing
-                    pass # Fall through to list item processing
+                        # If first line isn't sentiment, buffer it for list item processing
+                        pass # Fall through to list item processing
+
+            # Update overall sentiment UI outside lock
+            if overall_sentiment_value:
+                self.output_panel.set_overall_sentiment(overall_sentiment_value)
+                if '\n' not in text or text == overall_sentiment_value:
+                    return # Wait for next chunk
 
             # Process subsequent lines as list items
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Add formatting if needed (ensure class and style)
-                if "class=" not in item:
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
-                elif 'style="' not in item:
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
 
+                    # Add formatting if needed (ensure class and style)
+                    if "class=" not in item:
+                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                    elif 'style="' not in item:
+                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
 
         # Handle meeting summary streaming
-        elif hasattr(self, '_template_type') and self._template_type == "meeting-summary":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "meeting-summary":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Add formatting if needed (ensure class and style, no bold)
-                if "class=" not in item:
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-                elif 'style="' not in item:
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
 
+                    # Add formatting if needed (ensure class and style, no bold)
+                    if "class=" not in item:
+                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                    elif 'style="' not in item:
+                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
 
         # Handle practitioner insights streaming
-        elif hasattr(self, '_template_type') and self._template_type == "practitioner-insights":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "practitioner-insights":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Add formatting if needed (ensure class and style, no bold)
-                if "class=" not in item:
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-                elif 'style="' not in item:
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-                
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                    # Add formatting if needed (ensure class and style, no bold)
+                    if "class=" not in item:
+                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                    elif 'style="' not in item:
+                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
 
         # Handle topic summary streaming
-        elif hasattr(self, '_template_type') and self._template_type == "topic-summary":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "topic-summary":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Add formatting if needed (ensure class and style, no bold)
-                if "class=" not in item:
-                    item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
-                elif 'style="' not in item:
-                    item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
 
+                    # Add formatting if needed (ensure class and style, no bold)
+                    if "class=" not in item:
+                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                    elif 'style="' not in item:
+                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
 
         # Handle Fill Gaps streaming
-        elif hasattr(self, '_template_type') and self._template_type == "fill-gaps":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "fill-gaps":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Determine target list based on class
-                target_list_id = None
-                if 'class="core-thinking"' in item:
-                    target_list_id = "core-thinking-list"
-                elif 'class="gap-item"' in item:
-                    target_list_id = "gaps-list"
-                elif 'class="recommendation-item"' in item:
-                    target_list_id = "recommendations-list"
-                
-                if target_list_id:
-                    # Use the new method to append to the correct list
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if 'class="core-thinking"' in item:
+                        target_list_id = "core-thinking-list"
+                    elif 'class="gap-item"' in item:
+                        target_list_id = "gaps-list"
+                    elif 'class="recommendation-item"' in item:
+                        target_list_id = "recommendations-list"
+
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Brainstorm Questions streaming
-        elif hasattr(self, '_template_type') and self._template_type == "brainstorm":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "brainstorm":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Determine target list based on class
-                target_list_id = None
-                if 'class="challenge-question"' in item:
-                    target_list_id = "challenge-questions-list"
-                elif 'class="alternative-frame"' in item:
-                    target_list_id = "alternative-frames-list"
-                elif 'class="provocative-idea"' in item:
-                    target_list_id = "provocative-ideas-list"
-                
-                if target_list_id:
-                    # Use the method to append to the correct list (non-bold)
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if 'class="challenge-question"' in item:
+                        target_list_id = "challenge-questions-list"
+                    elif 'class="alternative-frame"' in item:
+                        target_list_id = "alternative-frames-list"
+                    elif 'class="provocative-idea"' in item:
+                        target_list_id = "provocative-ideas-list"
+
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Company Fit streaming
-        elif hasattr(self, '_template_type') and self._template_type == "company-fit":
-            self._html_buffer += text
-            while True:
-                item_start = self._html_buffer.find("<li")
-                if item_start == -1:
-                    break
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break
-                    
-                item = self._html_buffer[item_start:item_end + 5]
-                self._html_buffer = self._html_buffer[item_start + len(item):]
+        elif template_type == "company-fit":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    item_start = self._html_buffer.find("<li")
+                    if item_start == -1:
+                        break
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break
 
-                # Determine target list based on class
-                target_list_id = None
-                if 'class="key-topic"' in item:
-                    target_list_id = "key-topics-list"
-                elif 'class="viya-connection"' in item:
-                    target_list_id = "viya-connections-list"
-                elif 'class="missing-consideration"' in item:
-                    target_list_id = "missing-considerations-list"
-                
-                if target_list_id:
-                    # Use the method to append to the correct list (non-bold)
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    item = self._html_buffer[item_start:item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item):]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if 'class="key-topic"' in item:
+                        target_list_id = "key-topics-list"
+                    elif 'class="viya-connection"' in item:
+                        target_list_id = "viya-connections-list"
+                    elif 'class="missing-consideration"' in item:
+                        target_list_id = "missing-considerations-list"
+
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Fact Checking streaming
-        elif hasattr(self, '_template_type') and self._template_type == "fact-check":
-            self._html_buffer += text
-            while True:
-                # Fact check items can be multi-line, look for the start and end <li> tags
-                item_start = self._html_buffer.find("<li class=\"fact-check-item\">") 
-                if item_start == -1:
-                    item_start = self._html_buffer.find("<li class='fact-check-item'>") # Check single quotes too
+        elif template_type == "fact-check":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Fact check items can be multi-line, look for the start and end <li> tags
+                    item_start = self._html_buffer.find("<li class=\"fact-check-item\">")
                     if item_start == -1:
-                       break # No start tag found
+                        item_start = self._html_buffer.find("<li class='fact-check-item'>") # Check single quotes too
+                        if item_start == -1:
+                           break # No start tag found
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # End tag not found yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # End tag not found yet
 
-                # Append the complete item to the fact-check list
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    items_to_append.append(item)
+
+            # Update UI without lock
+            for item in items_to_append:
                 self.output_panel.append_to_list_by_id("fact-check-list", item)
 
         # Handle Answer Question streaming
-        elif hasattr(self, '_template_type') and self._template_type == "answer-question":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = ["answer-item", "rationale-item", "example-item"]
-                start_positions = {}
-                for cls in possible_classes:
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f"<li class='{cls}'>")
-                    if pos_double != -1:
-                        start_positions[pos_double] = cls
-                    if pos_single != -1:
-                        start_positions[pos_single] = cls
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                # Find the earliest starting position
-                item_start = min(start_positions.keys())
-                item_class = start_positions[item_start]
+        elif template_type == "answer-question":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = ["answer-item", "rationale-item", "example-item"]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                        if pos_double != -1:
+                            start_positions[pos_double] = cls
+                        if pos_single != -1:
+                            start_positions[pos_single] = cls
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                    if not start_positions:
+                        break # No relevant item start found
 
-                # Determine target list based on class
-                target_list_id = None
-                if item_class == "answer-item":
-                    target_list_id = "answer-list"
-                elif item_class == "rationale-item":
-                    target_list_id = "rationale-list"
-                elif item_class == "example-item":
-                    target_list_id = "examples-list"
+                    # Find the earliest starting position
+                    item_start = min(start_positions.keys())
+                    item_class = start_positions[item_start]
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if item_class == "answer-item":
+                        target_list_id = "answer-list"
+                    elif item_class == "rationale-item":
+                        target_list_id = "rationale-list"
+                    elif item_class == "example-item":
+                        target_list_id = "examples-list"
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Problem Solving / Issue Tree Logic streaming
-        elif hasattr(self, '_template_type') and self._template_type == "problem-solving":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = [
-                    "core-problem", "logic-tree-component", 
-                    "evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data",
-                    "challenge-weakness", "challenge-question", "challenge-reframe"
-                ]
-                start_positions = {}
-                for cls in possible_classes:
-                    # Check for class="cls" and class='cls'
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>') # Use \ to escape single quote in f-string
-                    
-                    current_pos = -1
-                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                        current_pos = pos_double
-                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                        current_pos = pos_single
-                        
-                    if current_pos != -1:
-                         # Store the earliest found position for this class
-                         if cls not in start_positions or current_pos < start_positions[cls][0]:
-                              start_positions[cls] = (current_pos, cls)
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                # Find the earliest starting position among all found classes
-                earliest_pos = -1
-                item_class = None
-                for cls, (pos, _) in start_positions.items():
-                     if earliest_pos == -1 or pos < earliest_pos:
-                          earliest_pos = pos
-                          item_class = cls
-                
-                item_start = earliest_pos
-                if item_start == -1: # Should not happen if start_positions is not empty
-                     break
+        elif template_type == "problem-solving":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = [
+                        "core-problem", "logic-tree-component",
+                        "evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data",
+                        "challenge-weakness", "challenge-question", "challenge-reframe"
+                    ]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        # Check for class="cls" and class='cls'
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>') # Use \ to escape single quote in f-string
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                        current_pos = -1
+                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                            current_pos = pos_double
+                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                            current_pos = pos_single
 
-                # Determine target list based on class
-                target_list_id = None
-                if item_class == "core-problem":
-                    target_list_id = "core-problem-list"
-                elif item_class == "logic-tree-component":
-                    target_list_id = "logic-tree-list"
-                elif item_class in ["evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data"]:
-                    target_list_id = "evaluation-list"
-                elif item_class in ["challenge-weakness", "challenge-question", "challenge-reframe"]:
-                    target_list_id = "challenge-list"
+                        if current_pos != -1:
+                             # Store the earliest found position for this class
+                             if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                  start_positions[cls] = (current_pos, cls)
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    if not start_positions:
+                        break # No relevant item start found
+
+                    # Find the earliest starting position among all found classes
+                    earliest_pos = -1
+                    item_class = None
+                    for cls, (pos, _) in start_positions.items():
+                         if earliest_pos == -1 or pos < earliest_pos:
+                              earliest_pos = pos
+                              item_class = cls
+
+                    item_start = earliest_pos
+                    if item_start == -1: # Should not happen if start_positions is not empty
+                         break
+
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if item_class == "core-problem":
+                        target_list_id = "core-problem-list"
+                    elif item_class == "logic-tree-component":
+                        target_list_id = "logic-tree-list"
+                    elif item_class in ["evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data"]:
+                        target_list_id = "evaluation-list"
+                    elif item_class in ["challenge-weakness", "challenge-question", "challenge-reframe"]:
+                        target_list_id = "challenge-list"
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle SCQA Framework streaming
-        elif hasattr(self, '_template_type') and self._template_type == "scqa":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = [
-                    "scqa-situation", "scqa-complication", "scqa-question", 
-                    "scqa-answer", "scqa-assessment", "scqa-roadmap"
-                ]
-                start_positions = {}
-                for cls in possible_classes:
-                    # Check for class="cls" and class='cls'
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
-                    
-                    current_pos = -1
-                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                        current_pos = pos_double
-                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                        current_pos = pos_single
-                        
-                    if current_pos != -1:
-                         if cls not in start_positions or current_pos < start_positions[cls][0]:
-                              start_positions[cls] = (current_pos, cls)
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                earliest_pos = -1
-                item_class = None
-                for cls, (pos, _) in start_positions.items():
-                     if earliest_pos == -1 or pos < earliest_pos:
-                          earliest_pos = pos
-                          item_class = cls
-                
-                item_start = earliest_pos
-                if item_start == -1: break
+        elif template_type == "scqa":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = [
+                        "scqa-situation", "scqa-complication", "scqa-question",
+                        "scqa-answer", "scqa-assessment", "scqa-roadmap"
+                    ]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        # Check for class="cls" and class='cls'
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                        current_pos = -1
+                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                            current_pos = pos_double
+                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                            current_pos = pos_single
 
-                # Determine target list based on class
-                target_list_id = f"{item_class}-list" # Map class directly to list ID
+                        if current_pos != -1:
+                             if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                  start_positions[cls] = (current_pos, cls)
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    if not start_positions:
+                        break # No relevant item start found
+
+                    earliest_pos = -1
+                    item_class = None
+                    for cls, (pos, _) in start_positions.items():
+                         if earliest_pos == -1 or pos < earliest_pos:
+                              earliest_pos = pos
+                              item_class = cls
+
+                    item_start = earliest_pos
+                    if item_start == -1: break
+
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class
+                    target_list_id = f"{item_class}-list" # Map class directly to list ID
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Hypothesis Driven Thinking streaming
-        elif hasattr(self, '_template_type') and self._template_type == "hypothesis-driven":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = [
-                    "hypothesis-problem", "hypothesis-hypothesis", 
-                    "hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing",
-                    "hypothesis-priority", "hypothesis-testing", "hypothesis-decision", "hypothesis-assessment"
-                ]
-                start_positions = {}
-                for cls in possible_classes:
-                    # Check for class="cls" and class='cls'
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
-                    
-                    current_pos = -1
-                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                        current_pos = pos_double
-                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                        current_pos = pos_single
-                        
-                    if current_pos != -1:
-                         if cls not in start_positions or current_pos < start_positions[cls][0]:
-                              start_positions[cls] = (current_pos, cls)
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                earliest_pos = -1
-                item_class = None
-                for cls, (pos, _) in start_positions.items():
-                     if earliest_pos == -1 or pos < earliest_pos:
-                          earliest_pos = pos
-                          item_class = cls
-                
-                item_start = earliest_pos
-                if item_start == -1: break
+        elif template_type == "hypothesis-driven":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = [
+                        "hypothesis-problem", "hypothesis-hypothesis",
+                        "hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing",
+                        "hypothesis-priority", "hypothesis-testing", "hypothesis-decision", "hypothesis-assessment"
+                    ]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        # Check for class="cls" and class='cls'
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                        current_pos = -1
+                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                            current_pos = pos_double
+                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                            current_pos = pos_single
 
-                # Determine target list based on class
-                target_list_id = None
-                if item_class == "hypothesis-problem": target_list_id = "hypothesis-problem-list"
-                elif item_class == "hypothesis-hypothesis": target_list_id = "hypothesis-hypothesis-list"
-                elif item_class in ["hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing"]: target_list_id = "hypothesis-evidence-list"
-                elif item_class == "hypothesis-priority": target_list_id = "hypothesis-priority-list"
-                elif item_class == "hypothesis-testing": target_list_id = "hypothesis-testing-list"
-                elif item_class == "hypothesis-decision": target_list_id = "hypothesis-decision-list"
-                elif item_class == "hypothesis-assessment": target_list_id = "hypothesis-assessment-list"
+                        if current_pos != -1:
+                             if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                  start_positions[cls] = (current_pos, cls)
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    if not start_positions:
+                        break # No relevant item start found
+
+                    earliest_pos = -1
+                    item_class = None
+                    for cls, (pos, _) in start_positions.items():
+                         if earliest_pos == -1 or pos < earliest_pos:
+                              earliest_pos = pos
+                              item_class = cls
+
+                    item_start = earliest_pos
+                    if item_start == -1: break
+
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class
+                    target_list_id = None
+                    if item_class == "hypothesis-problem": target_list_id = "hypothesis-problem-list"
+                    elif item_class == "hypothesis-hypothesis": target_list_id = "hypothesis-hypothesis-list"
+                    elif item_class in ["hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing"]: target_list_id = "hypothesis-evidence-list"
+                    elif item_class == "hypothesis-priority": target_list_id = "hypothesis-priority-list"
+                    elif item_class == "hypothesis-testing": target_list_id = "hypothesis-testing-list"
+                    elif item_class == "hypothesis-decision": target_list_id = "hypothesis-decision-list"
+                    elif item_class == "hypothesis-assessment": target_list_id = "hypothesis-assessment-list"
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle First Principles Thinking streaming
-        elif hasattr(self, '_template_type') and self._template_type == "first-principles":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = [
-                    "fp-conventional", "fp-fundamental", "fp-assumption", 
-                    "fp-rebuild", "fp-insight", "fp-implementation", "fp-metacognitive"
-                ]
-                start_positions = {}
-                for cls in possible_classes:
-                    # Check for class="cls" and class='cls'
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
-                    
-                    current_pos = -1
-                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                        current_pos = pos_double
-                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                        current_pos = pos_single
-                        
-                    if current_pos != -1:
-                         if cls not in start_positions or current_pos < start_positions[cls][0]:
-                              start_positions[cls] = (current_pos, cls)
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                earliest_pos = -1
-                item_class = None
-                for cls, (pos, _) in start_positions.items():
-                     if earliest_pos == -1 or pos < earliest_pos:
-                          earliest_pos = pos
-                          item_class = cls
-                
-                item_start = earliest_pos
-                if item_start == -1: break
+        elif template_type == "first-principles":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = [
+                        "fp-conventional", "fp-fundamental", "fp-assumption",
+                        "fp-rebuild", "fp-insight", "fp-implementation", "fp-metacognitive"
+                    ]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        # Check for class="cls" and class='cls'
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                        current_pos = -1
+                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                            current_pos = pos_double
+                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                            current_pos = pos_single
 
-                # Determine target list based on class (map class directly to list ID)
-                target_list_id = f"{item_class}-list"
+                        if current_pos != -1:
+                             if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                  start_positions[cls] = (current_pos, cls)
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    if not start_positions:
+                        break # No relevant item start found
+
+                    earliest_pos = -1
+                    item_class = None
+                    for cls, (pos, _) in start_positions.items():
+                         if earliest_pos == -1 or pos < earliest_pos:
+                              earliest_pos = pos
+                              item_class = cls
+
+                    item_start = earliest_pos
+                    if item_start == -1: break
+
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class (map class directly to list ID)
+                    target_list_id = f"{item_class}-list"
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
 
         # Handle Reframing streaming
-        elif hasattr(self, '_template_type') and self._template_type == "reframing":
-            self._html_buffer += text
-            while True:
-                # Find the start of any relevant list item
-                item_start = -1
-                possible_classes = ["reframing-statement", "reframing-point"]
-                start_positions = {}
-                for cls in possible_classes:
-                    # Check for class="cls" and class='cls'
-                    pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                    pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
-                    
-                    current_pos = -1
-                    if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                        current_pos = pos_double
-                    if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                        current_pos = pos_single
-                        
-                    if current_pos != -1:
-                         if cls not in start_positions or current_pos < start_positions[cls][0]:
-                              start_positions[cls] = (current_pos, cls)
-                
-                if not start_positions:
-                    break # No relevant item start found
-                
-                earliest_pos = -1
-                item_class = None
-                for cls, (pos, _) in start_positions.items():
-                     if earliest_pos == -1 or pos < earliest_pos:
-                          earliest_pos = pos
-                          item_class = cls
-                
-                item_start = earliest_pos
-                if item_start == -1: break
+        elif template_type == "reframing":
+            items_to_append = []
+            with self._html_state_lock:
+                self._html_buffer += text
+                while True:
+                    # Find the start of any relevant list item
+                    item_start = -1
+                    possible_classes = ["reframing-statement", "reframing-point"]
+                    start_positions = {}
+                    for cls in possible_classes:
+                        # Check for class="cls" and class='cls'
+                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
+                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
 
-                item_end = self._html_buffer.find("</li>", item_start)
-                if item_end == -1:
-                    break # No end tag yet
-                    
-                item = self._html_buffer[item_start : item_end + 5]
-                self._html_buffer = self._html_buffer[item_end + 5 :]
+                        current_pos = -1
+                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
+                            current_pos = pos_double
+                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
+                            current_pos = pos_single
 
-                # Determine target list based on class
-                target_list_id = f"{item_class}-list" # Map class directly to list ID
+                        if current_pos != -1:
+                             if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                  start_positions[cls] = (current_pos, cls)
 
-                # Append the complete item to the correct list
-                if target_list_id:
-                    self.output_panel.append_to_list_by_id(target_list_id, item)
+                    if not start_positions:
+                        break # No relevant item start found
 
-            # Default behavior for other template types
+                    earliest_pos = -1
+                    item_class = None
+                    for cls, (pos, _) in start_positions.items():
+                         if earliest_pos == -1 or pos < earliest_pos:
+                              earliest_pos = pos
+                              item_class = cls
+
+                    item_start = earliest_pos
+                    if item_start == -1: break
+
+                    item_end = self._html_buffer.find("</li>", item_start)
+                    if item_end == -1:
+                        break # No end tag yet
+
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_end + 5 :]
+
+                    # Determine target list based on class
+                    target_list_id = f"{item_class}-list" # Map class directly to list ID
+
+                    # Append the complete item to the correct list
+                    if target_list_id:
+                        items_to_append.append((target_list_id, item))
+
+            # Update UI without lock
+            for target_list_id, item in items_to_append:
+                self.output_panel.append_to_list_by_id(target_list_id, item)
+
+        # Default behavior for other template types
         else:
             complete_element = self._process_html_chunk(text)
             if complete_element:
+                # Check is_first_update with lock
+                with self._html_state_lock:
+                    is_first = self._is_first_update
+                    if is_first:
+                        self._is_first_update = False
+
                 # If this is the first update, set the output
-                if self._is_first_update:
+                if is_first:
                     self.output_panel.set_output(complete_element)
-                    self._is_first_update = False
                 else:
                     # For subsequent elements, we want to append only new content
                     # First, check if this is a new section or a list item
@@ -1341,13 +1495,15 @@ class MainWindow(QMainWindow):
         """Clear the output panel and reset HTML streaming state"""
         self.output_panel.set_output("")
         self.output_panel.set_title("Output")  # Reset title to default
+        # Clear transcript (property handles locking)
         self.current_transcript = ""
-        self._html_buffer = ""
-        self._current_element = None
-        self._element_stack = []
-        self._is_first_update = True
-        self._current_list_items = []
-        self._overall_sentiment_received = False # Reset sentiment flag
+        with self._html_state_lock:
+            self._html_buffer = ""
+            self._current_element = None
+            self._element_stack = []
+            self._is_first_update = True
+            self._current_list_items = []
+            self._overall_sentiment_received = False # Reset sentiment flag
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
