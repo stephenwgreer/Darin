@@ -2,6 +2,7 @@ import threading
 import numpy as np
 import soundcard as sc
 import soundfile as sf
+from collections import deque
 
 class ContinuousRecorder:
     def __init__(self, buffer_minutes=3, sample_rate=48000, chunk_seconds=1):
@@ -10,9 +11,9 @@ class ContinuousRecorder:
         self.chunk_frames = chunk_seconds * sample_rate
         self.buffer_minutes = buffer_minutes
         self.buffer_chunks = buffer_minutes * 60 // chunk_seconds
-        
-        # Create a circular buffer to store audio
-        self.audio_buffer = []
+
+        # Create a circular buffer to store audio (deque for O(1) operations)
+        self.audio_buffer = deque(maxlen=self.buffer_chunks)
         self.buffer_lock = threading.Lock()
         
         # Recording control
@@ -49,10 +50,8 @@ class ContinuousRecorder:
                 
                 # Add to the circular buffer
                 with self.buffer_lock:
+                    # deque with maxlen automatically drops oldest when full
                     self.audio_buffer.append(data)
-                    # Keep only the most recent chunks to maintain our time limit
-                    if len(self.audio_buffer) > self.buffer_chunks:
-                        self.audio_buffer.pop(0)
     
     def save_buffer(self, filename=None):
         """Save the current audio buffer to a file and return mono data"""

@@ -5,6 +5,7 @@ import requests
 from api.anthropic_utils import process_with_anthropic
 from api.deepgram_utils import transcribe_with_deepgram
 from anthropic import Anthropic
+import config
 
 class ApiClient:
     def __init__(self, anthropic_api_key=None, deepgram_api_key=None):
@@ -23,8 +24,8 @@ class ApiClient:
         """Process text with Anthropic's Claude API with streaming support"""
         if not self.anthropic_api_key:
             raise ValueError("Anthropic API key not set")
-            
-        client = Anthropic(api_key=self.anthropic_api_key)
+
+        client = self.anthropic_client
         
         # Prepare the message content
         if prompt_template:
@@ -39,8 +40,8 @@ class ApiClient:
             if stream:
                 # Stream the response
                 with client.messages.stream(
-                    model="claude-3-opus-20240229",
-                    max_tokens=4000,
+                    model=config.CLAUDE_MODEL,
+                    max_tokens=config.MAX_TOKENS,
                     messages=[{"role": "user", "content": content}]
                 ) as stream:
                     response_text = ""
@@ -56,8 +57,8 @@ class ApiClient:
             else:
                 # Get complete response
                 response = client.messages.create(
-                    model="claude-3-opus-20240229",
-                    max_tokens=4000,
+                    model=config.CLAUDE_MODEL,
+                    max_tokens=config.MAX_TOKENS,
                     messages=[{"role": "user", "content": content}]
                 )
                 return response.content[0].text

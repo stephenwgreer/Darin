@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QPixmap, QIcon
 
+import config
 from audio.recorder import ContinuousRecorder
 from api.client import ApiClient
 from ui.controls_panel import ControlsPanel
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(app_icon)
             
         # Initialize components
-        self.recorder = ContinuousRecorder(buffer_minutes=3)
+        self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
         self.current_transcript = ""
         self.is_processing = False  # Track if we're currently processing
