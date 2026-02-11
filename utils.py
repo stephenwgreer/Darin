@@ -1,57 +1,111 @@
+"""Utility functions for transcript processing and analysis."""
+
+from typing import Any
 import anthropic
 import json
+from loguru import logger
+import config
 
-def get_anthropic_client(api_key):
-    """Create and return an Anthropic client with the provided API key"""
+
+def get_anthropic_client(api_key: str) -> anthropic.Anthropic:
+    """Create and return an Anthropic client with the provided API key."""
     return anthropic.Anthropic(api_key=api_key)
 
-def process_transcript(client, transcript, prompt_template, **kwargs):
-    """Process transcript with a specific prompt template"""
+
+def process_transcript(
+    client: anthropic.Anthropic,
+    transcript: str,
+    prompt_template: str,
+    **kwargs: Any
+) -> str | dict[str, str]:
+    """
+    Process transcript with a specific prompt template.
+
+    Args:
+        client: Anthropic client instance
+        transcript: Transcript text to process
+        prompt_template: Template string with placeholders
+        **kwargs: Additional template variables
+
+    Returns:
+        Processed text or error dict
+
+    Raises:
+        ValueError: If inputs are invalid
+    """
     try:
         prompt = prompt_template.format(transcript=transcript, **kwargs)
-        
+
+        logger.info("Processing transcript with Claude API")
+        logger.debug(f"Prompt length: {len(prompt)} characters")
+
         message = client.messages.create(
-            model="claude-3-7-sonnet-20250219",
-            max_tokens=1024,
-            temperature=0,
+            model=config.CLAUDE_MODEL,
+            max_tokens=config.MAX_TOKENS,
+            temperature=config.TEMPERATURE,
             system="You analyze transcripts and extract key information.",
             messages=[
                 {"role": "user", "content": prompt}
             ]
         )
-        
-        return message.content[0].text
+
+        result = message.content[0].text
+        logger.info(f"Received response: {len(result)} characters")
+        return result
     except Exception as e:
+        logger.error(f"Error processing transcript: {e}")
         return {"error": str(e)}
         
-def get_practitioner_insights(client, transcript):
-    """Extract topics and get practitioner insights for each topic"""
+def get_practitioner_insights(
+    client: anthropic.Anthropic,
+    transcript: str
+) -> dict[str, Any]:
+    """
+    Extract topics and get practitioner insights for each topic.
+
+    Args:
+        client: Anthropic client instance
+        transcript: Transcript text to analyze
+
+    Returns:
+        Dict with topics and insights for each topic
+    """
     try:
+        logger.info("Extracting practitioner insights from transcript")
+
         # First, extract the topics
         topics_result = process_transcript(client, transcript, TOPIC_SUMMARY_PROMPT)
-        
+
         # Parse topics from JSON
-        topics_data = json.loads(topics_result)
-        
+        if isinstance(topics_result, dict) and "error" in topics_result:
+            return topics_result
+
+        topics_data = json.loads(str(topics_result))
+
         # Prepare results container
-        insights_results = {
+        insights_results: dict[str, Any] = {
             "topics": topics_data,
             "insights": {}
         }
-        
+
         # For each topic, get practitioner insights
         for key, topic in topics_data.items():
             insight = process_transcript(
-                client, 
-                transcript, 
-                PRACTITIONER_INSIGHTS_PROMPT, 
+                client,
+                transcript,
+                PRACTITIONER_INSIGHTS_PROMPT,
                 topic=topic
             )
             insights_results["insights"][key] = insight
-        
+
+        logger.info(f"Extracted insights for {len(topics_data)} topics")
         return insights_results
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse topics JSON: {e}")
+        return {"error": f"Invalid JSON in topics response: {e}"}
     except Exception as e:
-        return {"error": f"Error processing practitioner insights: {str(e)}"}
+        logger.error(f"Error processing practitioner insights: {e}")
+        return {"error": f"Error processing practitioner insights: {e}"}
 
 # Predefined prompt templates
 TOPIC_SUMMARY_PROMPT = """
