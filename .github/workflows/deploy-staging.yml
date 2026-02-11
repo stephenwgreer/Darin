@@ -91,7 +91,8 @@ jobs:
             --exclude='.pytest_cache' \
             --exclude='test_audio' \
             --exclude='.env' \
-            .
+            --exclude='darin-app.tar.gz' \
+            . || true
           echo "✓ Deployment artifact created"
 
       - name: Upload artifact
