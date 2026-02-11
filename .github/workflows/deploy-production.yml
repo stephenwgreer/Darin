@@ -103,9 +103,7 @@ jobs:
 
       - name: Install production dependencies
         run: |
-          source .venv/bin/activate
-          uv pip install -r requirements.txt
-
+          uv sync
       - name: Run final validation
         run: |
           source .venv/bin/activate
