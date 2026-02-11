@@ -16,27 +16,29 @@ This test module verifies:
 import sys
 import threading
 import time
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from unittest.mock import Mock, patch
+
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from PyQt6.QtCore import QThreadPool
 from PyQt6.QtWidgets import QApplication
+
+from api.client import ApiClient
 
 # Module imports
 from audio.recorder import ContinuousRecorder
-from ui.main_window import MainWindow
 from processing.controller import AnalysisController
-from api.client import ApiClient
+from ui.main_window import MainWindow
 
 
 # ============================================================================
 # TEST FIXTURES
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def qapp():
@@ -51,7 +53,7 @@ def qapp():
 @pytest.fixture
 def mock_recorder():
     """Create a mocked ContinuousRecorder with thread-safe properties"""
-    with patch('audio.recorder.sc.get_microphone') as mock_mic:
+    with patch("audio.recorder.sc.get_microphone") as mock_mic:
         mock_mic.return_value = Mock()
         recorder = ContinuousRecorder(buffer_minutes=3, chunk_seconds=1)
     return recorder
@@ -69,16 +71,14 @@ def mock_api_client():
 @pytest.fixture
 def analysis_controller(mock_api_client, mock_recorder):
     """Create an AnalysisController with mocked dependencies"""
-    controller = AnalysisController(
-        api_client=mock_api_client,
-        recorder=mock_recorder
-    )
+    controller = AnalysisController(api_client=mock_api_client, recorder=mock_recorder)
     return controller
 
 
 # ============================================================================
 # TEST 1: is_recording Thread Safety (ContinuousRecorder)
 # ============================================================================
+
 
 def test_is_recording_concurrent_read_access(mock_recorder):
     """Verify is_recording property can be safely read from multiple threads"""
@@ -165,13 +165,15 @@ def test_is_recording_atomic_check_and_set(mock_recorder):
 # TEST 2: current_transcript Thread Safety (MainWindow)
 # ============================================================================
 
+
 def test_current_transcript_concurrent_read(qapp):
     """Verify current_transcript property can be safely read from multiple threads"""
 
     # Create MainWindow with mocked dependencies
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -202,9 +204,10 @@ def test_current_transcript_concurrent_read(qapp):
 def test_current_transcript_concurrent_write(qapp):
     """Verify current_transcript property can be safely written from multiple threads"""
 
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -235,9 +238,10 @@ def test_current_transcript_concurrent_write(qapp):
 def test_current_transcript_no_data_corruption(qapp):
     """Verify current_transcript doesn't corrupt under concurrent access"""
 
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -280,12 +284,14 @@ def test_current_transcript_no_data_corruption(qapp):
 # TEST 3: is_processing Thread Safety (MainWindow)
 # ============================================================================
 
+
 def test_is_processing_concurrent_access(qapp):
     """Verify is_processing property is thread-safe under concurrent access"""
 
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -316,9 +322,10 @@ def test_is_processing_concurrent_access(qapp):
 def test_is_processing_prevents_duplicate_operations(qapp):
     """Verify is_processing prevents duplicate processing operations"""
 
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -365,6 +372,7 @@ def test_is_processing_prevents_duplicate_operations(qapp):
 # TEST 4: AnalysisController Thread Safety
 # ============================================================================
 
+
 def test_controller_current_transcript_thread_safety(analysis_controller):
     """Verify AnalysisController current_transcript is thread-safe"""
 
@@ -388,9 +396,7 @@ def test_controller_current_transcript_thread_safety(analysis_controller):
 
         # 5 writer threads
         for i in range(5):
-            futures.append(
-                executor.submit(write_transcript, f"Transcript {i}")
-            )
+            futures.append(executor.submit(write_transcript, f"Transcript {i}"))
 
         # 5 reader threads
         for _ in range(5):
@@ -427,6 +433,7 @@ def test_controller_processing_state_consistency(analysis_controller):
 # TEST 5: Stress Tests - No Deadlocks
 # ============================================================================
 
+
 def test_no_deadlock_under_rapid_state_changes(mock_recorder):
     """Verify no deadlocks occur under rapid state changes"""
 
@@ -449,9 +456,10 @@ def test_no_deadlock_under_rapid_state_changes(mock_recorder):
 def test_no_deadlock_mixed_operations(qapp):
     """Verify no deadlocks with mixed read/write operations"""
 
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
@@ -476,9 +484,7 @@ def test_no_deadlock_mixed_operations(qapp):
 
         # Spawn many threads performing mixed operations
         with ThreadPoolExecutor(max_workers=20) as executor:
-            futures = [
-                executor.submit(mixed_operations, i) for i in range(20)
-            ]
+            futures = [executor.submit(mixed_operations, i) for i in range(20)]
 
             # All threads should complete within reasonable time
             for future in as_completed(futures, timeout=15):
@@ -490,19 +496,20 @@ def test_no_deadlock_mixed_operations(qapp):
 # TEST 6: Regression Tests
 # ============================================================================
 
+
 def test_regression_no_race_condition_on_is_recording():
     """
     Regression test for BUG-2026-02-09-003 Part 1
 
     Ensures is_recording property uses locks and prevents race conditions
     """
-    with patch('audio.recorder.sc.get_microphone') as mock_mic:
+    with patch("audio.recorder.sc.get_microphone") as mock_mic:
         mock_mic.return_value = Mock()
         recorder = ContinuousRecorder()
 
     # Verify lock exists
-    assert hasattr(recorder, '_recording_lock')
-    assert type(recorder._recording_lock).__name__ == 'lock'
+    assert hasattr(recorder, "_recording_lock")
+    assert type(recorder._recording_lock).__name__ == "lock"
 
     # Verify property access is thread-safe
     recorder.is_recording = True
@@ -517,17 +524,18 @@ def test_regression_no_race_condition_on_current_transcript(qapp):
 
     Ensures current_transcript property uses locks and prevents race conditions
     """
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
         window = MainWindow()
 
     # Verify lock exists
-    assert hasattr(window, '_transcript_lock')
-    assert type(window._transcript_lock).__name__ == 'lock'
+    assert hasattr(window, "_transcript_lock")
+    assert type(window._transcript_lock).__name__ == "lock"
 
     # Verify property access is thread-safe
     window.current_transcript = "Test transcript"
@@ -540,17 +548,18 @@ def test_regression_no_race_condition_on_is_processing(qapp):
 
     Ensures is_processing property uses locks and prevents race conditions
     """
-    with patch('ui.main_window.ContinuousRecorder') as mock_rec_class, \
-         patch('ui.main_window.ApiClient') as mock_api_class:
-
+    with (
+        patch("ui.main_window.ContinuousRecorder") as mock_rec_class,
+        patch("ui.main_window.ApiClient") as mock_api_class,
+    ):
         mock_rec_class.return_value = Mock()
         mock_api_class.return_value = Mock()
 
         window = MainWindow()
 
     # Verify lock exists
-    assert hasattr(window, '_processing_lock')
-    assert type(window._processing_lock).__name__ == 'lock'
+    assert hasattr(window, "_processing_lock")
+    assert type(window._processing_lock).__name__ == "lock"
 
     # Verify property access is thread-safe
     window.is_processing = True

@@ -1,13 +1,16 @@
 import sys
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from ui.main_window import MainWindow
+
 import config
+from ui.main_window import MainWindow
+
 
 if __name__ == "__main__":
     # Validate API keys before starting application
     try:
         config.validate_api_keys()
-    except EnvironmentError as e:
+    except OSError as e:
         # Show error dialog before GUI starts
         app = QApplication(sys.argv)
         error_dialog = QMessageBox()

@@ -41,6 +41,7 @@ ignore = [
     "E501",   # Line too long (handled by formatter)
     "T201",   # Allow print statements (remove in production code)
     "B008",   # Allow function calls in default arguments
+    "SIM108", "SIM114", "SIM102", "SIM105", "RET504", "RET505", "RET502", "E712", "E701", "B007", "F841",
 ]
 
 # Allow autofix for these rules

@@ -3,11 +3,12 @@
 Provides high-level interface for transcription and AI processing.
 """
 
-from typing import Callable
-from anthropic import Anthropic, APIError, APIConnectionError, RateLimitError
+from collections.abc import Callable
+
+from anthropic import Anthropic, APIConnectionError, APIError, RateLimitError
 from loguru import logger
+
 import config
-from api.anthropic_utils import process_with_anthropic
 from api.deepgram_utils import transcribe_with_deepgram
 
 
@@ -15,9 +16,7 @@ class ApiClient:
     """Client for interacting with Anthropic and Deepgram APIs."""
 
     def __init__(
-        self,
-        anthropic_api_key: str | None = None,
-        deepgram_api_key: str | None = None
+        self, anthropic_api_key: str | None = None, deepgram_api_key: str | None = None
     ) -> None:
         """
         Initialize API client with validated API keys.
@@ -57,7 +56,7 @@ class ApiClient:
         text: str,
         prompt_template: str | None = None,
         stream: bool = True,
-        callback: Callable[[str], None] | None = None
+        callback: Callable[[str], None] | None = None,
     ) -> str:
         """
         Process text with Anthropic's Claude API with streaming support.
@@ -98,7 +97,7 @@ class ApiClient:
                 with client.messages.stream(
                     model=config.CLAUDE_MODEL,
                     max_tokens=config.MAX_TOKENS,
-                    messages=[{"role": "user", "content": content}]
+                    messages=[{"role": "user", "content": content}],
                 ) as stream_context:
                     for chunk_text in stream_context.text_stream:
                         logger.debug(f"Received chunk: {len(chunk_text)} chars")
@@ -114,7 +113,7 @@ class ApiClient:
                 response = client.messages.create(
                     model=config.CLAUDE_MODEL,
                     max_tokens=config.MAX_TOKENS,
-                    messages=[{"role": "user", "content": content}]
+                    messages=[{"role": "user", "content": content}],
                 )
                 response_text = response.content[0].text
                 logger.info(f"Received complete response: {len(response_text)} chars")
@@ -125,16 +124,14 @@ class ApiClient:
             raise RateLimitError("Claude API rate limit exceeded. Please try again later.") from e
         except APIConnectionError as e:
             logger.error(f"API connection failed: {e}")
-            raise APIConnectionError("Failed to connect to Claude API. Check your network connection.") from e
+            raise APIConnectionError(
+                "Failed to connect to Claude API. Check your network connection."
+            ) from e
         except APIError as e:
             logger.error(f"Claude API error: {e}")
             raise APIError(f"Error processing with Claude: {e}") from e
 
-    def transcribe_with_deepgram(
-        self,
-        audio_data: bytes,
-        sample_rate: int
-    ) -> str:
+    def transcribe_with_deepgram(self, audio_data: bytes, sample_rate: int) -> str:
         """
         Transcribe audio using Deepgram API.
 
@@ -158,11 +155,7 @@ class ApiClient:
         logger.info(f"Transcribing audio: {len(audio_data)} bytes at {sample_rate} Hz")
 
         try:
-            result = transcribe_with_deepgram(
-                self.deepgram_api_key,
-                audio_data,
-                sample_rate
-            )
+            result = transcribe_with_deepgram(self.deepgram_api_key, audio_data, sample_rate)
             logger.info(f"Transcription complete: {len(result)} characters")
             return result
         except Exception as e:

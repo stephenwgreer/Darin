@@ -1,9 +1,11 @@
 """Utility functions for transcript processing and analysis."""
 
-from typing import Any
-import anthropic
 import json
+from typing import Any
+
+import anthropic
 from loguru import logger
+
 import config
 
 
@@ -13,10 +15,7 @@ def get_anthropic_client(api_key: str) -> anthropic.Anthropic:
 
 
 def process_transcript(
-    client: anthropic.Anthropic,
-    transcript: str,
-    prompt_template: str,
-    **kwargs: Any
+    client: anthropic.Anthropic, transcript: str, prompt_template: str, **kwargs: Any
 ) -> str | dict[str, str]:
     """
     Process transcript with a specific prompt template.
@@ -44,9 +43,7 @@ def process_transcript(
             max_tokens=config.MAX_TOKENS,
             temperature=config.TEMPERATURE,
             system="You analyze transcripts and extract key information.",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}],
         )
 
         result = message.content[0].text
@@ -55,11 +52,9 @@ def process_transcript(
     except Exception as e:
         logger.error(f"Error processing transcript: {e}")
         return {"error": str(e)}
-        
-def get_practitioner_insights(
-    client: anthropic.Anthropic,
-    transcript: str
-) -> dict[str, Any]:
+
+
+def get_practitioner_insights(client: anthropic.Anthropic, transcript: str) -> dict[str, Any]:
     """
     Extract topics and get practitioner insights for each topic.
 
@@ -83,18 +78,12 @@ def get_practitioner_insights(
         topics_data = json.loads(str(topics_result))
 
         # Prepare results container
-        insights_results: dict[str, Any] = {
-            "topics": topics_data,
-            "insights": {}
-        }
+        insights_results: dict[str, Any] = {"topics": topics_data, "insights": {}}
 
         # For each topic, get practitioner insights
         for key, topic in topics_data.items():
             insight = process_transcript(
-                client,
-                transcript,
-                PRACTITIONER_INSIGHTS_PROMPT,
-                topic=topic
+                client, transcript, PRACTITIONER_INSIGHTS_PROMPT, topic=topic
             )
             insights_results["insights"][key] = insight
 
@@ -106,6 +95,7 @@ def get_practitioner_insights(
     except Exception as e:
         logger.error(f"Error processing practitioner insights: {e}")
         return {"error": f"Error processing practitioner insights: {e}"}
+
 
 # Predefined prompt templates
 TOPIC_SUMMARY_PROMPT = """

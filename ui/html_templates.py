@@ -40,23 +40,28 @@ STATUS_TEMPLATE = """
 </div>
 """
 
+
 def create_insight_list(items):
     """Create an HTML list from insight items."""
     items_html = "".join(INSIGHT_ITEM_TEMPLATE.format(content=item) for item in items)
     return INSIGHT_TEMPLATE.format(header="Insights", items=items_html)
 
+
 def create_topic_section(title, content):
     """Create a topic section with title and content."""
     return TOPIC_TEMPLATE.format(title=title, content=content)
+
 
 def wrap_in_base_template(content):
     """Wrap content in the base HTML template."""
     return BASE_HTML_TEMPLATE.format(content=content)
 
+
 def create_error_message(message):
     """Create an error message display."""
     return ERROR_TEMPLATE.format(message=message)
 
+
 def create_status_message(message):
     """Create a status message display."""
-    return STATUS_TEMPLATE.format(message=message) 
+    return STATUS_TEMPLATE.format(message=message)

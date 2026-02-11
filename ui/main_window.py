@@ -1,34 +1,49 @@
 import json
 import threading
-from datetime import datetime
 
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                           QLabel, QSplitter, QMessageBox, QInputDialog, QLineEdit)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont, QPixmap, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 import config
-from audio.recorder import ContinuousRecorder
 from api.client import ApiClient
-from ui.controls_panel import ControlsPanel
-from ui.output_panel import OutputPanel
-from ui.animated_label import AnimatedLabel
-from ui.font_manager import FontManager
+from audio.recorder import ContinuousRecorder
+
+# Import from new logic_templates file
+from prompts.logic_templates import (
+    FIRST_PRINCIPLES_PROMPT,
+    HYPOTHESIS_DRIVEN_PROMPT,
+    PROBLEM_SOLVING_PROMPT,
+    REFRAMING_PROMPT,
+    SCQA_PROMPT,
+)
+
 # Explicit imports from prompts.templates
 from prompts.templates import (
-    PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-    MEETING_SUMMARY_PROMPT,
-    FILL_IN_GAPS_PROMPT,
+    ANSWER_QUESTION_PROMPT,
     BRAINSTORM_PROMPT,
     COMPANY_FIT_PROMPT,
     FACT_CHECKING_PROMPT,
+    FILL_IN_GAPS_PROMPT,
     FOLLOW_UP_QUESTIONS_PROMPT,
+    MEETING_SUMMARY_PROMPT,
+    PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
     SENTIMENT_ANALYSIS_PROMPT,
     TOPIC_SUMMARY_PROMPT,
-    ANSWER_QUESTION_PROMPT
 )
-# Import from new logic_templates file
-from prompts.logic_templates import PROBLEM_SOLVING_PROMPT, SCQA_PROMPT, HYPOTHESIS_DRIVEN_PROMPT, FIRST_PRINCIPLES_PROMPT, REFRAMING_PROMPT
+from ui.animated_label import AnimatedLabel
+from ui.controls_panel import ControlsPanel
+from ui.font_manager import FontManager
+from ui.output_panel import OutputPanel
+
 
 class MainWindow(QMainWindow):
     # Custom signals
@@ -38,7 +53,7 @@ class MainWindow(QMainWindow):
     processing_complete = pyqtSignal(dict)
     progress_update = pyqtSignal(str)  # Signal for thread-safe progress updates
     stream_update = pyqtSignal(str)  # New signal for streaming updates
-    
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Darin Audio Assistant")
@@ -50,7 +65,7 @@ class MainWindow(QMainWindow):
         # Set application icon
         app_icon = QIcon("assets/Darin_ICON.png")
         self.setWindowIcon(app_icon)
-            
+
         # Initialize components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
@@ -70,11 +85,11 @@ class MainWindow(QMainWindow):
         self._element_stack = []  # Stack to track nested HTML elements
         self._is_first_update = True  # Track if this is the first stream update
         self._current_list_items = []  # Track list items for the current section
-        self._template_type = None # Track the current template type
+        self._template_type = None  # Track the current template type
 
         # Sentiment analysis specific state
         self._overall_sentiment_received = False
-        
+
         # Setup UI
         self.setup_ui()
 
@@ -115,92 +130,146 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)  # Add some padding around the edges
         main_layout.setSpacing(10)  # Space between elements
-        
+
         ########################
         # Header section
         ########################
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Add logo on left
         logo_label = QLabel()
         small_logo = QPixmap("assets/Darin_Round.png")
         small_logo = small_logo.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio)
         logo_label.setPixmap(small_logo)
         header_layout.addWidget(logo_label)
-        
+
         # Add spacing between logo and title
         header_layout.addSpacing(10)
-        
+
         # App title with typing animation
         app_title = AnimatedLabel("Welcome to Darin, your intern")
         app_title.setFont(FontManager.get_font(18, QFont.Weight.Bold))
         header_layout.addWidget(app_title)
-        
+
         header_layout.addStretch()
-        
+
         main_layout.addWidget(header_widget)
-        
+
         ########################
         # Content section with splitter
         ########################
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.content_splitter.setHandleWidth(1)  # Make splitter handle less visible
-        
+
         # Left panel (controls)
         self.controls_panel = ControlsPanel()
         self.controls_panel.setMaximumWidth(300)  # Limit the width of controls panel
-        
+
         # Right panel (output)
         self.output_panel = OutputPanel()
-        
+
         # Add panels to splitter
         self.content_splitter.addWidget(self.controls_panel)
         self.content_splitter.addWidget(self.output_panel)
-        
+
         # Set the proportions (25% controls, 75% output)
         self.content_splitter.setStretchFactor(0, 1)  # Controls take 1 part
         self.content_splitter.setStretchFactor(1, 3)  # Output takes 3 parts
-        
+
         # Set initial sizes
         total_width = self.width()
         self.content_splitter.setSizes([int(total_width * 0.25), int(total_width * 0.75)])
-        
+
         main_layout.addWidget(self.content_splitter)
-        
+
         # Footer
         footer = QLabel("© 2025 Darin Listening Assistant")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setStyleSheet("color: #666666; font-size: 11px;")
         main_layout.addWidget(footer)
-    
+
     def setup_connections(self):
         # Connect control panel signals
         self.controls_panel.record_clicked.connect(self.toggle_recording)
         self.controls_panel.transcribe_clicked.connect(self.transcribe_buffer)
         self.controls_panel.transcribe_last_30_clicked.connect(self.transcribe_last_30_seconds)
         self.controls_panel.clear_output_clicked.connect(self.clear_output)
-        
+
         # Original prompt buttons
-        self.controls_panel.topics_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT, title="Key Topics"))
-        self.controls_panel.insights_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PRACTITIONER_INSIGHTS_STREAMING_PROMPT, title="Banking Practitioner Insights"))
-        self.controls_panel.summary_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(MEETING_SUMMARY_PROMPT, title="Meeting Summary"))
-        self.controls_panel.questions_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FOLLOW_UP_QUESTIONS_PROMPT, title="Follow-up Questions"))
-        self.controls_panel.sentiment_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SENTIMENT_ANALYSIS_PROMPT, title="Sentiment Analysis"))
-        
+        self.controls_panel.topics_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(TOPIC_SUMMARY_PROMPT, title="Key Topics")
+        )
+        self.controls_panel.insights_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                PRACTITIONER_INSIGHTS_STREAMING_PROMPT, title="Banking Practitioner Insights"
+            )
+        )
+        self.controls_panel.summary_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                MEETING_SUMMARY_PROMPT, title="Meeting Summary"
+            )
+        )
+        self.controls_panel.questions_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                FOLLOW_UP_QUESTIONS_PROMPT, title="Follow-up Questions"
+            )
+        )
+        self.controls_panel.sentiment_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                SENTIMENT_ANALYSIS_PROMPT, title="Sentiment Analysis"
+            )
+        )
+
         # New prompt buttons
-        self.controls_panel.fill_gaps_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FILL_IN_GAPS_PROMPT, title="Gaps in Reasoning"))
-        self.controls_panel.brainstorm_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(BRAINSTORM_PROMPT, title="Brainstorm Questions"))
-        self.controls_panel.company_fit_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(COMPANY_FIT_PROMPT, title="SAS Viya Alignment"))
-        self.controls_panel.fact_check_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FACT_CHECKING_PROMPT, title="Fact Check Analysis"))
-        self.controls_panel.answer_question_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(ANSWER_QUESTION_PROMPT, title="Answer Question"))
-        self.controls_panel.problem_solving_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(PROBLEM_SOLVING_PROMPT, title="Issue Tree Logic"))
-        self.controls_panel.scqa_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(SCQA_PROMPT, title="SCQA Framework"))
-        self.controls_panel.hypothesis_driven_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(HYPOTHESIS_DRIVEN_PROMPT, title="Hypothesis Thinking"))
-        self.controls_panel.first_principles_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(FIRST_PRINCIPLES_PROMPT, title="First Principles"))
-        self.controls_panel.reframing_clicked.connect(lambda: self.run_prompt_with_auto_transcribe(REFRAMING_PROMPT, title="Reframing"))
-        
+        self.controls_panel.fill_gaps_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                FILL_IN_GAPS_PROMPT, title="Gaps in Reasoning"
+            )
+        )
+        self.controls_panel.brainstorm_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                BRAINSTORM_PROMPT, title="Brainstorm Questions"
+            )
+        )
+        self.controls_panel.company_fit_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                COMPANY_FIT_PROMPT, title="SAS Viya Alignment"
+            )
+        )
+        self.controls_panel.fact_check_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                FACT_CHECKING_PROMPT, title="Fact Check Analysis"
+            )
+        )
+        self.controls_panel.answer_question_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                ANSWER_QUESTION_PROMPT, title="Answer Question"
+            )
+        )
+        self.controls_panel.problem_solving_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                PROBLEM_SOLVING_PROMPT, title="Issue Tree Logic"
+            )
+        )
+        self.controls_panel.scqa_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(SCQA_PROMPT, title="SCQA Framework")
+        )
+        self.controls_panel.hypothesis_driven_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                HYPOTHESIS_DRIVEN_PROMPT, title="Hypothesis Thinking"
+            )
+        )
+        self.controls_panel.first_principles_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(
+                FIRST_PRINCIPLES_PROMPT, title="First Principles"
+            )
+        )
+        self.controls_panel.reframing_clicked.connect(
+            lambda: self.run_prompt_with_auto_transcribe(REFRAMING_PROMPT, title="Reframing")
+        )
+
         # Connect custom signals to slots
         self.recording_started.connect(self.on_recording_started)
         self.recording_stopped.connect(self.on_recording_stopped)
@@ -208,7 +277,7 @@ class MainWindow(QMainWindow):
         self.processing_complete.connect(self.on_processing_complete)
         self.progress_update.connect(self.on_progress_update)
         self.stream_update.connect(self.on_stream_update)
-    
+
     def toggle_recording(self):
         if not self.recorder.is_recording:
             # Start recording
@@ -222,26 +291,27 @@ class MainWindow(QMainWindow):
                 self.recording_stopped.emit()
                 # Update UI to show stopped state
                 self.controls_panel.set_recording_active(False)
-    
+
     def transcribe_buffer(self):
         """Transcribe the current audio buffer"""
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_button.setEnabled(False)
         self.controls_panel.transcribe_button.setText("Transcribing...")
-        
+
         # Get audio data from buffer
         audio_data = self.recorder.save_buffer()
-        
+
         if audio_data is None:
             self.controls_panel.transcribe_button.setText("Transcribe Buffer")
             self.controls_panel.transcribe_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
             return
-        
+
         # Start transcription in a separate thread
-        threading.Thread(target=self._transcribe_thread, 
-                        args=(audio_data, self.recorder.sample_rate)).start()
-    
+        threading.Thread(
+            target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
+        ).start()
+
     def _transcribe_thread(self, audio_data, sample_rate):
         """Background thread for transcription - emits signal, doesn't write directly"""
         try:
@@ -250,7 +320,7 @@ class MainWindow(QMainWindow):
             self.transcription_complete.emit(text)
         except Exception as e:
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
-    
+
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
         """Auto transcribe and then run a specific prompt"""
         # Atomic check-and-set for processing state
@@ -281,38 +351,43 @@ class MainWindow(QMainWindow):
         if has_transcript:
             self._run_specific_prompt(transcript_copy, prompt_template)
             return
-            
+
         # Otherwise get audio data
-        audio_data = None # Initialize audio_data
+        audio_data = None  # Initialize audio_data
         # For specific prompts, only use last 30s if no transcript exists
-        use_last_30s = prompt_template in [PRACTITIONER_INSIGHTS_STREAMING_PROMPT, ANSWER_QUESTION_PROMPT]
-        
+        use_last_30s = prompt_template in [
+            PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
+            ANSWER_QUESTION_PROMPT,
+        ]
+
         if use_last_30s and not self.current_transcript:
             audio_data = self.recorder.get_last_n_seconds(30)
             if audio_data is None:
-                QMessageBox.warning(self, "Processing Error", "Not enough audio (last 30s) in buffer to process")
+                QMessageBox.warning(
+                    self, "Processing Error", "Not enough audio (last 30s) in buffer to process"
+                )
                 self.controls_panel.set_prompt_buttons_enabled(True)
                 self.is_processing = False  # Property handles locking
-                return # Return early if 30s failed
+                return  # Return early if 30s failed
 
         # If we didn't get 30s audio (either not applicable or it succeeded but we proceed),
         # get the full buffer instead.
-        if audio_data is None: # This means we need the full buffer
+        if audio_data is None:  # This means we need the full buffer
             audio_data = self.recorder.save_buffer()
             if audio_data is None:
-                 # Check if getting the full buffer failed
-                 QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
-                 self.controls_panel.set_prompt_buttons_enabled(True)
-                 self.is_processing = False  # Property handles locking
-                 return # Return early if full buffer failed
-        
+                # Check if getting the full buffer failed
+                QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
+                self.controls_panel.set_prompt_buttons_enabled(True)
+                self.is_processing = False  # Property handles locking
+                return  # Return early if full buffer failed
+
         # We should now have valid audio_data (either 30s or full buffer)
         # Start transcription and processing in a separate thread
         threading.Thread(
-            target=self._transcribe_and_process_thread, 
-            args=(audio_data, self.recorder.sample_rate, prompt_template)
+            target=self._transcribe_and_process_thread,
+            args=(audio_data, self.recorder.sample_rate, prompt_template),
         ).start()
-    
+
     def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
         """Background thread for transcription followed by processing with a specific prompt"""
         try:
@@ -332,13 +407,13 @@ class MainWindow(QMainWindow):
             # Emit signal to update processing state in GUI thread (thread-safe)
             # We need to emit processing_complete which will handle this
             pass  # is_processing will be set to False by on_processing_complete slot
-    
+
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
-            
+
             # Set up the static template based on the prompt type
             template_type = self._setup_static_template(prompt_template)
 
@@ -350,24 +425,21 @@ class MainWindow(QMainWindow):
                 self._is_first_update = False  # Already set up the template
                 self._current_list_items = []
                 self._template_type = template_type  # Store the template type for use in streaming
-            
+
             def handle_stream(text):
                 """Callback to handle streaming text"""
                 self.stream_update.emit(text)
-            
+
             # Process with the template
             result = self.api_client.process_with_anthropic(
-                transcript, 
-                prompt_template,
-                stream=True,
-                callback=handle_stream
+                transcript, prompt_template, stream=True, callback=handle_stream
             )
-            
+
             # Final update with complete response
             self.processing_complete.emit({"result": result})
         except Exception as e:
             self.processing_complete.emit({"error": str(e)})
-    
+
     def _setup_static_template(self, prompt_template):
         """Set up a static template based on the prompt type"""
         if prompt_template == FOLLOW_UP_QUESTIONS_PROMPT:
@@ -676,13 +748,13 @@ class MainWindow(QMainWindow):
             """
             self.output_panel.set_output(static_template)
             return "generic"
-    
+
     # Slots for custom signals
     @pyqtSlot()
     def on_recording_started(self):
         # Enable prompt buttons when recording starts
         self.controls_panel.set_prompt_buttons_enabled(True)
-    
+
     @pyqtSlot()
     def on_recording_stopped(self):
         # Keep buttons enabled even when recording stops
@@ -690,7 +762,7 @@ class MainWindow(QMainWindow):
         if self.recorder.get_buffer_seconds() > 0:
             self.controls_panel.transcribe_button.setEnabled(True)
             self.controls_panel.set_prompt_buttons_enabled(True)
-    
+
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
         # Update transcript in GUI thread (thread-safe via property)
@@ -707,7 +779,7 @@ class MainWindow(QMainWindow):
 
         # Enable all prompt buttons when we have a transcript
         self.controls_panel.set_prompt_buttons_enabled(True)
-    
+
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
         # Reset processing state in GUI thread (thread-safe)
@@ -719,17 +791,35 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For specific streaming types, we don't want to overwrite our formatted content
             # as the final output might be raw text without the template structure.
-            if not hasattr(self, '_template_type') or self._template_type not in ["follow-up-questions", "sentiment-analysis", "meeting-summary", "practitioner-insights", "topic-summary", "fill-gaps", "brainstorm", "company-fit", "fact-check", "answer-question", "problem-solving", "scqa", "hypothesis-driven", "first-principles", "reframing"]:
+            if not hasattr(self, "_template_type") or self._template_type not in [
+                "follow-up-questions",
+                "sentiment-analysis",
+                "meeting-summary",
+                "practitioner-insights",
+                "topic-summary",
+                "fill-gaps",
+                "brainstorm",
+                "company-fit",
+                "fact-check",
+                "answer-question",
+                "problem-solving",
+                "scqa",
+                "hypothesis-driven",
+                "first-principles",
+                "reframing",
+            ]:
                 # Show result text for other non-streaming or differently handled types
                 self.output_panel.set_output(result["result"])
         else:
             # Format the result as a topic section
             content = json.dumps(result, indent=2)
-            self.output_panel.set_output(create_topic_section("Processing Results", f"<pre>{content}</pre>"))
+            self.output_panel.set_output(
+                create_topic_section("Processing Results", f"<pre>{content}</pre>")
+            )
 
         # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
-    
+
     def _process_html_chunk(self, chunk):
         """Process a chunk of HTML text and return complete elements if found."""
         with self._html_state_lock:
@@ -740,38 +830,47 @@ class MainWindow(QMainWindow):
                 # If we don't have a current element, look for the start of one
                 if not self._current_element:
                     # Find the next opening tag for a topic section
-                    start_idx = self._html_buffer.find("<div class=\"topic-section\">")
+                    start_idx = self._html_buffer.find('<div class="topic-section">')
                     if start_idx == -1:
                         # If no topic section, look for individual list items
-                        item_start = self._html_buffer.find("<li class=\"insight-item\">")
+                        item_start = self._html_buffer.find('<li class="insight-item">')
                         if item_start != -1:
                             item_end = self._html_buffer.find("</li>", item_start)
                             if item_end != -1:
                                 # Extract the complete list item
-                                item = self._html_buffer[item_start:item_end + 5]
+                                item = self._html_buffer[item_start : item_end + 5]
                                 # Remove the processed item from buffer
-                                self._html_buffer = self._html_buffer[:item_start] + self._html_buffer[item_end + 5:]
+                                self._html_buffer = (
+                                    self._html_buffer[:item_start]
+                                    + self._html_buffer[item_end + 5 :]
+                                )
                                 return item
                         break  # No new elements found
 
                     # Found a topic section, extract the title if present
-                    title_start = self._html_buffer.find("<h2 class=\"topic-title\">", start_idx)
-                    title_end = self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
+                    title_start = self._html_buffer.find('<h2 class="topic-title">', start_idx)
+                    title_end = (
+                        self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
+                    )
 
                     if title_start != -1 and title_end != -1:
                         # Found a title, extract the complete section
                         section_end = self._html_buffer.find("</div>", title_end)
                         if section_end != -1:
                             # Extract the complete section
-                            section = self._html_buffer[start_idx:section_end + 6]
+                            section = self._html_buffer[start_idx : section_end + 6]
                             # Remove the processed section from buffer
-                            self._html_buffer = self._html_buffer[:start_idx] + self._html_buffer[section_end + 6:]
+                            self._html_buffer = (
+                                self._html_buffer[:start_idx] + self._html_buffer[section_end + 6 :]
+                            )
                             return section
                         else:
                             # Title found but section not complete
                             self._current_element = {
                                 "type": "topic-section",
-                                "title": self._html_buffer[title_start + len("<h2 class=\"topic-title\">"):title_end].strip()
+                                "title": self._html_buffer[
+                                    title_start + len('<h2 class="topic-title">') : title_end
+                                ].strip(),
                             }
                     else:
                         # No title found yet, keep accumulating
@@ -785,8 +884,8 @@ class MainWindow(QMainWindow):
                     end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
                     if end_idx != -1:
                         # Section is complete, extract it all
-                        complete_element = self._html_buffer[:end_idx + 6]
-                        self._html_buffer = self._html_buffer[end_idx + 6:]
+                        complete_element = self._html_buffer[: end_idx + 6]
+                        self._html_buffer = self._html_buffer[end_idx + 6 :]
                         self._current_element = None
                         self._element_stack.pop()
                         return complete_element
@@ -804,7 +903,7 @@ class MainWindow(QMainWindow):
 
         # Get template type with lock
         with self._html_state_lock:
-            template_type = self._template_type if hasattr(self, '_template_type') else None
+            template_type = self._template_type if hasattr(self, "_template_type") else None
 
         # Handle follow-up questions streaming
         if template_type == "follow-up-questions":
@@ -819,21 +918,26 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
-                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                        item = item.replace(
+                            "<li",
+                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
+                        )
                     elif 'style="' not in item:
-                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                        item = item.replace(
+                            'class="',
+                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
+                        )
 
                     items_to_append.append(item)
 
             # Update UI without lock
             for item in items_to_append:
                 self.output_panel.append_to_dynamic_content(item)
-
 
         # Handle sentiment analysis streaming
         elif template_type == "sentiment-analysis":
@@ -843,7 +947,7 @@ class MainWindow(QMainWindow):
             with self._html_state_lock:
                 if not self._overall_sentiment_received:
                     # First line should be the overall sentiment
-                    lines = text.split('\n', 1)
+                    lines = text.split("\n", 1)
                     overall_sentiment = lines[0].strip()
                     if overall_sentiment in ["Positive", "Negative", "Neutral"]:
                         overall_sentiment_value = overall_sentiment
@@ -856,13 +960,13 @@ class MainWindow(QMainWindow):
                             pass
                     else:
                         # If first line isn't sentiment, buffer it for list item processing
-                        pass # Fall through to list item processing
+                        pass  # Fall through to list item processing
 
             # Update overall sentiment UI outside lock
             if overall_sentiment_value:
                 self.output_panel.set_overall_sentiment(overall_sentiment_value)
-                if '\n' not in text or text == overall_sentiment_value:
-                    return # Wait for next chunk
+                if "\n" not in text or text == overall_sentiment_value:
+                    return  # Wait for next chunk
 
             # Process subsequent lines as list items
             with self._html_state_lock:
@@ -875,14 +979,20 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
-                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                        item = item.replace(
+                            "<li",
+                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
+                        )
                     elif 'style="' not in item:
-                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"')
+                        item = item.replace(
+                            'class="',
+                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
+                        )
 
                     items_to_append.append(item)
 
@@ -903,14 +1013,20 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
-                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            "<li",
+                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
                     elif 'style="' not in item:
-                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            'class="',
+                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
 
                     items_to_append.append(item)
 
@@ -931,14 +1047,20 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
-                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            "<li",
+                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
                     elif 'style="' not in item:
-                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            'class="',
+                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
 
                     items_to_append.append(item)
 
@@ -959,14 +1081,20 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
-                        item = item.replace("<li", '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            "<li",
+                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
                     elif 'style="' not in item:
-                        item = item.replace('class="', 'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"')
+                        item = item.replace(
+                            'class="',
+                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
+                        )
 
                     items_to_append.append(item)
 
@@ -987,8 +1115,8 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Determine target list based on class
                     target_list_id = None
@@ -1019,8 +1147,8 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Determine target list based on class
                     target_list_id = None
@@ -1051,8 +1179,8 @@ class MainWindow(QMainWindow):
                     if item_end == -1:
                         break
 
-                    item = self._html_buffer[item_start:item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item):]
+                    item = self._html_buffer[item_start : item_end + 5]
+                    self._html_buffer = self._html_buffer[item_start + len(item) :]
 
                     # Determine target list based on class
                     target_list_id = None
@@ -1077,15 +1205,17 @@ class MainWindow(QMainWindow):
                 self._html_buffer += text
                 while True:
                     # Fact check items can be multi-line, look for the start and end <li> tags
-                    item_start = self._html_buffer.find("<li class=\"fact-check-item\">")
+                    item_start = self._html_buffer.find('<li class="fact-check-item">')
                     if item_start == -1:
-                        item_start = self._html_buffer.find("<li class='fact-check-item'>") # Check single quotes too
+                        item_start = self._html_buffer.find(
+                            "<li class='fact-check-item'>"
+                        )  # Check single quotes too
                         if item_start == -1:
-                           break # No start tag found
+                            break  # No start tag found
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # End tag not found yet
+                        break  # End tag not found yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
@@ -1115,7 +1245,7 @@ class MainWindow(QMainWindow):
                             start_positions[pos_single] = cls
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     # Find the earliest starting position
                     item_start = min(start_positions.keys())
@@ -1123,7 +1253,7 @@ class MainWindow(QMainWindow):
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
@@ -1154,15 +1284,23 @@ class MainWindow(QMainWindow):
                     # Find the start of any relevant list item
                     item_start = -1
                     possible_classes = [
-                        "core-problem", "logic-tree-component",
-                        "evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data",
-                        "challenge-weakness", "challenge-question", "challenge-reframe"
+                        "core-problem",
+                        "logic-tree-component",
+                        "evaluation-mece",
+                        "evaluation-assumption",
+                        "evaluation-logic",
+                        "evaluation-data",
+                        "challenge-weakness",
+                        "challenge-question",
+                        "challenge-reframe",
                     ]
                     start_positions = {}
                     for cls in possible_classes:
                         # Check for class="cls" and class='cls'
                         pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>') # Use \ to escape single quote in f-string
+                        pos_single = self._html_buffer.find(
+                            f"<li class='{cls}'>"
+                        )  # Use \ to escape single quote in f-string
 
                         current_pos = -1
                         if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
@@ -1171,28 +1309,28 @@ class MainWindow(QMainWindow):
                             current_pos = pos_single
 
                         if current_pos != -1:
-                             # Store the earliest found position for this class
-                             if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                  start_positions[cls] = (current_pos, cls)
+                            # Store the earliest found position for this class
+                            if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                start_positions[cls] = (current_pos, cls)
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     # Find the earliest starting position among all found classes
                     earliest_pos = -1
                     item_class = None
                     for cls, (pos, _) in start_positions.items():
-                         if earliest_pos == -1 or pos < earliest_pos:
-                              earliest_pos = pos
-                              item_class = cls
+                        if earliest_pos == -1 or pos < earliest_pos:
+                            earliest_pos = pos
+                            item_class = cls
 
                     item_start = earliest_pos
-                    if item_start == -1: # Should not happen if start_positions is not empty
-                         break
+                    if item_start == -1:  # Should not happen if start_positions is not empty
+                        break
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
@@ -1203,9 +1341,18 @@ class MainWindow(QMainWindow):
                         target_list_id = "core-problem-list"
                     elif item_class == "logic-tree-component":
                         target_list_id = "logic-tree-list"
-                    elif item_class in ["evaluation-mece", "evaluation-assumption", "evaluation-logic", "evaluation-data"]:
+                    elif item_class in [
+                        "evaluation-mece",
+                        "evaluation-assumption",
+                        "evaluation-logic",
+                        "evaluation-data",
+                    ]:
                         target_list_id = "evaluation-list"
-                    elif item_class in ["challenge-weakness", "challenge-question", "challenge-reframe"]:
+                    elif item_class in [
+                        "challenge-weakness",
+                        "challenge-question",
+                        "challenge-reframe",
+                    ]:
                         target_list_id = "challenge-list"
 
                     # Append the complete item to the correct list
@@ -1225,14 +1372,18 @@ class MainWindow(QMainWindow):
                     # Find the start of any relevant list item
                     item_start = -1
                     possible_classes = [
-                        "scqa-situation", "scqa-complication", "scqa-question",
-                        "scqa-answer", "scqa-assessment", "scqa-roadmap"
+                        "scqa-situation",
+                        "scqa-complication",
+                        "scqa-question",
+                        "scqa-answer",
+                        "scqa-assessment",
+                        "scqa-roadmap",
                     ]
                     start_positions = {}
                     for cls in possible_classes:
                         # Check for class="cls" and class='cls'
                         pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
 
                         current_pos = -1
                         if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
@@ -1241,31 +1392,32 @@ class MainWindow(QMainWindow):
                             current_pos = pos_single
 
                         if current_pos != -1:
-                             if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                  start_positions[cls] = (current_pos, cls)
+                            if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                start_positions[cls] = (current_pos, cls)
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     earliest_pos = -1
                     item_class = None
                     for cls, (pos, _) in start_positions.items():
-                         if earliest_pos == -1 or pos < earliest_pos:
-                              earliest_pos = pos
-                              item_class = cls
+                        if earliest_pos == -1 or pos < earliest_pos:
+                            earliest_pos = pos
+                            item_class = cls
 
                     item_start = earliest_pos
-                    if item_start == -1: break
+                    if item_start == -1:
+                        break
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
 
                     # Determine target list based on class
-                    target_list_id = f"{item_class}-list" # Map class directly to list ID
+                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
 
                     # Append the complete item to the correct list
                     if target_list_id:
@@ -1284,15 +1436,21 @@ class MainWindow(QMainWindow):
                     # Find the start of any relevant list item
                     item_start = -1
                     possible_classes = [
-                        "hypothesis-problem", "hypothesis-hypothesis",
-                        "hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing",
-                        "hypothesis-priority", "hypothesis-testing", "hypothesis-decision", "hypothesis-assessment"
+                        "hypothesis-problem",
+                        "hypothesis-hypothesis",
+                        "hypothesis-evidence-support",
+                        "hypothesis-evidence-contradict",
+                        "hypothesis-evidence-missing",
+                        "hypothesis-priority",
+                        "hypothesis-testing",
+                        "hypothesis-decision",
+                        "hypothesis-assessment",
                     ]
                     start_positions = {}
                     for cls in possible_classes:
                         # Check for class="cls" and class='cls'
                         pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
 
                         current_pos = -1
                         if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
@@ -1301,38 +1459,50 @@ class MainWindow(QMainWindow):
                             current_pos = pos_single
 
                         if current_pos != -1:
-                             if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                  start_positions[cls] = (current_pos, cls)
+                            if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                start_positions[cls] = (current_pos, cls)
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     earliest_pos = -1
                     item_class = None
                     for cls, (pos, _) in start_positions.items():
-                         if earliest_pos == -1 or pos < earliest_pos:
-                              earliest_pos = pos
-                              item_class = cls
+                        if earliest_pos == -1 or pos < earliest_pos:
+                            earliest_pos = pos
+                            item_class = cls
 
                     item_start = earliest_pos
-                    if item_start == -1: break
+                    if item_start == -1:
+                        break
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
 
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "hypothesis-problem": target_list_id = "hypothesis-problem-list"
-                    elif item_class == "hypothesis-hypothesis": target_list_id = "hypothesis-hypothesis-list"
-                    elif item_class in ["hypothesis-evidence-support", "hypothesis-evidence-contradict", "hypothesis-evidence-missing"]: target_list_id = "hypothesis-evidence-list"
-                    elif item_class == "hypothesis-priority": target_list_id = "hypothesis-priority-list"
-                    elif item_class == "hypothesis-testing": target_list_id = "hypothesis-testing-list"
-                    elif item_class == "hypothesis-decision": target_list_id = "hypothesis-decision-list"
-                    elif item_class == "hypothesis-assessment": target_list_id = "hypothesis-assessment-list"
+                    if item_class == "hypothesis-problem":
+                        target_list_id = "hypothesis-problem-list"
+                    elif item_class == "hypothesis-hypothesis":
+                        target_list_id = "hypothesis-hypothesis-list"
+                    elif item_class in [
+                        "hypothesis-evidence-support",
+                        "hypothesis-evidence-contradict",
+                        "hypothesis-evidence-missing",
+                    ]:
+                        target_list_id = "hypothesis-evidence-list"
+                    elif item_class == "hypothesis-priority":
+                        target_list_id = "hypothesis-priority-list"
+                    elif item_class == "hypothesis-testing":
+                        target_list_id = "hypothesis-testing-list"
+                    elif item_class == "hypothesis-decision":
+                        target_list_id = "hypothesis-decision-list"
+                    elif item_class == "hypothesis-assessment":
+                        target_list_id = "hypothesis-assessment-list"
 
                     # Append the complete item to the correct list
                     if target_list_id:
@@ -1351,14 +1521,19 @@ class MainWindow(QMainWindow):
                     # Find the start of any relevant list item
                     item_start = -1
                     possible_classes = [
-                        "fp-conventional", "fp-fundamental", "fp-assumption",
-                        "fp-rebuild", "fp-insight", "fp-implementation", "fp-metacognitive"
+                        "fp-conventional",
+                        "fp-fundamental",
+                        "fp-assumption",
+                        "fp-rebuild",
+                        "fp-insight",
+                        "fp-implementation",
+                        "fp-metacognitive",
                     ]
                     start_positions = {}
                     for cls in possible_classes:
                         # Check for class="cls" and class='cls'
                         pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
 
                         current_pos = -1
                         if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
@@ -1367,25 +1542,26 @@ class MainWindow(QMainWindow):
                             current_pos = pos_single
 
                         if current_pos != -1:
-                             if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                  start_positions[cls] = (current_pos, cls)
+                            if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                start_positions[cls] = (current_pos, cls)
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     earliest_pos = -1
                     item_class = None
                     for cls, (pos, _) in start_positions.items():
-                         if earliest_pos == -1 or pos < earliest_pos:
-                              earliest_pos = pos
-                              item_class = cls
+                        if earliest_pos == -1 or pos < earliest_pos:
+                            earliest_pos = pos
+                            item_class = cls
 
                     item_start = earliest_pos
-                    if item_start == -1: break
+                    if item_start == -1:
+                        break
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
@@ -1414,7 +1590,7 @@ class MainWindow(QMainWindow):
                     for cls in possible_classes:
                         # Check for class="cls" and class='cls'
                         pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f'<li class=\'{cls}\'>')
+                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
 
                         current_pos = -1
                         if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
@@ -1423,31 +1599,32 @@ class MainWindow(QMainWindow):
                             current_pos = pos_single
 
                         if current_pos != -1:
-                             if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                  start_positions[cls] = (current_pos, cls)
+                            if cls not in start_positions or current_pos < start_positions[cls][0]:
+                                start_positions[cls] = (current_pos, cls)
 
                     if not start_positions:
-                        break # No relevant item start found
+                        break  # No relevant item start found
 
                     earliest_pos = -1
                     item_class = None
                     for cls, (pos, _) in start_positions.items():
-                         if earliest_pos == -1 or pos < earliest_pos:
-                              earliest_pos = pos
-                              item_class = cls
+                        if earliest_pos == -1 or pos < earliest_pos:
+                            earliest_pos = pos
+                            item_class = cls
 
                     item_start = earliest_pos
-                    if item_start == -1: break
+                    if item_start == -1:
+                        break
 
                     item_end = self._html_buffer.find("</li>", item_start)
                     if item_end == -1:
-                        break # No end tag yet
+                        break  # No end tag yet
 
                     item = self._html_buffer[item_start : item_end + 5]
                     self._html_buffer = self._html_buffer[item_end + 5 :]
 
                     # Determine target list based on class
-                    target_list_id = f"{item_class}-list" # Map class directly to list ID
+                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
 
                     # Append the complete item to the correct list
                     if target_list_id:
@@ -1473,10 +1650,10 @@ class MainWindow(QMainWindow):
                 else:
                     # For subsequent elements, we want to append only new content
                     # First, check if this is a new section or a list item
-                    if complete_element.startswith("<div class=\"topic-section\">"):
+                    if complete_element.startswith('<div class="topic-section">'):
                         # This is a new section, append it
                         self.output_panel.append_output(complete_element)
-                    elif complete_element.startswith("<li class=\"insight-item\">"):
+                    elif complete_element.startswith('<li class="insight-item">'):
                         # This is a list item, append it to the current list
                         self.output_panel.append_output(
                             f"""<div class="insight-block">
@@ -1485,7 +1662,7 @@ class MainWindow(QMainWindow):
             </ul>
         </div>"""
                         )
-    
+
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
@@ -1503,23 +1680,24 @@ class MainWindow(QMainWindow):
             self._element_stack = []
             self._is_first_update = True
             self._current_list_items = []
-            self._overall_sentiment_received = False # Reset sentiment flag
+            self._overall_sentiment_received = False  # Reset sentiment flag
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_last_30_button.setEnabled(False)
         self.controls_panel.transcribe_last_30_button.setText("Transcribing...")
-        
+
         # Get last 30 seconds of audio data
         audio_data = self.recorder.get_last_n_seconds(30)
-        
+
         if audio_data is None:
             self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
             self.controls_panel.transcribe_last_30_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
             return
-        
+
         # Start transcription in a separate thread
-        threading.Thread(target=self._transcribe_thread, 
-                        args=(audio_data, self.recorder.sample_rate)).start()
+        threading.Thread(
+            target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
+        ).start()

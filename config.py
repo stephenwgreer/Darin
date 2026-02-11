@@ -6,7 +6,9 @@ All configuration values are defined here as the single source of truth.
 
 import os
 from typing import Final
+
 from dotenv import load_dotenv
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,7 +35,7 @@ def validate_api_keys(
     *,
     anthropic_key: str | None = None,
     deepgram_key: str | None = None,
-    _use_module_defaults: bool = True
+    _use_module_defaults: bool = True,
 ) -> None:
     """
     Validate that required API keys are present and non-empty.
@@ -78,7 +80,9 @@ def validate_api_keys(
     missing_keys: list[str] = []
 
     # Check for missing, empty, or whitespace-only keys
-    if not api_key_anthropic or (isinstance(api_key_anthropic, str) and not api_key_anthropic.strip()):
+    if not api_key_anthropic or (
+        isinstance(api_key_anthropic, str) and not api_key_anthropic.strip()
+    ):
         missing_keys.append("ANTHROPIC_API_KEY")
     if not api_key_deepgram or (isinstance(api_key_deepgram, str) and not api_key_deepgram.strip()):
         missing_keys.append("DEEPGRAM_API_KEY")
@@ -89,4 +93,4 @@ def validate_api_keys(
             + "\n".join(f"  - {key}" for key in missing_keys)
             + "\n\nPlease set these in your .env file or environment variables."
         )
-        raise EnvironmentError(error_msg)
+        raise OSError(error_msg)
