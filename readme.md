@@ -49,11 +49,24 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your API keys:
-```env
-DEEPGRAM_API_KEY=your_deepgram_key
-ANTHROPIC_API_KEY=your_anthropic_key
+4. Set up your API keys:
+
+**Copy the example environment file:**
+```bash
+cp .env.example .env
 ```
+
+**Edit `.env` and add your actual API keys:**
+```env
+ANTHROPIC_API_KEY=sk-ant-api03-your_actual_anthropic_key_here
+DEEPGRAM_API_KEY=your_actual_deepgram_key_here
+```
+
+**Get your API keys from:**
+- Anthropic (Claude AI): https://console.anthropic.com/
+- Deepgram (Transcription): https://console.deepgram.com/
+
+**Important:** The application validates API keys at startup and will show a clear error message if keys are missing or invalid. Never commit your `.env` file to version control.
 
 ### Running the Application
 

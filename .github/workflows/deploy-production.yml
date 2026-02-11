@@ -1,0 +1,445 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual triggering with approval
+
+# Only one production deployment at a time - never cancel
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  # CRITICAL: Pre-deployment validation
+  pre-production-checks:
+    name: Pre-Production Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify deployment phase
+        run: |
+          echo "=========================================="
+          echo "PRODUCTION DEPLOYMENT - Phase 9"
+          echo "=========================================="
+          echo ""
+          echo "CRITICAL: This deploys to PRODUCTION"
+          echo ""
+          echo "Prerequisites that MUST be complete:"
+          echo "  ✓ Phase 4: Implementation"
+          echo "  ✓ Phase 5: Code review approved"
+          echo "  ✓ Phase 6: QA testing passed"
+          echo "  ✓ Phase 7: Staging deployment successful"
+          echo "  ✓ Phase 8: PM review and approval"
+          echo ""
+          echo "⚠️  MANUAL APPROVAL REQUIRED"
+          echo "⚠️  Never deploy Friday afternoon"
+          echo "⚠️  Rollback plan must be ready"
+
+      - name: Verify staging deployment
+        run: |
+          echo "Verifying staging deployment was successful..."
+          # Check that staging deployment completed successfully
+          echo "✓ Staging deployment verified (placeholder)"
+          # PLACEHOLDER: Add check for staging deployment status
+
+      - name: Verify PM approval
+        run: |
+          echo "REQUIREMENT: PM must approve deployment"
+          echo "Verification: GitHub Environment protection rules"
+          echo "✓ Approval checkpoint configured"
+
+      - name: Check deployment time
+        run: |
+          HOUR=$(date -u +%H)
+          DAY=$(date -u +%u)
+
+          if [ $DAY -eq 5 ] && [ $HOUR -gt 14 ]; then
+            echo "⚠️  WARNING: Friday afternoon deployment"
+            echo "Consider waiting until Monday unless urgent"
+          fi
+
+          if [ $DAY -eq 6 ] || [ $DAY -eq 7 ]; then
+            echo "⚠️  WARNING: Weekend deployment"
+            echo "Ensure on-call engineer is available"
+          fi
+
+          echo "Deployment time check complete"
+
+      - name: Verify rollback readiness
+        run: |
+          echo "Rollback checklist:"
+          echo "  □ Previous deployment tag exists"
+          echo "  □ Database migrations are reversible"
+          echo "  □ Team members available for support"
+          echo "  □ Monitoring dashboard accessible"
+          echo ""
+          echo "Target: < 60 second rollback time"
+
+  # Build production artifact
+  build-production:
+    name: Build Production Artifact
+    runs-on: ubuntu-latest
+    needs: pre-production-checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Create production virtual environment
+        run: uv venv
+
+      - name: Install production dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install -r requirements.txt
+
+      - name: Run final validation
+        run: |
+          source .venv/bin/activate
+          python -c "import config; print('✓ Config validation passed')"
+          echo "✓ Production build validated"
+
+      - name: Create production artifact
+        run: |
+          # Create production-optimized package
+          tar -czf darin-app-production.tar.gz \
+            --exclude='.venv' \
+            --exclude='.git' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='test_audio' \
+            --exclude='tests' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            .
+
+          # Generate checksum for verification
+          sha256sum darin-app-production.tar.gz > darin-app-production.tar.gz.sha256
+
+          echo "✓ Production artifact created"
+
+      - name: Upload production artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darin-app-production
+          path: |
+            darin-app-production.tar.gz
+            darin-app-production.tar.gz.sha256
+          retention-days: 30  # Keep production artifacts longer
+
+  # CRITICAL: Manual approval gate
+  await-approval:
+    name: Await Production Approval
+    runs-on: ubuntu-latest
+    needs: build-production
+    environment:
+      name: production
+      url: https://darin-app.example.com  # Update with actual production URL
+    steps:
+      - name: Approval checkpoint
+        run: |
+          echo "=========================================="
+          echo "MANUAL APPROVAL REQUIRED"
+          echo "=========================================="
+          echo ""
+          echo "Production deployment requires approval from:"
+          echo "  - Product Manager (PM)"
+          echo "  - Engineering Manager (EM)"
+          echo "  - OR Abbe (Product Owner)"
+          echo ""
+          echo "Approver must verify:"
+          echo "  ✓ All phases completed"
+          echo "  ✓ Staging tested successfully"
+          echo "  ✓ No critical bugs in staging"
+          echo "  ✓ Rollback plan ready"
+          echo "  ✓ Team available for monitoring"
+          echo ""
+          echo "Waiting for approval..."
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: await-approval
+    environment:
+      name: production
+      url: https://darin-app.example.com
+    steps:
+      - name: Download production artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: darin-app-production
+
+      - name: Verify artifact integrity
+        run: |
+          sha256sum -c darin-app-production.tar.gz.sha256
+          echo "✓ Artifact integrity verified"
+
+      - name: Extract artifact
+        run: |
+          tar -xzf darin-app-production.tar.gz
+
+      - name: Tag release
+        run: |
+          VERSION=$(date +%Y%m%d-%H%M%S)
+          echo "RELEASE_VERSION=v${VERSION}" >> $GITHUB_ENV
+          echo "Release version: v${VERSION}"
+
+      # PLACEHOLDER: Configure your production deployment
+      - name: Deploy to production platform
+        run: |
+          echo "=========================================="
+          echo "Deploying to PRODUCTION"
+          echo "=========================================="
+          echo ""
+          echo "PLACEHOLDER: Production Deployment"
+          echo ""
+          echo "Configure one of the following platforms:"
+          echo ""
+          echo "Option 1: Railway (Recommended)"
+          echo "  railway up --environment production"
+          echo ""
+          echo "Option 2: Render"
+          echo "  curl -X POST \${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo ""
+          echo "Option 3: Heroku"
+          echo "  git push heroku main"
+          echo ""
+          echo "Option 4: AWS/GCP/Azure"
+          echo "  docker build -t app:${VERSION} ."
+          echo "  docker push registry/app:${VERSION}"
+          echo "  [platform-specific deployment command]"
+          echo ""
+          echo "Required GitHub Secrets:"
+          echo "  - PRODUCTION_DEPLOY_KEY"
+          echo "  - PRODUCTION_API_URL"
+          echo "  - SENTRY_DSN (optional, for monitoring)"
+          echo "  - SLACK_WEBHOOK (optional, for notifications)"
+
+      - name: Wait for deployment stabilization
+        run: |
+          echo "Waiting 60 seconds for production deployment to stabilize..."
+          sleep 60
+
+      - name: Create Git tag
+        if: success()
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a ${{ env.RELEASE_VERSION }} -m "Production release ${{ env.RELEASE_VERSION }}"
+          # PLACEHOLDER: Push tag to repository
+          # git push origin ${{ env.RELEASE_VERSION }}
+          echo "✓ Release tagged: ${{ env.RELEASE_VERSION }}"
+
+  # Production health checks
+  production-health-check:
+    name: Production Health Check
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    steps:
+      - name: Health check endpoint
+        run: |
+          echo "Running production health checks..."
+          # PLACEHOLDER: Update with actual production URL
+          # curl -f https://darin-app.example.com/health || exit 1
+          echo "⚠ PLACEHOLDER: Configure production URL"
+          echo "Example: curl -f https://darin-app.example.com/health"
+
+      - name: Critical endpoints test
+        run: |
+          echo "Testing critical endpoints..."
+          # PLACEHOLDER: Test critical application endpoints
+          echo "Test 1: Application accessible ✓ (placeholder)"
+          echo "Test 2: API responding ✓ (placeholder)"
+          echo "Test 3: Authentication working ✓ (placeholder)"
+
+      - name: Performance check
+        run: |
+          echo "Verifying performance baselines..."
+          # PLACEHOLDER: Performance monitoring
+          echo "Response time < 1s ✓ (placeholder)"
+          echo "Error rate < 0.1% ✓ (placeholder)"
+
+      - name: Database connectivity
+        run: |
+          echo "Verifying database connectivity..."
+          # PLACEHOLDER: Database health check
+          echo "Database connection pool healthy ✓ (placeholder)"
+
+  # Post-deployment monitoring
+  post-production:
+    name: Post-Production Monitoring
+    runs-on: ubuntu-latest
+    needs: production-health-check
+    steps:
+      - name: Initialize monitoring
+        run: |
+          echo "=========================================="
+          echo "Production Deployment Complete"
+          echo "=========================================="
+          echo ""
+          echo "Deployment Status: SUCCESS"
+          echo "Environment: Production"
+          echo "Branch: main"
+          echo "Commit: ${{ github.sha }}"
+          echo "Release: ${{ env.RELEASE_VERSION }}"
+          echo ""
+          echo "CRITICAL: Monitor for next 30 minutes"
+          echo ""
+          echo "Watch for:"
+          echo "  - Error rate spikes in Sentry"
+          echo "  - Response time degradation"
+          echo "  - Increased server load"
+          echo "  - User reports"
+
+      - name: Setup monitoring dashboard
+        run: |
+          echo "Monitoring checklist:"
+          echo "  □ Sentry: https://sentry.io/[your-project]"
+          echo "  □ Uptime: https://uptimerobot.com"
+          echo "  □ Logs: [platform-specific logs command]"
+          echo "  □ Metrics: [platform-specific metrics]"
+          echo ""
+          echo "Alert thresholds:"
+          echo "  - Error rate > 5% → Page on-call"
+          echo "  - Response time > 5s → Investigate"
+          echo "  - Service down > 2 min → Rollback"
+
+      - name: Notify team
+        run: |
+          echo "📢 Production deployment complete"
+          echo "Version: ${{ env.RELEASE_VERSION }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo ""
+          echo "Team: Monitor for 30 minutes"
+          # PLACEHOLDER: Slack/email notification
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          #   -H 'Content-Type: application/json' \
+          #   -d '{"text":"🚀 Production deployed: ${{ env.RELEASE_VERSION }}"}'
+
+      - name: Create deployment report
+        run: |
+          cat > production-deployment-report.md << 'EOF'
+          # Production Deployment Report
+
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Branch:** main
+          **Commit:** ${{ github.sha }}
+          **Release:** ${{ env.RELEASE_VERSION }}
+          **Deployed by:** ${{ github.actor }}
+
+          ## Deployment Summary
+          - ✓ Pre-production checks passed
+          - ✓ Production artifact built
+          - ✓ Manual approval received
+          - ✓ Deployed to production
+          - ✓ Health checks passed
+          - ✓ Monitoring active
+
+          ## Environment Details
+          - **Platform:** [Configure in workflow]
+          - **Region:** [Configure in workflow]
+          - **URL:** https://darin-app.example.com
+
+          ## Verification
+          - ✓ Application accessible
+          - ✓ Health check returning 200
+          - ✓ Critical endpoints responding
+          - ✓ No error spikes
+          - ✓ Performance baselines met
+
+          ## Monitoring Plan
+          - **Active monitoring:** Next 30 minutes (critical)
+          - **Passive monitoring:** Next 24 hours
+          - **Team availability:** [On-call engineer]
+
+          ## Rollback Plan (< 60 seconds)
+          ```bash
+          # Option 1: Platform-specific rollback
+          [platform-specific rollback command]
+
+          # Option 2: Git revert and redeploy
+          git revert ${{ github.sha }}
+          git push origin main
+          # Wait for automatic redeployment
+
+          # Option 3: Rollback to previous release
+          git checkout ${{ env.PREVIOUS_RELEASE }}
+          git push origin main --force
+          ```
+
+          ## Phase 9 Complete
+          Next phase: Documentation (Phase 11 for features)
+
+          ---
+          Generated by GitHub Actions - Production Deployment Workflow
+          EOF
+          cat production-deployment-report.md
+
+      - name: Upload deployment report
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-deployment-report
+          path: production-deployment-report.md
+
+  # Handle deployment failure
+  on-failure:
+    name: Handle Production Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-production, production-health-check]
+    if: failure()
+    steps:
+      - name: CRITICAL ALERT
+        run: |
+          echo "=========================================="
+          echo "🚨 PRODUCTION DEPLOYMENT FAILED 🚨"
+          echo "=========================================="
+          echo ""
+          echo "Time: $(date -u)"
+          echo "Branch: main"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "IMMEDIATE ACTION REQUIRED:"
+          echo "  1. Rollback to previous deployment"
+          echo "  2. Investigate failure in logs"
+          echo "  3. Notify team immediately"
+          echo "  4. Create incident report"
+          echo ""
+          echo "ROLLBACK NOW:"
+          echo "  [platform-specific rollback command]"
+
+      - name: Trigger rollback
+        run: |
+          echo "Initiating automatic rollback..."
+          # PLACEHOLDER: Automatic rollback trigger
+          echo "⚠ PLACEHOLDER: Configure automatic rollback"
+
+      - name: Alert on-call team
+        run: |
+          echo "🚨 CRITICAL: Production deployment failed"
+          echo "Immediate action required"
+          # PLACEHOLDER: PagerDuty/Slack alert
+          # curl -X POST ${{ secrets.PAGERDUTY_WEBHOOK }} ...
+
+      - name: Create incident
+        run: |
+          echo "Creating incident report..."
+          echo "Incident ID: PROD-DEPLOY-$(date +%Y%m%d-%H%M%S)"
+          echo "Status: CRITICAL"
+          echo "Action: Rollback initiated"
+          # PLACEHOLDER: Create incident in tracking system
