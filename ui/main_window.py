@@ -156,6 +156,8 @@ class MainWindow(QMainWindow):
                 self.output_panel.append_to_dynamic_content(item)
         """
         # Append new text to buffer (O(1) amortized)
+        # Seek to end before writing to ensure append behavior
+        self._buffer_io.seek(0, 2)
         self._buffer_io.write(text)
         buffer_content = self._buffer_io.getvalue()
 
@@ -176,7 +178,8 @@ class MainWindow(QMainWindow):
         for start, end in reversed(removals):
             buffer_content = buffer_content[:start] + buffer_content[end:]
 
-        # Reset buffer with remaining content (efficient StringIO reset)
+        # Reset buffer with remaining content
+        # Create fresh StringIO to ensure clean state
         self._buffer_io = io.StringIO(buffer_content)
 
         return extracted_items
