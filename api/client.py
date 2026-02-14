@@ -156,7 +156,7 @@ class ApiClient:
         if not self.deepgram_api_key:
             raise ValueError("Deepgram API key not set")
 
-        if not audio_data:
+        if audio_data is None or len(audio_data) == 0:
             raise ValueError("Audio data cannot be empty")
 
         logger.info(f"Transcribing audio: {len(audio_data)} bytes at {sample_rate} Hz")
