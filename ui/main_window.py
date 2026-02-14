@@ -1126,18 +1126,10 @@ class MainWindow(QMainWindow):
         elif template_type == "fill-gaps":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="core-thinking"' in item:
@@ -1158,18 +1150,10 @@ class MainWindow(QMainWindow):
         elif template_type == "brainstorm":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="challenge-question"' in item:
@@ -1190,18 +1174,10 @@ class MainWindow(QMainWindow):
         elif template_type == "company-fit":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="key-topic"' in item:
@@ -1222,25 +1198,10 @@ class MainWindow(QMainWindow):
         elif template_type == "fact-check":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Fact check items can be multi-line, look for the start and end <li> tags
-                    item_start = self._html_buffer.find('<li class="fact-check-item">')
-                    if item_start == -1:
-                        item_start = self._html_buffer.find(
-                            "<li class='fact-check-item'>"
-                        )  # Check single quotes too
-                        if item_start == -1:
-                            break  # No start tag found
+                # Use shared extraction function with specific pattern (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li class=["\']fact-check-item["\']>.*?</li>')
 
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # End tag not found yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    items_to_append.append(item)
+                items_to_append.extend(extracted_items)
 
             # Update UI without lock
             for item in items_to_append:
@@ -1250,41 +1211,21 @@ class MainWindow(QMainWindow):
         elif template_type == "answer-question":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = ["answer-item", "rationale-item", "example-item"]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
-                        if pos_double != -1:
-                            start_positions[pos_double] = cls
-                        if pos_single != -1:
-                            start_positions[pos_single] = cls
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches any of the three class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\'](?:answer-item|rationale-item|example-item)["\']>.*?</li>'
+                )
 
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    # Find the earliest starting position
-                    item_start = min(start_positions.keys())
-                    item_class = start_positions[item_start]
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "answer-item":
+                    if 'class="answer-item"' in item or "class='answer-item'" in item:
                         target_list_id = "answer-list"
-                    elif item_class == "rationale-item":
+                    elif 'class="rationale-item"' in item or "class='rationale-item'" in item:
                         target_list_id = "rationale-list"
-                    elif item_class == "example-item":
+                    elif 'class="example-item"' in item or "class='example-item'" in item:
                         target_list_id = "examples-list"
 
                     # Append the complete item to the correct list
