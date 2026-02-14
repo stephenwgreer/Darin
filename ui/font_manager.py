@@ -11,7 +11,7 @@ class FontManager:
     ]
 
     @classmethod
-    def get_font(cls, size, weight=QFont.Weight.Normal):
+    def get_font(cls, size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:
         """Get the first available font from the preferences list"""
         for font_name in cls.FONT_PREFERENCES:
             font = QFont(font_name, size, weight)
@@ -28,7 +28,7 @@ class FontManager:
         return QFont("Arial", size, weight)
 
     @classmethod
-    def load_fonts(cls):
+    def load_fonts(cls) -> None:
         """Load custom fonts from the assets/fonts directory"""
         font_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "fonts")
         if not os.path.exists(font_dir):
