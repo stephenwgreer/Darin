@@ -12,7 +12,7 @@ class ContinuousRecorder:
         self.chunk_seconds = chunk_seconds
         self.chunk_frames = chunk_seconds * sample_rate
         self.buffer_minutes = buffer_minutes
-        self.buffer_chunks = buffer_minutes * 60 // chunk_seconds
+        self.buffer_chunks = int(buffer_minutes * 60 // chunk_seconds)
 
         # Create a circular buffer to store audio (deque for O(1) operations)
         self.audio_buffer = deque(maxlen=self.buffer_chunks)
@@ -106,12 +106,13 @@ class ContinuousRecorder:
                 return None
 
             # Calculate how many chunks we need
-            chunks_needed = seconds // self.chunk_seconds
+            chunks_needed = int(seconds // self.chunk_seconds)
             if chunks_needed == 0:
                 chunks_needed = 1  # At least get one chunk
 
-            # Get the last N chunks
-            chunks = self.audio_buffer[-chunks_needed:]
+            # Get the last N chunks (convert deque to list for slicing)
+            buffer_list = list(self.audio_buffer)
+            chunks = buffer_list[-chunks_needed:]
 
             # Combine chunks into one array
             if len(chunks) > 1:
