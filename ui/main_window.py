@@ -3,8 +3,11 @@ import io
 import json
 import re
 import threading
+import time
 from dataclasses import dataclass
+from pathlib import Path
 
+from loguru import logger
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
@@ -63,6 +66,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
 
+        # Configure logging
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+        logger.add(
+            log_dir / "darin_{time:YYYY-MM-DD}.log",
+            rotation="00:00",  # Rotate at midnight
+            retention="7 days",
+            level="INFO",
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        )
+        logger.info("Darin Audio Assistant initializing")
+
         # Load fonts
         FontManager.load_fonts()
 
@@ -73,6 +88,8 @@ class MainWindow(QMainWindow):
         # Initialize components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
+
+        logger.info("Components initialized", buffer_minutes=config.BUFFER_MINUTES)
 
         # Threading locks for shared state protection
         self._transcript_lock = threading.Lock()
@@ -345,19 +362,28 @@ class MainWindow(QMainWindow):
     def toggle_recording(self):
         if not self.recorder.is_recording:
             # Start recording
+            logger.info("Starting audio recording")
             if self.recorder.start_recording():
+                logger.info("Audio recording started successfully")
                 self.recording_started.emit()
                 # Update UI to show recording state
                 self.controls_panel.set_recording_active(True)
+            else:
+                logger.error("Failed to start audio recording")
         else:
             # Stop recording
+            logger.info("Stopping audio recording")
             if self.recorder.stop_recording():
+                logger.info("Audio recording stopped successfully")
                 self.recording_stopped.emit()
                 # Update UI to show stopped state
                 self.controls_panel.set_recording_active(False)
+            else:
+                logger.error("Failed to stop audio recording")
 
     def transcribe_buffer(self):
         """Transcribe the current audio buffer"""
+        logger.info("Transcribe buffer requested")
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_button.setEnabled(False)
         self.controls_panel.transcribe_button.setText("Transcribing...")
@@ -366,11 +392,13 @@ class MainWindow(QMainWindow):
         audio_data = self.recorder.save_buffer()
 
         if audio_data is None:
+            logger.warning("Transcription failed: No audio in buffer")
             self.controls_panel.transcribe_button.setText("Transcribe Buffer")
             self.controls_panel.transcribe_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
             return
 
+        logger.info("Starting transcription from buffer", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
@@ -378,18 +406,26 @@ class MainWindow(QMainWindow):
 
     def _transcribe_thread(self, audio_data, sample_rate):
         """Background thread for transcription - emits signal, doesn't write directly"""
+        start_time = time.perf_counter()
+        logger.info("Transcription thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
         try:
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcription complete", transcript_length=len(text), duration_ms=f"{duration_ms:.2f}")
             # Emit signal to update transcript in GUI thread (thread-safe)
             self.transcription_complete.emit(text)
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("Transcription failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
 
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
         """Auto transcribe and then run a specific prompt"""
+        logger.info("Prompt with auto-transcribe requested", title=title)
         # Atomic check-and-set for processing state
         with self._processing_lock:
             if self._is_processing:
+                logger.warning("Prompt request rejected: already processing")
                 return
             self._is_processing = True
 
@@ -427,6 +463,7 @@ class MainWindow(QMainWindow):
         if use_last_30s and not self.current_transcript:
             audio_data = self.recorder.get_last_n_seconds(30)
             if audio_data is None:
+                logger.warning("Processing failed: Not enough audio in buffer (last 30s)")
                 QMessageBox.warning(
                     self, "Processing Error", "Not enough audio (last 30s) in buffer to process"
                 )
@@ -440,6 +477,7 @@ class MainWindow(QMainWindow):
             audio_data = self.recorder.save_buffer()
             if audio_data is None:
                 # Check if getting the full buffer failed
+                logger.warning("Processing failed: No audio in buffer")
                 QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
                 self.controls_panel.set_prompt_buttons_enabled(True)
                 self.is_processing = False  # Property handles locking
@@ -454,10 +492,14 @@ class MainWindow(QMainWindow):
 
     def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
         """Background thread for transcription followed by processing with a specific prompt"""
+        start_time = time.perf_counter()
+        logger.info("Transcribe and process thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
         try:
             # First transcribe
             self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            transcribe_duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcription phase complete", transcript_length=len(text), duration_ms=f"{transcribe_duration_ms:.2f}")
 
             # Update UI with transcript via signal (thread-safe)
             # The slot handler will set self.current_transcript
@@ -465,7 +507,11 @@ class MainWindow(QMainWindow):
 
             # Then process with the specific prompt
             self._run_specific_prompt(text, prompt_template)
+            total_duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcribe and process complete", total_duration_ms=f"{total_duration_ms:.2f}")
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("Transcribe and process failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.processing_complete.emit({"error": str(e)})
         finally:
             # Emit signal to update processing state in GUI thread (thread-safe)
@@ -474,12 +520,15 @@ class MainWindow(QMainWindow):
 
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
+        start_time = time.perf_counter()
+        logger.info("Starting LLM processing", transcript_length=len(transcript), template_type=str(prompt_template)[:50])
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
 
             # Set up the static template based on the prompt type
             template_type = self._setup_static_template(prompt_template)
+            logger.info("Template set up", template_type=template_type)
 
             # Reset HTML streaming state for new dynamic content
             with self._html_state_lock:
@@ -498,10 +547,14 @@ class MainWindow(QMainWindow):
             result = self.api_client.process_with_anthropic(
                 transcript, prompt_template, stream=True, callback=handle_stream
             )
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("LLM processing complete", template_type=template_type, duration_ms=f"{duration_ms:.2f}", result_length=len(str(result)))
 
             # Final update with complete response
             self.processing_complete.emit({"result": result})
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("LLM processing failed", template_type=str(prompt_template)[:50], error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.processing_complete.emit({"error": str(e)})
 
     def _setup_static_template(self, prompt_template):
@@ -829,6 +882,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
+        logger.info("Transcription complete signal received", text_length=len(text))
         # Update transcript in GUI thread (thread-safe via property)
         self.current_transcript = text
 
@@ -846,10 +900,12 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
+        logger.info("Processing complete signal received", has_error="error" in result, has_result="result" in result)
         # Reset processing state in GUI thread (thread-safe)
         self.is_processing = False
 
         if "error" in result:
+            logger.error("Processing completed with error", error=result["error"])
             # Show error using template
             self.output_panel.set_error(result["error"])
         elif "result" in result:
@@ -1418,10 +1474,12 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
+        logger.debug("Progress update", message=message)
         self.output_panel.set_status(message)
 
     def clear_output(self):
         """Clear the output panel and reset HTML streaming state"""
+        logger.info("Clearing output panel and resetting state")
         self.output_panel.set_output("")
         self.output_panel.set_title("Output")  # Reset title to default
         # Clear transcript (property handles locking)
@@ -1436,6 +1494,7 @@ class MainWindow(QMainWindow):
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
+        logger.info("Transcribe last 30 seconds requested")
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_last_30_button.setEnabled(False)
         self.controls_panel.transcribe_last_30_button.setText("Transcribing...")
@@ -1444,11 +1503,13 @@ class MainWindow(QMainWindow):
         audio_data = self.recorder.get_last_n_seconds(30)
 
         if audio_data is None:
+            logger.warning("Transcription failed: Not enough audio in buffer (last 30s)")
             self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
             self.controls_panel.transcribe_last_30_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
             return
 
+        logger.info("Starting transcription from last 30s", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
