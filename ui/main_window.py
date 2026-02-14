@@ -881,9 +881,15 @@ class MainWindow(QMainWindow):
         self.controls_panel.set_prompt_buttons_enabled(True)
 
     def _process_html_chunk(self, chunk):
-        """Process a chunk of HTML text and return complete elements if found."""
+        """
+        Process a chunk of HTML text and return complete elements if found.
+
+        Fixes O(n²) bug by using io.StringIO for efficient buffer management.
+        """
         with self._html_state_lock:
-            self._html_buffer += chunk
+            # Use shared buffer_io for O(n) append (fixes BUG-2026-02-09-005)
+            self._buffer_io.write(chunk)
+            self._html_buffer = self._buffer_io.getvalue()
 
             # Look for complete HTML elements
             while True:
@@ -899,11 +905,12 @@ class MainWindow(QMainWindow):
                             if item_end != -1:
                                 # Extract the complete list item
                                 item = self._html_buffer[item_start : item_end + 5]
-                                # Remove the processed item from buffer
+                                # Remove the processed item from buffer - update both representations
                                 self._html_buffer = (
                                     self._html_buffer[:item_start]
                                     + self._html_buffer[item_end + 5 :]
                                 )
+                                self._buffer_io = io.StringIO(self._html_buffer)
                                 return item
                         break  # No new elements found
 
@@ -919,10 +926,11 @@ class MainWindow(QMainWindow):
                         if section_end != -1:
                             # Extract the complete section
                             section = self._html_buffer[start_idx : section_end + 6]
-                            # Remove the processed section from buffer
+                            # Remove the processed section from buffer - update both representations
                             self._html_buffer = (
                                 self._html_buffer[:start_idx] + self._html_buffer[section_end + 6 :]
                             )
+                            self._buffer_io = io.StringIO(self._html_buffer)
                             return section
                         else:
                             # Title found but section not complete
@@ -945,7 +953,9 @@ class MainWindow(QMainWindow):
                     if end_idx != -1:
                         # Section is complete, extract it all
                         complete_element = self._html_buffer[: end_idx + 6]
+                        # Update both representations
                         self._html_buffer = self._html_buffer[end_idx + 6 :]
+                        self._buffer_io = io.StringIO(self._html_buffer)
                         self._current_element = None
                         self._element_stack.pop()
                         return complete_element
