@@ -31,14 +31,14 @@ class ControlsPanel(QWidget):
     reframing_clicked = pyqtSignal()
     clear_output_clicked = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setup_ui()
-        self._recording_start_time = None
+        self._recording_start_time: datetime | None = None
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update_timestamp)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         layout = QVBoxLayout(self)
 
         # Recording controls section
@@ -205,7 +205,7 @@ class ControlsPanel(QWidget):
         # Add stretch at the bottom
         layout.addStretch()
 
-    def set_recording_active(self, active):
+    def set_recording_active(self, active: bool) -> None:
         """Update UI state when recording starts/stops"""
         self.record_button.setText("Stop Recording" if active else "Start Recording")
         self.transcribe_button.setEnabled(True)
@@ -220,7 +220,7 @@ class ControlsPanel(QWidget):
             self.timestamp_label.hide()
             self.timestamp_label.setText("00:00:00")
 
-    def _update_timestamp(self):
+    def _update_timestamp(self) -> None:
         """Update the timestamp display"""
         if self._recording_start_time:
             elapsed = datetime.now() - self._recording_start_time
@@ -229,7 +229,7 @@ class ControlsPanel(QWidget):
             seconds = elapsed.seconds % 60
             self.timestamp_label.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
 
-    def set_prompt_buttons_enabled(self, enabled):
+    def set_prompt_buttons_enabled(self, enabled: bool) -> None:
         """Enable or disable all prompt buttons"""
         # Enable/disable the menu buttons
         self.processing_menu_button.setEnabled(enabled)
