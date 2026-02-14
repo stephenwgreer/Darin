@@ -16,18 +16,18 @@ class OutputPanel(QWidget):
     # Signal for updating HTML content in the main thread
     html_update = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("OutputPanel")  # Set object name for CSS styling
         self.setup_ui()
-        self._current_output = ""
-        self._auto_scroll = True
-        self._user_scrolled = False
+        self._current_output: str = ""
+        self._auto_scroll: bool = True
+        self._user_scrolled: bool = False
 
         # Connect the HTML update signal
         self.html_update.connect(self._update_html_content)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
         layout.setSpacing(0)  # Remove spacing
@@ -138,42 +138,42 @@ class OutputPanel(QWidget):
 
         layout.addWidget(self.output_text)
 
-    def set_output(self, text):
+    def set_output(self, text: str) -> None:
         """Set the output text as HTML"""
         self._current_output = text
         self._user_scrolled = False  # Reset scroll state when setting new content
         self.html_update.emit(wrap_in_base_template(text))
 
-    def set_title(self, title):
+    def set_title(self, title: str) -> None:
         """Update the output panel title"""
         self.title_label.setText(title)
 
-    def append_output(self, text):
+    def append_output(self, text: str) -> None:
         """Append text to the current output as HTML"""
         self._current_output += text
         self.html_update.emit(wrap_in_base_template(self._current_output))
 
-    def set_error(self, message):
+    def set_error(self, message: str) -> None:
         """Display an error message"""
         self.set_output(create_error_message(message))
 
-    def set_status(self, message):
+    def set_status(self, message: str) -> None:
         """Display a status message"""
         self.set_output(create_status_message(message))
 
-    def set_overall_sentiment(self, sentiment_value):
+    def set_overall_sentiment(self, sentiment_value: str) -> None:
         """Update the overall sentiment value in the sentiment analysis template"""
         js = f'document.getElementById("overall-sentiment-value").innerText = "{sentiment_value}";'
         self.output_text.page().runJavaScript(js)
 
     @pyqtSlot(str)
-    def _update_html_content(self, html):
+    def _update_html_content(self, html: str) -> None:
         """Update the HTML content in the main thread"""
         # Update the content div
         js = f'document.getElementById("content").innerHTML = `{html}`;'
         self.output_text.page().runJavaScript(js)
 
-    def append_to_dynamic_content(self, content):
+    def append_to_dynamic_content(self, content: str) -> None:
         """Append content to the dynamic-content section of the template"""
         # Ensure content has proper class and style for formatting
         if content.startswith("<li"):
@@ -197,7 +197,7 @@ class OutputPanel(QWidget):
         """
         self.output_text.page().runJavaScript(js)
 
-    def append_to_list_by_id(self, list_id, item_html):
+    def append_to_list_by_id(self, list_id: str, item_html: str) -> None:
         """Append an HTML list item to a specific list using its ID, preserving internal HTML."""
         # Ensure it has a base class if none is provided, but preserve existing classes.
         if 'class="' not in item_html:
