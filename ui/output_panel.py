@@ -1,3 +1,5 @@
+import html
+
 from PyQt6.QtCore import pyqtSignal, pyqtSlot
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -163,7 +165,9 @@ class OutputPanel(QWidget):
 
     def set_overall_sentiment(self, sentiment_value: str) -> None:
         """Update the overall sentiment value in the sentiment analysis template"""
-        js = f'document.getElementById("overall-sentiment-value").innerText = "{sentiment_value}";'
+        # Escape for JavaScript string context to prevent injection
+        escaped_value = html.escape(sentiment_value).replace('"', '\\"').replace("'", "\\'")
+        js = f'document.getElementById("overall-sentiment-value").innerText = "{escaped_value}";'
         self.output_text.page().runJavaScript(js)
 
     @pyqtSlot(str)

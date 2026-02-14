@@ -1,3 +1,4 @@
+import html
 import io
 import json
 import re
@@ -831,8 +832,8 @@ class MainWindow(QMainWindow):
         # Update transcript in GUI thread (thread-safe via property)
         self.current_transcript = text
 
-        # Display transcript in the output panel
-        self.output_panel.set_output(f"<div class='transcript-text'>{text}</div>")
+        # Display transcript in the output panel (sanitize to prevent XSS)
+        self.output_panel.set_output(f"<div class='transcript-text'>{html.escape(text)}</div>")
 
         # Reset both transcribe buttons
         self.controls_panel.transcribe_button.setText("Transcribe Buffer")
@@ -876,8 +877,9 @@ class MainWindow(QMainWindow):
         else:
             # Format the result as a topic section
             content = json.dumps(result, indent=2)
+            # Escape JSON content to prevent XSS if result contains malicious strings
             self.output_panel.set_output(
-                create_topic_section("Processing Results", f"<pre>{content}</pre>")
+                create_topic_section("Processing Results", f"<pre>{html.escape(content)}</pre>")
             )
 
         # Re-enable prompt buttons
