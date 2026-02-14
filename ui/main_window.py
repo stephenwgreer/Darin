@@ -1022,18 +1022,10 @@ class MainWindow(QMainWindow):
 
             # Process subsequent lines as list items
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
                         item = item.replace(
@@ -1056,18 +1048,10 @@ class MainWindow(QMainWindow):
         elif template_type == "meeting-summary":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
@@ -1090,18 +1074,10 @@ class MainWindow(QMainWindow):
         elif template_type == "practitioner-insights":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
@@ -1124,18 +1100,10 @@ class MainWindow(QMainWindow):
         elif template_type == "topic-summary":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
