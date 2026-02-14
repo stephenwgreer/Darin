@@ -6,13 +6,13 @@ from ui.font_manager import FontManager
 
 
 class AnimatedLabel(QLabel):
-    def __init__(self, text, parent=None):
+    def __init__(self, text: str, parent: QLabel | None = None) -> None:
         super().__init__(parent)
-        self.full_text = text
-        self.current_text = ""
-        self.current_index = 0
-        self.cursor = "█"
-        self.show_cursor = True
+        self.full_text: str = text
+        self.current_text: str = ""
+        self.current_index: int = 0
+        self.cursor: str = "█"
+        self.show_cursor: bool = True
 
         # Set up the timer for typing animation
         self.typing_timer = QTimer(self)
@@ -27,7 +27,7 @@ class AnimatedLabel(QLabel):
         # Set the font
         self.setFont(FontManager.get_font(18, QFont.Weight.Bold))
 
-    def update_text(self):
+    def update_text(self) -> None:
         if self.current_index < len(self.full_text):
             self.current_text = self.full_text[: self.current_index + 1]
             self.current_index += 1
@@ -36,7 +36,7 @@ class AnimatedLabel(QLabel):
             self.typing_timer.stop()
             self.setText(self.full_text + (self.cursor if self.show_cursor else ""))
 
-    def toggle_cursor(self):
+    def toggle_cursor(self) -> None:
         self.show_cursor = not self.show_cursor
         if self.current_index < len(self.full_text):
             self.setText(self.current_text + (self.cursor if self.show_cursor else ""))
