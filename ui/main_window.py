@@ -1240,80 +1240,23 @@ class MainWindow(QMainWindow):
         elif template_type == "problem-solving":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "core-problem",
-                        "logic-tree-component",
-                        "evaluation-mece",
-                        "evaluation-assumption",
-                        "evaluation-logic",
-                        "evaluation-data",
-                        "challenge-weakness",
-                        "challenge-question",
-                        "challenge-reframe",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(
-                            f"<li class='{cls}'>"
-                        )  # Use \ to escape single quote in f-string
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 9 class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\'](?:core-problem|logic-tree-component|evaluation-(?:mece|assumption|logic|data)|challenge-(?:weakness|question|reframe))["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            # Store the earliest found position for this class
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    # Find the earliest starting position among all found classes
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:  # Should not happen if start_positions is not empty
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "core-problem":
+                    if 'class="core-problem"' in item or "class='core-problem'" in item:
                         target_list_id = "core-problem-list"
-                    elif item_class == "logic-tree-component":
+                    elif 'class="logic-tree-component"' in item or "class='logic-tree-component'" in item:
                         target_list_id = "logic-tree-list"
-                    elif item_class in [
-                        "evaluation-mece",
-                        "evaluation-assumption",
-                        "evaluation-logic",
-                        "evaluation-data",
-                    ]:
+                    elif any(cls in item for cls in ['evaluation-mece', 'evaluation-assumption', 'evaluation-logic', 'evaluation-data']):
                         target_list_id = "evaluation-list"
-                    elif item_class in [
-                        "challenge-weakness",
-                        "challenge-question",
-                        "challenge-reframe",
-                    ]:
+                    elif any(cls in item for cls in ['challenge-weakness', 'challenge-question', 'challenge-reframe']):
                         target_list_id = "challenge-list"
 
                     # Append the complete item to the correct list
@@ -1328,60 +1271,19 @@ class MainWindow(QMainWindow):
         elif template_type == "scqa":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "scqa-situation",
-                        "scqa-complication",
-                        "scqa-question",
-                        "scqa-answer",
-                        "scqa-assessment",
-                        "scqa-roadmap",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 6 SCQA class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']scqa-(?:situation|complication|question|answer|assessment|roadmap)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class
-                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    # Find the class attribute value
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
@@ -1392,77 +1294,29 @@ class MainWindow(QMainWindow):
         elif template_type == "hypothesis-driven":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "hypothesis-problem",
-                        "hypothesis-hypothesis",
-                        "hypothesis-evidence-support",
-                        "hypothesis-evidence-contradict",
-                        "hypothesis-evidence-missing",
-                        "hypothesis-priority",
-                        "hypothesis-testing",
-                        "hypothesis-decision",
-                        "hypothesis-assessment",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 9 hypothesis class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']hypothesis-(?:problem|hypothesis|evidence-(?:support|contradict|missing)|priority|testing|decision|assessment)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "hypothesis-problem":
+                    if 'hypothesis-problem' in item:
                         target_list_id = "hypothesis-problem-list"
-                    elif item_class == "hypothesis-hypothesis":
+                    elif 'hypothesis-hypothesis' in item:
                         target_list_id = "hypothesis-hypothesis-list"
-                    elif item_class in [
-                        "hypothesis-evidence-support",
-                        "hypothesis-evidence-contradict",
-                        "hypothesis-evidence-missing",
-                    ]:
+                    elif any(cls in item for cls in ['hypothesis-evidence-support', 'hypothesis-evidence-contradict', 'hypothesis-evidence-missing']):
                         target_list_id = "hypothesis-evidence-list"
-                    elif item_class == "hypothesis-priority":
+                    elif 'hypothesis-priority' in item:
                         target_list_id = "hypothesis-priority-list"
-                    elif item_class == "hypothesis-testing":
+                    elif 'hypothesis-testing' in item:
                         target_list_id = "hypothesis-testing-list"
-                    elif item_class == "hypothesis-decision":
+                    elif 'hypothesis-decision' in item:
                         target_list_id = "hypothesis-decision-list"
-                    elif item_class == "hypothesis-assessment":
+                    elif 'hypothesis-assessment' in item:
                         target_list_id = "hypothesis-assessment-list"
 
                     # Append the complete item to the correct list
@@ -1477,61 +1331,18 @@ class MainWindow(QMainWindow):
         elif template_type == "first-principles":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "fp-conventional",
-                        "fp-fundamental",
-                        "fp-assumption",
-                        "fp-rebuild",
-                        "fp-insight",
-                        "fp-implementation",
-                        "fp-metacognitive",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 7 first-principles class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']fp-(?:conventional|fundamental|assumption|rebuild|insight|implementation|metacognitive)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class (map class directly to list ID)
-                    target_list_id = f"{item_class}-list"
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
@@ -1542,53 +1353,18 @@ class MainWindow(QMainWindow):
         elif template_type == "reframing":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = ["reframing-statement", "reframing-point"]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches both reframing class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class
-                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
