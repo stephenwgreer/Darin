@@ -1,5 +1,8 @@
+import io
 import json
+import re
 import threading
+from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QIcon, QPixmap
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
 
         # HTML streaming state
         self._html_buffer = ""  # Buffer for accumulating HTML chunks
+        self._buffer_io = io.StringIO()  # Efficient buffer for O(n) string building
         self._current_element = None  # Track the current HTML element being built
         self._element_stack = []  # Stack to track nested HTML elements
         self._is_first_update = True  # Track if this is the first stream update
@@ -120,6 +124,62 @@ class MainWindow(QMainWindow):
         """Thread-safe setter for processing state"""
         with self._processing_lock:
             self._is_processing = value
+
+    def _extract_html_items(self, text: str, pattern: str = r'<li[^>]*>(.*?)</li>') -> list[str]:
+        """
+        Shared HTML stream parsing logic for all template handlers.
+
+        Efficiently extracts HTML list items from streaming text using io.StringIO
+        for O(n) performance instead of O(n²) string concatenation.
+
+        Thread Safety:
+        - All buffer operations happen under self._html_state_lock (caller responsibility)
+        - This method assumes the lock is already held by the caller
+
+        Performance (fixes BUG-2026-02-09-005):
+        - Uses io.StringIO for O(1) amortized append operations
+        - Collects all extractions before buffer modification
+        - Single buffer reconstruction instead of repeated string slicing
+
+        Args:
+            text: New chunk of HTML text from streaming response
+            pattern: Regex pattern for extraction (default: any <li> tag)
+
+        Returns:
+            List of extracted HTML items as strings
+
+        Example:
+            # In a handler (with lock already held):
+            items = self._extract_html_items(text, r'<li class="question">(.*?)</li>')
+            for item in items:
+                # Format and append to UI
+                self.output_panel.append_to_dynamic_content(item)
+        """
+        # Append new text to buffer (O(1) amortized)
+        self._buffer_io.write(text)
+        buffer_content = self._buffer_io.getvalue()
+
+        # Extract all matches
+        extracted_items = []
+        matches = list(re.finditer(pattern, buffer_content, re.DOTALL))
+
+        if not matches:
+            return extracted_items
+
+        # Collect all extracted items and their positions
+        removals = []
+        for match in matches:
+            extracted_items.append(match.group(0))  # Full match including tags
+            removals.append((match.start(), match.end()))
+
+        # Remove extracted portions in reverse order (preserves positions)
+        for start, end in reversed(removals):
+            buffer_content = buffer_content[:start] + buffer_content[end:]
+
+        # Reset buffer with remaining content (efficient StringIO reset)
+        self._buffer_io = io.StringIO(buffer_content)
+
+        return extracted_items
 
     def setup_ui(self):
         ########################
@@ -909,18 +969,10 @@ class MainWindow(QMainWindow):
         if template_type == "follow-up-questions":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
                         item = item.replace(
