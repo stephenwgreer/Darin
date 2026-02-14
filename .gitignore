@@ -128,6 +128,7 @@ celerybeat.pid
 .env.staging
 .env.production
 .venv
+.venv-wsl/
 env/
 venv/
 ENV/

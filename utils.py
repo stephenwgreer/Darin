@@ -10,7 +10,22 @@ import config
 
 
 def get_anthropic_client(api_key: str) -> anthropic.Anthropic:
-    """Create and return an Anthropic client with the provided API key."""
+    """
+    Create and return an Anthropic client with the provided API key.
+
+    Args:
+        api_key: The Anthropic API key for authentication.
+
+    Returns:
+        An initialized Anthropic client instance.
+
+    Raises:
+        ValueError: If api_key is None or empty.
+        AuthenticationError: If the API key is invalid.
+    """
+    if not api_key or not api_key.strip():
+        raise ValueError("API key cannot be empty or whitespace-only")
+
     return anthropic.Anthropic(api_key=api_key)
 
 
@@ -27,10 +42,12 @@ def process_transcript(
         **kwargs: Additional template variables
 
     Returns:
-        Processed text or error dict
+        Processed text from Claude API, or error dict if processing fails
 
     Raises:
-        ValueError: If inputs are invalid
+        ValueError: If inputs are invalid or template formatting fails
+        APIError: If Anthropic API returns an error
+        APIConnectionError: If network connection fails
     """
     try:
         prompt = prompt_template.format(transcript=transcript, **kwargs)
@@ -46,12 +63,28 @@ def process_transcript(
             messages=[{"role": "user", "content": prompt}],
         )
 
-        result = message.content[0].text
-        logger.info(f"Received response: {len(result)} characters")
-        return result
+        # Extract text from first content block (type: TextBlock)
+        first_block = message.content[0]
+        if hasattr(first_block, "text"):
+            result = first_block.text
+            logger.info(f"Received response: {len(result)} characters")
+            return result
+        else:
+            error_msg = f"Unexpected content block type: {type(first_block)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
+    except KeyError as e:
+        logger.error(f"Template formatting failed - missing placeholder: {e}")
+        return {"error": f"Invalid template placeholder: {e}"}
+    except anthropic.APIError as e:
+        logger.error(f"Anthropic API error: {e}")
+        return {"error": f"API error: {e}"}
+    except anthropic.APIConnectionError as e:
+        logger.error(f"API connection failed: {e}")
+        return {"error": f"Connection error: {e}"}
     except Exception as e:
-        logger.error(f"Error processing transcript: {e}")
-        return {"error": str(e)}
+        logger.error(f"Unexpected error processing transcript: {e}")
+        return {"error": f"Unexpected error: {e}"}
 
 
 def get_practitioner_insights(client: anthropic.Anthropic, transcript: str) -> dict[str, Any]:
@@ -63,8 +96,14 @@ def get_practitioner_insights(client: anthropic.Anthropic, transcript: str) -> d
         transcript: Transcript text to analyze
 
     Returns:
-        Dict with topics and insights for each topic
+        Dict with topics and insights for each topic, or error dict if processing fails
+
+    Raises:
+        ValueError: If transcript is empty or invalid
     """
+    if not transcript or not transcript.strip():
+        raise ValueError("Transcript cannot be empty")
+
     try:
         logger.info("Extracting practitioner insights from transcript")
 
@@ -92,9 +131,12 @@ def get_practitioner_insights(client: anthropic.Anthropic, transcript: str) -> d
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse topics JSON: {e}")
         return {"error": f"Invalid JSON in topics response: {e}"}
+    except (anthropic.APIError, anthropic.APIConnectionError) as e:
+        logger.error(f"API error while extracting insights: {e}")
+        return {"error": f"API error: {e}"}
     except Exception as e:
-        logger.error(f"Error processing practitioner insights: {e}")
-        return {"error": f"Error processing practitioner insights: {e}"}
+        logger.error(f"Unexpected error processing practitioner insights: {e}")
+        return {"error": f"Unexpected error: {e}"}
 
 
 # Predefined prompt templates
@@ -121,7 +163,7 @@ Text to analyze:
 """
 
 FOLLOW_UP_QUESTIONS_PROMPT = """
-Based on the following transcript, generate 5 insightful follow-up questions that would 
+Based on the following transcript, generate 5 insightful follow-up questions that would
 help clarify or expand on the topics discussed.
 Return in JSON format with a "questions" array.
 

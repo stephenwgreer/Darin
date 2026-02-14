@@ -1,3 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "audio*", "processing*", "prompts*", "ui*"]
+exclude = ["tests*", "test_audio*", "assets*"]
+
 [project]
 name = "darin-audio-assistant"
 version = "0.1.0"
@@ -30,6 +39,7 @@ dependencies = [
 dev = [
     "ipykernel",
     "jupyter",
+    "types-requests>=2.32.4.20260107",
 ]
 
 [tool.pytest.ini_options]

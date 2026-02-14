@@ -41,7 +41,7 @@ class SimpleListStreamHandler:
             # Add bold class if needed, ensuring not to duplicate if already present
             if self.bold_items:
                 # Use regex to avoid issues if attributes exist
-                if not re.search(r"<li[^>]*class=['"].*bold-list-item.*['"]", item):
+                if not re.search(r'''<li[^>]*class=['"].*bold-list-item.*['"]''', item):
                     if 'class=' in item:
                         item_to_append = item.replace('class="', 'class="bold-list-item ', 1)
                         item_to_append = item_to_append.replace("class='", "class='bold-list-item ", 1)

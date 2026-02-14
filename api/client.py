@@ -115,21 +115,28 @@ class ApiClient:
                     max_tokens=config.MAX_TOKENS,
                     messages=[{"role": "user", "content": content}],
                 )
-                response_text = response.content[0].text
-                logger.info(f"Received complete response: {len(response_text)} chars")
-                return response_text
+                # Extract text from first content block
+                first_block = response.content[0]
+                if hasattr(first_block, "text"):
+                    response_text = first_block.text
+                    logger.info(f"Received complete response: {len(response_text)} chars")
+                    return response_text
+                else:
+                    error_msg = f"Unexpected content block type: {type(first_block)}"
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
 
         except RateLimitError as e:
             logger.error(f"Rate limit exceeded: {e}")
-            raise RateLimitError("Claude API rate limit exceeded. Please try again later.") from e
+            raise RuntimeError("Claude API rate limit exceeded. Please try again later.") from e
         except APIConnectionError as e:
             logger.error(f"API connection failed: {e}")
-            raise APIConnectionError(
+            raise RuntimeError(
                 "Failed to connect to Claude API. Check your network connection."
             ) from e
         except APIError as e:
             logger.error(f"Claude API error: {e}")
-            raise APIError(f"Error processing with Claude: {e}") from e
+            raise RuntimeError(f"Error processing with Claude: {e}") from e
 
     def transcribe_with_deepgram(self, audio_data: bytes, sample_rate: int) -> str:
         """
