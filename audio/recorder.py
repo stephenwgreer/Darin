@@ -5,6 +5,7 @@ from typing import Optional
 import numpy as np
 import soundcard as sc
 import soundfile as sf
+from loguru import logger
 
 
 class ContinuousRecorder:
@@ -79,7 +80,7 @@ class ContinuousRecorder:
 
         with self.buffer_lock:
             if not self.audio_buffer:
-                print("No audio to save!")
+                logger.warning("No audio to save!")
                 return None
 
             # Combine all chunks in the buffer
@@ -91,7 +92,7 @@ class ContinuousRecorder:
             # Save to file
             output_file = filename or "BSGPT_REC.wav"
             sf.write(file=output_file, data=mono_data, samplerate=self.sample_rate)
-            print(f"Audio saved to {output_file}")
+            logger.info(f"Audio saved to {output_file}")
 
             return mono_data
 
