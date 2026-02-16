@@ -157,6 +157,12 @@ class MainWindow(QMainWindow):
         Performance (fixes BUG-2026-02-09-005):
         - Uses io.StringIO for O(1) amortized append operations
         - Collects all extractions before buffer modification
+
+        Security Note:
+        - Extracts HTML from LLM responses without sanitization
+        - Accepted risk: LLM output from Anthropic API is trusted source
+        - Mitigation: Use only official Anthropic API, validate API keys at startup
+        - Future enhancement: Add HTML sanitization library (e.g., bleach) for defense-in-depth
         - Single buffer reconstruction instead of repeated string slicing
 
         Args:
