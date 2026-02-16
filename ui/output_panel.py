@@ -132,6 +132,36 @@ class OutputPanel(QWidget):
                 #dynamic-content li::marker {
                     color: #007ACC;
                 }
+
+                .error-message {
+                    margin: 20px;
+                    padding: 16px;
+                    background-color: #5A1D1D;
+                    border-left: 4px solid #F48771;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                }
+
+                .error-text {
+                    color: #F48771;
+                    font-size: 14px;
+                    margin: 0;
+                }
+
+                .status-message {
+                    margin: 20px;
+                    padding: 16px;
+                    background-color: #2D2D2D;
+                    border-left: 4px solid #007ACC;
+                    border-radius: 8px;
+                    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+                }
+
+                .status-text {
+                    color: #CCCCCC;
+                    font-size: 14px;
+                    margin: 0;
+                }
             </style>
         </head>
         <body>
