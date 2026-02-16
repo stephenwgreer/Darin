@@ -236,8 +236,8 @@ jobs:
 
       - name: Security audit with bun
         if: hashFiles('package.json') != ''
-        continue-on-error: true
         run: bun audit || echo "Warning: Security vulnerabilities detected"
+        continue-on-error: true
 
   # Integration with enterprise workflows
   workflow-validation:
