@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "audio*", "processing*", "prompts*", "ui*"]
+exclude = ["tests*", "test_audio*", "assets*"]
+
+[project]
+name = "darin-audio-assistant"
+version = "0.1.0"
+description = "Desktop audio assistant for real-time meeting transcription and AI-powered analysis"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26.0,<2.0",
+    "sounddevice==0.4.6",
+    "soundcard==0.4.3",
+    "comtypes==1.4.10",
+    "soundfile==0.13.1",
+    "keyboard",
+    "deepgram-sdk==2.12.0",
+    "python-dotenv==1.0.0",
+    "anthropic>=0.40.0",
+    "PyQt6==6.6.1",
+    "PyQt6-Qt6>=6.6.0,<6.7",
+    "PyQt6-WebEngine==6.6.0",
+    "PyQt6-WebEngine-Qt6>=6.6.0,<6.7",
+    "markdown2==2.5.3",
+    "scipy",
+    "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.15.0",
+    "mypy>=1.19.1",
+    "loguru>=0.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+    "jupyter",
+    "types-requests>=2.32.4.20260107",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_unimported = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+check_untyped_defs = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "sounddevice.*",
+    "soundcard.*",
+    "comtypes.*",
+    "keyboard.*",
+    "deepgram.*",
+    "markdown2.*",
+    "scipy.*",
+    "PyQt6.*",
+]
+ignore_missing_imports = true

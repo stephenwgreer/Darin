@@ -1,0 +1,60 @@
+# Coverage.py configuration for pytest-cov
+# Used by CI pipeline to measure test coverage
+
+[run]
+# Measure coverage for these directories
+source = .
+
+# Omit these files/directories from coverage
+omit =
+    */.venv/*
+    */venv/*
+    */__pycache__/*
+    */tests/*
+    */test_*.py
+    */.pytest_cache/*
+    */setup.py
+    */conftest.py
+
+# Enable branch coverage (more detailed)
+branch = True
+
+# Record which tests covered which lines
+parallel = True
+
+[report]
+# Exclude these lines from coverage reporting
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code
+    def __repr__
+    def __str__
+
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @(abc\.)?abstractmethod
+
+# Show missing lines in coverage report
+show_missing = True
+
+# Precision of coverage percentage
+precision = 2
+
+# Sort coverage report by name
+sort = Name
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

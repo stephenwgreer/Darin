@@ -35,25 +35,43 @@ git clone https://github.com/yourusername/audio_test.git
 cd audio_test
 ```
 
-2. Create and activate a virtual environment:
+2. Install uv (modern Python package manager):
 ```bash
-python -m venv venv
-# On Windows
-.\venv\Scripts\activate
 # On macOS/Linux
-source venv/bin/activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-3. Install dependencies:
+3. Install dependencies with uv:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-4. Create a `.env` file with your API keys:
-```env
-DEEPGRAM_API_KEY=your_deepgram_key
-ANTHROPIC_API_KEY=your_anthropic_key
+This will automatically:
+- Create a virtual environment in `.venv/`
+- Install all dependencies from `pyproject.toml`
+- Set up development tools (pytest, ruff, mypy)
+
+4. Set up your API keys:
+
+**Copy the example environment file:**
+```bash
+cp .env.example .env
 ```
+
+**Edit `.env` and add your actual API keys:**
+```env
+ANTHROPIC_API_KEY=sk-ant-api03-your_actual_anthropic_key_here
+DEEPGRAM_API_KEY=your_actual_deepgram_key_here
+```
+
+**Get your API keys from:**
+- Anthropic (Claude AI): https://console.anthropic.com/
+- Deepgram (Transcription): https://console.deepgram.com/
+
+**Important:** The application validates API keys at startup and will show a clear error message if keys are missing or invalid. Never commit your `.env` file to version control.
 
 ### Running the Application
 
