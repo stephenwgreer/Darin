@@ -95,8 +95,8 @@ def test_validate_api_keys_mixed_whitespace() -> None:
 def test_validate_api_keys_with_actual_format() -> None:
     """Test validation with realistic API key formats"""
     validate_api_keys(
-        anthropic_key="sk-ant-api03-XdW48x0VkJXBKEJx8Jz1QjxnbBALwKrq2orWZYdslrD",
-        deepgram_key="dbdd8c40b2221419b4e53a21767b32e61b358efe",
+        anthropic_key="sk-ant-api03-FAKE-KEY-FOR-TESTING-ONLY-DO-NOT-USE",
+        deepgram_key="fake-deepgram-key-32-chars-mock-test",
         _use_module_defaults=False,
     )
 
