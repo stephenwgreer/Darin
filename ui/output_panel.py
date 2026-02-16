@@ -63,64 +63,74 @@ class OutputPanel(QWidget):
             <style>
                 body {
                     background-color: #252526;
-                    color: #FFFFFF;
-                    font-family: system-ui, -apple-system, sans-serif;
+                    color: #CCCCCC;
+                    font-family: "Space Grotesk", Arial, sans-serif;
                     padding: 0px;
                     margin: 0;
                     font-size: 14px;
                 }
-                
+
                 .output-container {
                     margin: 0;
                     padding: 0;
                 }
-                
+
                 .topic-section {
                     margin-bottom: 24px;
                     padding: 20px;
                     background-color: #2D2D2D;
                     border-radius: 8px;
-                    border-left: 4px solid #3498db;
+                    border-left: 4px solid #007ACC;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
                 }
-                
+
                 .topic-title {
                     font-size: 28px;
                     color: #FFFFFF;
                     margin: 0 0 20px 0;
                     padding-bottom: 12px;
-                    border-bottom: 1px solid #3498db;
+                    border-bottom: 1px solid #007ACC;
                     font-weight: 500;
                 }
-                
+
                 .insight-block {
                     margin: 15px 0;
                     padding: 16px;
                     background-color: #2D2D2D;
                     border-radius: 8px;
+                    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
                 }
-                
+
                 .insight-list {
                     margin: 0;
                     padding-left: 25px;
                     list-style-type: disc !important;
                 }
-                
+
                 .insight-item {
                     margin: 16px 0;
                     line-height: 1.6;
-                    color: #D4D4D4;
+                    color: #CCCCCC;
                     display: list-item !important;
                     list-style-type: disc !important;
                     font-size: 14px;
                 }
-                
+
+                .insight-item::marker {
+                    color: #007ACC;
+                }
+
                 #dynamic-content {
                     list-style-type: disc !important;
                 }
-                
+
                 #dynamic-content li {
                     display: list-item !important;
                     list-style-type: disc !important;
+                }
+
+                #dynamic-content li::marker {
+                    color: #007ACC;
                 }
             </style>
         </head>

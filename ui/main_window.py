@@ -50,6 +50,7 @@ from ui.animated_label import AnimatedLabel
 from ui.controls_panel import ControlsPanel
 from ui.font_manager import FontManager
 from ui.output_panel import OutputPanel
+from ui import theme
 
 
 class MainWindow(QMainWindow):
@@ -65,6 +66,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
+
+        # Load and apply stylesheet
+        self._load_stylesheet()
 
         # Configure logging
         log_dir = Path("logs")
@@ -117,6 +121,33 @@ class MainWindow(QMainWindow):
 
         # Connect signals to slots
         self.setup_connections()
+
+    def _load_stylesheet(self):
+        """Load and apply the QSS stylesheet for dark theme"""
+        stylesheet_path = Path(__file__).parent / "styles.qss"
+
+        if stylesheet_path.exists():
+            logger.info("Loading stylesheet from styles.qss")
+            with open(stylesheet_path, 'r') as f:
+                self.setStyleSheet(f.read())
+        else:
+            # Fallback to inline QSS if file missing
+            logger.warning("styles.qss not found, using inline fallback")
+            self.setStyleSheet(f"""
+                QMainWindow {{ background-color: {theme.COLORS.bg_primary}; }}
+                QWidget {{ background-color: {theme.COLORS.bg_secondary}; color: {theme.COLORS.text_primary}; }}
+                QPushButton {{
+                    background-color: {theme.COLORS.bg_tertiary};
+                    color: {theme.COLORS.text_primary};
+                    border: 1px solid {theme.COLORS.border_primary};
+                    border-radius: 4px;
+                    padding: 8px 16px;
+                }}
+                QPushButton:hover {{
+                    background-color: {theme.COLORS.bg_hover};
+                    border-color: {theme.COLORS.accent_primary};
+                }}
+            """)
 
     # Thread-safe properties for shared state
     @property
@@ -248,7 +279,7 @@ class MainWindow(QMainWindow):
         # Content section with splitter
         ########################
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.content_splitter.setHandleWidth(1)  # Make splitter handle less visible
+        self.content_splitter.setHandleWidth(2)  # Splitter handle visibility
 
         # Left panel (controls)
         self.controls_panel = ControlsPanel()
@@ -273,8 +304,8 @@ class MainWindow(QMainWindow):
 
         # Footer
         footer = QLabel("© 2025 Darin Listening Assistant")
+        footer.setObjectName("footerLabel")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("color: #666666; font-size: 11px;")
         main_layout.addWidget(footer)
 
     def setup_connections(self):
