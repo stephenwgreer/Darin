@@ -1,6 +1,7 @@
 import threading
 import traceback
 
+from loguru import logger
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 # Assuming api.client and audio.recorder are structured appropriately
@@ -126,7 +127,7 @@ class AnalysisController(QObject):
     def start_transcription(self, use_last_30s: bool = False):
         """Initiates transcription of the buffer (or last 30s)."""
         if self.is_processing:
-            print("AnalysisController: Already processing.")
+            logger.warning("AnalysisController: Already processing.")
             return
 
         audio_data = None

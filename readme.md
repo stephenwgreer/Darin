@@ -35,19 +35,24 @@ git clone https://github.com/yourusername/audio_test.git
 cd audio_test
 ```
 
-2. Create and activate a virtual environment:
+2. Install uv (modern Python package manager):
 ```bash
-python -m venv venv
-# On Windows
-.\venv\Scripts\activate
 # On macOS/Linux
-source venv/bin/activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-3. Install dependencies:
+3. Install dependencies with uv:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
+
+This will automatically:
+- Create a virtual environment in `.venv/`
+- Install all dependencies from `pyproject.toml`
+- Set up development tools (pytest, ruff, mypy)
 
 4. Set up your API keys:
 

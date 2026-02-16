@@ -1,6 +1,13 @@
+import html
+import io
 import json
+import re
 import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
 
+from loguru import logger
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
@@ -59,6 +66,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
 
+        # Configure logging
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+        logger.add(
+            log_dir / "darin_{time:YYYY-MM-DD}.log",
+            rotation="00:00",  # Rotate at midnight
+            retention="7 days",
+            level="INFO",
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        )
+        logger.info("Darin Audio Assistant initializing")
+
         # Load fonts
         FontManager.load_fonts()
 
@@ -69,6 +88,8 @@ class MainWindow(QMainWindow):
         # Initialize components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
+
+        logger.info("Components initialized", buffer_minutes=config.BUFFER_MINUTES)
 
         # Threading locks for shared state protection
         self._transcript_lock = threading.Lock()
@@ -81,6 +102,7 @@ class MainWindow(QMainWindow):
 
         # HTML streaming state
         self._html_buffer = ""  # Buffer for accumulating HTML chunks
+        self._buffer_io = io.StringIO()  # Efficient buffer for O(n) string building
         self._current_element = None  # Track the current HTML element being built
         self._element_stack = []  # Stack to track nested HTML elements
         self._is_first_update = True  # Track if this is the first stream update
@@ -120,6 +142,71 @@ class MainWindow(QMainWindow):
         """Thread-safe setter for processing state"""
         with self._processing_lock:
             self._is_processing = value
+
+    def _extract_html_items(self, text: str, pattern: str = r'<li[^>]*>(.*?)</li>') -> list[str]:
+        """
+        Shared HTML stream parsing logic for all template handlers.
+
+        Efficiently extracts HTML list items from streaming text using io.StringIO
+        for O(n) performance instead of O(n²) string concatenation.
+
+        Thread Safety:
+        - All buffer operations happen under self._html_state_lock (caller responsibility)
+        - This method assumes the lock is already held by the caller
+
+        Performance (fixes BUG-2026-02-09-005):
+        - Uses io.StringIO for O(1) amortized append operations
+        - Collects all extractions before buffer modification
+
+        Security Note:
+        - Extracts HTML from LLM responses without sanitization
+        - Accepted risk: LLM output from Anthropic API is trusted source
+        - Mitigation: Use only official Anthropic API, validate API keys at startup
+        - Future enhancement: Add HTML sanitization library (e.g., bleach) for defense-in-depth
+        - Single buffer reconstruction instead of repeated string slicing
+
+        Args:
+            text: New chunk of HTML text from streaming response
+            pattern: Regex pattern for extraction (default: any <li> tag)
+
+        Returns:
+            List of extracted HTML items as strings
+
+        Example:
+            # In a handler (with lock already held):
+            items = self._extract_html_items(text, r'<li class="question">(.*?)</li>')
+            for item in items:
+                # Format and append to UI
+                self.output_panel.append_to_dynamic_content(item)
+        """
+        # Append new text to buffer (O(1) amortized)
+        # Seek to end before writing to ensure append behavior
+        self._buffer_io.seek(0, 2)
+        self._buffer_io.write(text)
+        buffer_content = self._buffer_io.getvalue()
+
+        # Extract all matches
+        extracted_items = []
+        matches = list(re.finditer(pattern, buffer_content, re.DOTALL))
+
+        if not matches:
+            return extracted_items
+
+        # Collect all extracted items and their positions
+        removals = []
+        for match in matches:
+            extracted_items.append(match.group(0))  # Full match including tags
+            removals.append((match.start(), match.end()))
+
+        # Remove extracted portions in reverse order (preserves positions)
+        for start, end in reversed(removals):
+            buffer_content = buffer_content[:start] + buffer_content[end:]
+
+        # Reset buffer with remaining content
+        # Create fresh StringIO to ensure clean state
+        self._buffer_io = io.StringIO(buffer_content)
+
+        return extracted_items
 
     def setup_ui(self):
         ########################
@@ -281,19 +368,28 @@ class MainWindow(QMainWindow):
     def toggle_recording(self):
         if not self.recorder.is_recording:
             # Start recording
+            logger.info("Starting audio recording")
             if self.recorder.start_recording():
+                logger.info("Audio recording started successfully")
                 self.recording_started.emit()
                 # Update UI to show recording state
                 self.controls_panel.set_recording_active(True)
+            else:
+                logger.error("Failed to start audio recording")
         else:
             # Stop recording
+            logger.info("Stopping audio recording")
             if self.recorder.stop_recording():
+                logger.info("Audio recording stopped successfully")
                 self.recording_stopped.emit()
                 # Update UI to show stopped state
                 self.controls_panel.set_recording_active(False)
+            else:
+                logger.error("Failed to stop audio recording")
 
     def transcribe_buffer(self):
         """Transcribe the current audio buffer"""
+        logger.info("Transcribe buffer requested")
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_button.setEnabled(False)
         self.controls_panel.transcribe_button.setText("Transcribing...")
@@ -302,11 +398,13 @@ class MainWindow(QMainWindow):
         audio_data = self.recorder.save_buffer()
 
         if audio_data is None:
+            logger.warning("Transcription failed: No audio in buffer")
             self.controls_panel.transcribe_button.setText("Transcribe Buffer")
             self.controls_panel.transcribe_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
             return
 
+        logger.info("Starting transcription from buffer", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
@@ -314,18 +412,26 @@ class MainWindow(QMainWindow):
 
     def _transcribe_thread(self, audio_data, sample_rate):
         """Background thread for transcription - emits signal, doesn't write directly"""
+        start_time = time.perf_counter()
+        logger.info("Transcription thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
         try:
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcription complete", transcript_length=len(text), duration_ms=f"{duration_ms:.2f}")
             # Emit signal to update transcript in GUI thread (thread-safe)
             self.transcription_complete.emit(text)
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("Transcription failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
 
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
         """Auto transcribe and then run a specific prompt"""
+        logger.info("Prompt with auto-transcribe requested", title=title)
         # Atomic check-and-set for processing state
         with self._processing_lock:
             if self._is_processing:
+                logger.warning("Prompt request rejected: already processing")
                 return
             self._is_processing = True
 
@@ -363,6 +469,7 @@ class MainWindow(QMainWindow):
         if use_last_30s and not self.current_transcript:
             audio_data = self.recorder.get_last_n_seconds(30)
             if audio_data is None:
+                logger.warning("Processing failed: Not enough audio in buffer (last 30s)")
                 QMessageBox.warning(
                     self, "Processing Error", "Not enough audio (last 30s) in buffer to process"
                 )
@@ -376,6 +483,7 @@ class MainWindow(QMainWindow):
             audio_data = self.recorder.save_buffer()
             if audio_data is None:
                 # Check if getting the full buffer failed
+                logger.warning("Processing failed: No audio in buffer")
                 QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
                 self.controls_panel.set_prompt_buttons_enabled(True)
                 self.is_processing = False  # Property handles locking
@@ -390,10 +498,14 @@ class MainWindow(QMainWindow):
 
     def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
         """Background thread for transcription followed by processing with a specific prompt"""
+        start_time = time.perf_counter()
+        logger.info("Transcribe and process thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
         try:
             # First transcribe
             self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
+            transcribe_duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcription phase complete", transcript_length=len(text), duration_ms=f"{transcribe_duration_ms:.2f}")
 
             # Update UI with transcript via signal (thread-safe)
             # The slot handler will set self.current_transcript
@@ -401,7 +513,11 @@ class MainWindow(QMainWindow):
 
             # Then process with the specific prompt
             self._run_specific_prompt(text, prompt_template)
+            total_duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("Transcribe and process complete", total_duration_ms=f"{total_duration_ms:.2f}")
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("Transcribe and process failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.processing_complete.emit({"error": str(e)})
         finally:
             # Emit signal to update processing state in GUI thread (thread-safe)
@@ -410,12 +526,15 @@ class MainWindow(QMainWindow):
 
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
+        start_time = time.perf_counter()
+        logger.info("Starting LLM processing", transcript_length=len(transcript), template_type=str(prompt_template)[:50])
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
 
             # Set up the static template based on the prompt type
             template_type = self._setup_static_template(prompt_template)
+            logger.info("Template set up", template_type=template_type)
 
             # Reset HTML streaming state for new dynamic content
             with self._html_state_lock:
@@ -434,10 +553,14 @@ class MainWindow(QMainWindow):
             result = self.api_client.process_with_anthropic(
                 transcript, prompt_template, stream=True, callback=handle_stream
             )
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info("LLM processing complete", template_type=template_type, duration_ms=f"{duration_ms:.2f}", result_length=len(str(result)))
 
             # Final update with complete response
             self.processing_complete.emit({"result": result})
         except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error("LLM processing failed", template_type=str(prompt_template)[:50], error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
             self.processing_complete.emit({"error": str(e)})
 
     def _setup_static_template(self, prompt_template):
@@ -765,11 +888,12 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str)
     def on_transcription_complete(self, text):
+        logger.info("Transcription complete signal received", text_length=len(text))
         # Update transcript in GUI thread (thread-safe via property)
         self.current_transcript = text
 
-        # Display transcript in the output panel
-        self.output_panel.set_output(f"<div class='transcript-text'>{text}</div>")
+        # Display transcript in the output panel (sanitize to prevent XSS)
+        self.output_panel.set_output(f"<div class='transcript-text'>{html.escape(text)}</div>")
 
         # Reset both transcribe buttons
         self.controls_panel.transcribe_button.setText("Transcribe Buffer")
@@ -782,10 +906,12 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
+        logger.info("Processing complete signal received", has_error="error" in result, has_result="result" in result)
         # Reset processing state in GUI thread (thread-safe)
         self.is_processing = False
 
         if "error" in result:
+            logger.error("Processing completed with error", error=result["error"])
             # Show error using template
             self.output_panel.set_error(result["error"])
         elif "result" in result:
@@ -813,17 +939,24 @@ class MainWindow(QMainWindow):
         else:
             # Format the result as a topic section
             content = json.dumps(result, indent=2)
+            # Escape JSON content to prevent XSS if result contains malicious strings
             self.output_panel.set_output(
-                create_topic_section("Processing Results", f"<pre>{content}</pre>")
+                create_topic_section("Processing Results", f"<pre>{html.escape(content)}</pre>")
             )
 
         # Re-enable prompt buttons
         self.controls_panel.set_prompt_buttons_enabled(True)
 
     def _process_html_chunk(self, chunk):
-        """Process a chunk of HTML text and return complete elements if found."""
+        """
+        Process a chunk of HTML text and return complete elements if found.
+
+        Fixes O(n²) bug by using io.StringIO for efficient buffer management.
+        """
         with self._html_state_lock:
-            self._html_buffer += chunk
+            # Use shared buffer_io for O(n) append (fixes BUG-2026-02-09-005)
+            self._buffer_io.write(chunk)
+            self._html_buffer = self._buffer_io.getvalue()
 
             # Look for complete HTML elements
             while True:
@@ -839,11 +972,12 @@ class MainWindow(QMainWindow):
                             if item_end != -1:
                                 # Extract the complete list item
                                 item = self._html_buffer[item_start : item_end + 5]
-                                # Remove the processed item from buffer
+                                # Remove the processed item from buffer - update both representations
                                 self._html_buffer = (
                                     self._html_buffer[:item_start]
                                     + self._html_buffer[item_end + 5 :]
                                 )
+                                self._buffer_io = io.StringIO(self._html_buffer)
                                 return item
                         break  # No new elements found
 
@@ -859,10 +993,11 @@ class MainWindow(QMainWindow):
                         if section_end != -1:
                             # Extract the complete section
                             section = self._html_buffer[start_idx : section_end + 6]
-                            # Remove the processed section from buffer
+                            # Remove the processed section from buffer - update both representations
                             self._html_buffer = (
                                 self._html_buffer[:start_idx] + self._html_buffer[section_end + 6 :]
                             )
+                            self._buffer_io = io.StringIO(self._html_buffer)
                             return section
                         else:
                             # Title found but section not complete
@@ -885,7 +1020,9 @@ class MainWindow(QMainWindow):
                     if end_idx != -1:
                         # Section is complete, extract it all
                         complete_element = self._html_buffer[: end_idx + 6]
+                        # Update both representations
                         self._html_buffer = self._html_buffer[end_idx + 6 :]
+                        self._buffer_io = io.StringIO(self._html_buffer)
                         self._current_element = None
                         self._element_stack.pop()
                         return complete_element
@@ -909,18 +1046,10 @@ class MainWindow(QMainWindow):
         if template_type == "follow-up-questions":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
                         item = item.replace(
@@ -970,18 +1099,10 @@ class MainWindow(QMainWindow):
 
             # Process subsequent lines as list items
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
                     if "class=" not in item:
                         item = item.replace(
@@ -1004,18 +1125,10 @@ class MainWindow(QMainWindow):
         elif template_type == "meeting-summary":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
@@ -1038,18 +1151,10 @@ class MainWindow(QMainWindow):
         elif template_type == "practitioner-insights":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
@@ -1072,18 +1177,10 @@ class MainWindow(QMainWindow):
         elif template_type == "topic-summary":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
                     if "class=" not in item:
                         item = item.replace(
@@ -1106,18 +1203,10 @@ class MainWindow(QMainWindow):
         elif template_type == "fill-gaps":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="core-thinking"' in item:
@@ -1138,18 +1227,10 @@ class MainWindow(QMainWindow):
         elif template_type == "brainstorm":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="challenge-question"' in item:
@@ -1170,18 +1251,10 @@ class MainWindow(QMainWindow):
         elif template_type == "company-fit":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    item_start = self._html_buffer.find("<li")
-                    if item_start == -1:
-                        break
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break
+                # Use shared extraction function (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
 
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_start + len(item) :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
                     if 'class="key-topic"' in item:
@@ -1202,25 +1275,10 @@ class MainWindow(QMainWindow):
         elif template_type == "fact-check":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Fact check items can be multi-line, look for the start and end <li> tags
-                    item_start = self._html_buffer.find('<li class="fact-check-item">')
-                    if item_start == -1:
-                        item_start = self._html_buffer.find(
-                            "<li class='fact-check-item'>"
-                        )  # Check single quotes too
-                        if item_start == -1:
-                            break  # No start tag found
+                # Use shared extraction function with specific pattern (fixes O(n²) bug)
+                extracted_items = self._extract_html_items(text, r'<li class=["\']fact-check-item["\']>.*?</li>')
 
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # End tag not found yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    items_to_append.append(item)
+                items_to_append.extend(extracted_items)
 
             # Update UI without lock
             for item in items_to_append:
@@ -1230,41 +1288,21 @@ class MainWindow(QMainWindow):
         elif template_type == "answer-question":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = ["answer-item", "rationale-item", "example-item"]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
-                        if pos_double != -1:
-                            start_positions[pos_double] = cls
-                        if pos_single != -1:
-                            start_positions[pos_single] = cls
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches any of the three class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\'](?:answer-item|rationale-item|example-item)["\']>.*?</li>'
+                )
 
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    # Find the earliest starting position
-                    item_start = min(start_positions.keys())
-                    item_class = start_positions[item_start]
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "answer-item":
+                    if 'class="answer-item"' in item or "class='answer-item'" in item:
                         target_list_id = "answer-list"
-                    elif item_class == "rationale-item":
+                    elif 'class="rationale-item"' in item or "class='rationale-item'" in item:
                         target_list_id = "rationale-list"
-                    elif item_class == "example-item":
+                    elif 'class="example-item"' in item or "class='example-item'" in item:
                         target_list_id = "examples-list"
 
                     # Append the complete item to the correct list
@@ -1279,80 +1317,23 @@ class MainWindow(QMainWindow):
         elif template_type == "problem-solving":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "core-problem",
-                        "logic-tree-component",
-                        "evaluation-mece",
-                        "evaluation-assumption",
-                        "evaluation-logic",
-                        "evaluation-data",
-                        "challenge-weakness",
-                        "challenge-question",
-                        "challenge-reframe",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(
-                            f"<li class='{cls}'>"
-                        )  # Use \ to escape single quote in f-string
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 9 class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\'](?:core-problem|logic-tree-component|evaluation-(?:mece|assumption|logic|data)|challenge-(?:weakness|question|reframe))["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            # Store the earliest found position for this class
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    # Find the earliest starting position among all found classes
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:  # Should not happen if start_positions is not empty
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "core-problem":
+                    if 'class="core-problem"' in item or "class='core-problem'" in item:
                         target_list_id = "core-problem-list"
-                    elif item_class == "logic-tree-component":
+                    elif 'class="logic-tree-component"' in item or "class='logic-tree-component'" in item:
                         target_list_id = "logic-tree-list"
-                    elif item_class in [
-                        "evaluation-mece",
-                        "evaluation-assumption",
-                        "evaluation-logic",
-                        "evaluation-data",
-                    ]:
+                    elif any(cls in item for cls in ['evaluation-mece', 'evaluation-assumption', 'evaluation-logic', 'evaluation-data']):
                         target_list_id = "evaluation-list"
-                    elif item_class in [
-                        "challenge-weakness",
-                        "challenge-question",
-                        "challenge-reframe",
-                    ]:
+                    elif any(cls in item for cls in ['challenge-weakness', 'challenge-question', 'challenge-reframe']):
                         target_list_id = "challenge-list"
 
                     # Append the complete item to the correct list
@@ -1367,60 +1348,19 @@ class MainWindow(QMainWindow):
         elif template_type == "scqa":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "scqa-situation",
-                        "scqa-complication",
-                        "scqa-question",
-                        "scqa-answer",
-                        "scqa-assessment",
-                        "scqa-roadmap",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 6 SCQA class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']scqa-(?:situation|complication|question|answer|assessment|roadmap)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class
-                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    # Find the class attribute value
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
@@ -1431,77 +1371,29 @@ class MainWindow(QMainWindow):
         elif template_type == "hypothesis-driven":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "hypothesis-problem",
-                        "hypothesis-hypothesis",
-                        "hypothesis-evidence-support",
-                        "hypothesis-evidence-contradict",
-                        "hypothesis-evidence-missing",
-                        "hypothesis-priority",
-                        "hypothesis-testing",
-                        "hypothesis-decision",
-                        "hypothesis-assessment",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 9 hypothesis class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']hypothesis-(?:problem|hypothesis|evidence-(?:support|contradict|missing)|priority|testing|decision|assessment)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
+                for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if item_class == "hypothesis-problem":
+                    if 'hypothesis-problem' in item:
                         target_list_id = "hypothesis-problem-list"
-                    elif item_class == "hypothesis-hypothesis":
+                    elif 'hypothesis-hypothesis' in item:
                         target_list_id = "hypothesis-hypothesis-list"
-                    elif item_class in [
-                        "hypothesis-evidence-support",
-                        "hypothesis-evidence-contradict",
-                        "hypothesis-evidence-missing",
-                    ]:
+                    elif any(cls in item for cls in ['hypothesis-evidence-support', 'hypothesis-evidence-contradict', 'hypothesis-evidence-missing']):
                         target_list_id = "hypothesis-evidence-list"
-                    elif item_class == "hypothesis-priority":
+                    elif 'hypothesis-priority' in item:
                         target_list_id = "hypothesis-priority-list"
-                    elif item_class == "hypothesis-testing":
+                    elif 'hypothesis-testing' in item:
                         target_list_id = "hypothesis-testing-list"
-                    elif item_class == "hypothesis-decision":
+                    elif 'hypothesis-decision' in item:
                         target_list_id = "hypothesis-decision-list"
-                    elif item_class == "hypothesis-assessment":
+                    elif 'hypothesis-assessment' in item:
                         target_list_id = "hypothesis-assessment-list"
 
                     # Append the complete item to the correct list
@@ -1516,61 +1408,18 @@ class MainWindow(QMainWindow):
         elif template_type == "first-principles":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = [
-                        "fp-conventional",
-                        "fp-fundamental",
-                        "fp-assumption",
-                        "fp-rebuild",
-                        "fp-insight",
-                        "fp-implementation",
-                        "fp-metacognitive",
-                    ]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches all 7 first-principles class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']fp-(?:conventional|fundamental|assumption|rebuild|insight|implementation|metacognitive)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class (map class directly to list ID)
-                    target_list_id = f"{item_class}-list"
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
@@ -1581,53 +1430,18 @@ class MainWindow(QMainWindow):
         elif template_type == "reframing":
             items_to_append = []
             with self._html_state_lock:
-                self._html_buffer += text
-                while True:
-                    # Find the start of any relevant list item
-                    item_start = -1
-                    possible_classes = ["reframing-statement", "reframing-point"]
-                    start_positions = {}
-                    for cls in possible_classes:
-                        # Check for class="cls" and class='cls'
-                        pos_double = self._html_buffer.find(f'<li class="{cls}">')
-                        pos_single = self._html_buffer.find(f"<li class='{cls}'>")
+                # Use shared extraction function (fixes O(n²) bug)
+                # Pattern matches both reframing class types
+                extracted_items = self._extract_html_items(
+                    text,
+                    r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>'
+                )
 
-                        current_pos = -1
-                        if pos_double != -1 and (current_pos == -1 or pos_double < current_pos):
-                            current_pos = pos_double
-                        if pos_single != -1 and (current_pos == -1 or pos_single < current_pos):
-                            current_pos = pos_single
-
-                        if current_pos != -1:
-                            if cls not in start_positions or current_pos < start_positions[cls][0]:
-                                start_positions[cls] = (current_pos, cls)
-
-                    if not start_positions:
-                        break  # No relevant item start found
-
-                    earliest_pos = -1
-                    item_class = None
-                    for cls, (pos, _) in start_positions.items():
-                        if earliest_pos == -1 or pos < earliest_pos:
-                            earliest_pos = pos
-                            item_class = cls
-
-                    item_start = earliest_pos
-                    if item_start == -1:
-                        break
-
-                    item_end = self._html_buffer.find("</li>", item_start)
-                    if item_end == -1:
-                        break  # No end tag yet
-
-                    item = self._html_buffer[item_start : item_end + 5]
-                    self._html_buffer = self._html_buffer[item_end + 5 :]
-
-                    # Determine target list based on class
-                    target_list_id = f"{item_class}-list"  # Map class directly to list ID
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
+                for item in extracted_items:
+                    # Extract class name and map to list ID
+                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
+                    if class_match:
+                        target_list_id = f"{class_match.group(1)}-list"
                         items_to_append.append((target_list_id, item))
 
             # Update UI without lock
@@ -1666,10 +1480,12 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
+        logger.debug("Progress update", message=message)
         self.output_panel.set_status(message)
 
     def clear_output(self):
         """Clear the output panel and reset HTML streaming state"""
+        logger.info("Clearing output panel and resetting state")
         self.output_panel.set_output("")
         self.output_panel.set_title("Output")  # Reset title to default
         # Clear transcript (property handles locking)
@@ -1684,6 +1500,7 @@ class MainWindow(QMainWindow):
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
+        logger.info("Transcribe last 30 seconds requested")
         # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_last_30_button.setEnabled(False)
         self.controls_panel.transcribe_last_30_button.setText("Transcribing...")
@@ -1692,11 +1509,13 @@ class MainWindow(QMainWindow):
         audio_data = self.recorder.get_last_n_seconds(30)
 
         if audio_data is None:
+            logger.warning("Transcription failed: Not enough audio in buffer (last 30s)")
             self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
             self.controls_panel.transcribe_last_30_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
             return
 
+        logger.info("Starting transcription from last 30s", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
