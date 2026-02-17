@@ -64,6 +64,11 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        # Make window frameless for custom title bar
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
         self.setWindowTitle("Darin Audio Assistant")
         self.setGeometry(100, 100, 1000, 700)
 
@@ -121,6 +126,66 @@ class MainWindow(QMainWindow):
 
         # Connect signals to slots
         self.setup_connections()
+
+    def _create_title_bar(self):
+        """Create custom title bar for frameless window"""
+        title_bar = QWidget()
+        title_bar.setObjectName("titleBar")
+        title_bar.setFixedHeight(40)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(10, 0, 10, 0)
+        title_bar_layout.setSpacing(10)
+
+        # App title
+        title_label = QLabel("Darin Audio Assistant")
+        title_label.setObjectName("titleBarLabel")
+        title_bar_layout.addWidget(title_label)
+
+        title_bar_layout.addStretch()
+
+        # Window control buttons
+        minimize_btn = QPushButton("−")
+        minimize_btn.setObjectName("minimizeButton")
+        minimize_btn.setFixedSize(40, 30)
+        minimize_btn.clicked.connect(self.showMinimized)
+        title_bar_layout.addWidget(minimize_btn)
+
+        maximize_btn = QPushButton("□")
+        maximize_btn.setObjectName("maximizeButton")
+        maximize_btn.setFixedSize(40, 30)
+        maximize_btn.clicked.connect(self._toggle_maximize)
+        title_bar_layout.addWidget(maximize_btn)
+
+        close_btn = QPushButton("×")
+        close_btn.setObjectName("closeButton")
+        close_btn.setFixedSize(40, 30)
+        close_btn.clicked.connect(self.close)
+        title_bar_layout.addWidget(close_btn)
+
+        # Make title bar draggable
+        title_bar.mousePressEvent = self._title_bar_mouse_press
+        title_bar.mouseMoveEvent = self._title_bar_mouse_move
+
+        return title_bar
+
+    def _toggle_maximize(self):
+        """Toggle between maximized and normal window state"""
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def _title_bar_mouse_press(self, event):
+        """Handle mouse press on title bar for dragging"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+
+    def _title_bar_mouse_move(self, event):
+        """Handle mouse move on title bar for dragging"""
+        if hasattr(self, '_drag_pos'):
+            delta = event.globalPosition().toPoint() - self._drag_pos
+            self.move(self.pos() + delta)
+            self._drag_pos = event.globalPosition().toPoint()
 
     def _load_stylesheet(self):
         """Load and apply the QSS stylesheet for dark theme"""
@@ -244,10 +309,23 @@ class MainWindow(QMainWindow):
         # Main widget and layout
         ########################
         main_widget = QWidget()
+        main_widget.setObjectName("mainWidget")
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)  # Add some padding around the edges
-        main_layout.setSpacing(10)  # Space between elements
+        main_layout.setContentsMargins(0, 0, 0, 0)  # No margins for frameless window
+        main_layout.setSpacing(0)  # No spacing at top level
+
+        ########################
+        # Custom Title Bar
+        ########################
+        self.title_bar = self._create_title_bar()
+        main_layout.addWidget(self.title_bar)
+
+        # Content container with padding
+        content_container = QWidget()
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(10, 10, 10, 10)
+        content_layout.setSpacing(10)
 
         ########################
         # Header section
@@ -273,7 +351,7 @@ class MainWindow(QMainWindow):
 
         header_layout.addStretch()
 
-        main_layout.addWidget(header_widget)
+        content_layout.addWidget(header_widget)
 
         ########################
         # Content section with splitter
@@ -300,13 +378,16 @@ class MainWindow(QMainWindow):
         total_width = self.width()
         self.content_splitter.setSizes([int(total_width * 0.25), int(total_width * 0.75)])
 
-        main_layout.addWidget(self.content_splitter)
+        content_layout.addWidget(self.content_splitter)
 
         # Footer
         footer = QLabel("© 2025 Darin Listening Assistant")
         footer.setObjectName("footerLabel")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(footer)
+        content_layout.addWidget(footer)
+
+        # Add content container to main layout
+        main_layout.addWidget(content_container)
 
     def setup_connections(self):
         # Connect control panel signals
