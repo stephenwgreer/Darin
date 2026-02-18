@@ -10,10 +10,11 @@ Tests HTML streaming parsing and buffer management:
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from PyQt6.QtWidgets import QApplication
+
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -33,10 +34,12 @@ def qapp():
 @pytest.fixture
 def main_window(qapp):
     """Create MainWindow instance for testing."""
-    with patch('ui.main_window.ContinuousRecorder'), \
-         patch('ui.main_window.ApiClient'), \
-         patch('ui.main_window.FontManager'), \
-         patch('ui.main_window.logger'):
+    with (
+        patch("ui.main_window.ContinuousRecorder"),
+        patch("ui.main_window.ApiClient"),
+        patch("ui.main_window.FontManager"),
+        patch("ui.main_window.logger"),
+    ):
         window = MainWindow()
         yield window
         window.close()
@@ -89,7 +92,7 @@ class TestExtractHtmlItemsPartialChunks:
         """Test handling of partial HTML tags across multiple chunks."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             # Chunk 1: Incomplete tag
             items1 = main_window._extract_html_items("<li>Item ")
@@ -104,7 +107,7 @@ class TestExtractHtmlItemsPartialChunks:
         """Test building multiple items across chunks."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             # Chunk 1: First complete item + partial second
             items1 = main_window._extract_html_items("<li>Item 1</li><li>Item ")
@@ -125,9 +128,9 @@ class TestExtractHtmlItemsPartialChunks:
         """Test items with nested tags."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
-            html = '<li><strong>Bold</strong> text</li>'
+            html = "<li><strong>Bold</strong> text</li>"
             items = main_window._extract_html_items(html)
             assert len(items) == 1
             assert "<strong>Bold</strong>" in items[0]
@@ -136,7 +139,7 @@ class TestExtractHtmlItemsPartialChunks:
         """Test items spanning multiple lines."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             html = """<li>
 Line 1
@@ -155,27 +158,28 @@ class TestExtractHtmlItemsCustomPatterns:
         """Test extraction with class-specific pattern."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             html = '<li class="fact-check-item">Fact</li><li class="other">Other</li>'
-            items = main_window._extract_html_items(html, r'<li class=["\']fact-check-item["\']>.*?</li>')
+            items = main_window._extract_html_items(
+                html, r'<li class=["\']fact-check-item["\']>.*?</li>'
+            )
             assert len(items) == 1
-            assert 'fact-check-item' in items[0]
+            assert "fact-check-item" in items[0]
 
     def test_custom_pattern_multiple_classes(self, main_window):
         """Test extraction with pattern matching multiple classes."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             html = '<li class="answer-item">Answer</li><li class="rationale-item">Rationale</li><li class="other">Other</li>'
             items = main_window._extract_html_items(
-                html,
-                r'<li class=["\'](?:answer-item|rationale-item)["\']>.*?</li>'
+                html, r'<li class=["\'](?:answer-item|rationale-item)["\']>.*?</li>'
             )
             assert len(items) == 2
-            assert any('answer-item' in item for item in items)
-            assert any('rationale-item' in item for item in items)
+            assert any("answer-item" in item for item in items)
+            assert any("rationale-item" in item for item in items)
 
 
 class TestBufferManagement:
@@ -185,7 +189,7 @@ class TestBufferManagement:
         """Test buffer is cleared after extracting items."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             # Add complete item
             items = main_window._extract_html_items("<li>Item 1</li>")
@@ -199,7 +203,7 @@ class TestBufferManagement:
         """Test buffer retains partial content after extracting complete items."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             # Add complete item + partial
             items = main_window._extract_html_items("<li>Complete</li><li>Partial")
@@ -213,7 +217,7 @@ class TestBufferManagement:
         """Test buffer handles large HTML items efficiently."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             # Create large item (1000 chars)
             large_content = "x" * 1000
@@ -227,7 +231,7 @@ class TestBufferManagement:
         """Test _buffer_io gets fresh instance after extraction to ensure clean state."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
             original_buffer = main_window._buffer_io
 
             # Extract items
@@ -256,7 +260,7 @@ class TestStreamingHandlersEdgeCases:
         """Test handling of malformed HTML without closing tag."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             items = main_window._extract_html_items("<li>Unclosed item")
             assert len(items) == 0
@@ -268,7 +272,7 @@ class TestStreamingHandlersEdgeCases:
         """Test handling of HTML entities in content."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             html = "<li>Item with &amp; entity</li>"
             items = main_window._extract_html_items(html)
@@ -279,7 +283,7 @@ class TestStreamingHandlersEdgeCases:
         """Test handling of special characters in content."""
         with main_window._html_state_lock:
             # Clear buffer first
-            main_window._buffer_io = __import__('io').StringIO()
+            main_window._buffer_io = __import__("io").StringIO()
 
             html = "<li>Item with < > \" ' characters</li>"
             items = main_window._extract_html_items(html)

@@ -2,6 +2,7 @@
 
 import html
 
+
 BASE_HTML_TEMPLATE = """
 <div class="output-container">
     {content}

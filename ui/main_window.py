@@ -4,7 +4,6 @@ import json
 import re
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
@@ -47,11 +46,11 @@ from prompts.templates import (
     SENTIMENT_ANALYSIS_PROMPT,
     TOPIC_SUMMARY_PROMPT,
 )
+from ui import theme
 from ui.animated_label import AnimatedLabel
 from ui.controls_panel import ControlsPanel
 from ui.font_manager import FontManager
 from ui.output_panel import OutputPanel
-from ui import theme
 
 
 class MainWindow(QMainWindow):
@@ -84,7 +83,7 @@ class MainWindow(QMainWindow):
             rotation="00:00",  # Rotate at midnight
             retention="7 days",
             level="INFO",
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
         )
         logger.info("Darin Audio Assistant initializing")
 
@@ -183,7 +182,7 @@ class MainWindow(QMainWindow):
 
     def _title_bar_mouse_move(self, event):
         """Handle mouse move on title bar for dragging"""
-        if hasattr(self, '_drag_pos'):
+        if hasattr(self, "_drag_pos"):
             delta = event.globalPosition().toPoint() - self._drag_pos
             self.move(self.pos() + delta)
             self._drag_pos = event.globalPosition().toPoint()
@@ -194,7 +193,7 @@ class MainWindow(QMainWindow):
 
         if stylesheet_path.exists():
             logger.info("Loading stylesheet from styles.qss")
-            with open(stylesheet_path, 'r') as f:
+            with open(stylesheet_path) as f:
                 self.setStyleSheet(f.read())
         else:
             # Fallback to inline QSS if file missing
@@ -240,7 +239,7 @@ class MainWindow(QMainWindow):
         with self._processing_lock:
             self._is_processing = value
 
-    def _extract_html_items(self, text: str, pattern: str = r'<li[^>]*>(.*?)</li>') -> list[str]:
+    def _extract_html_items(self, text: str, pattern: str = r"<li[^>]*>(.*?)</li>") -> list[str]:
         """
         Shared HTML stream parsing logic for all template handlers.
 
@@ -517,7 +516,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
             return
 
-        logger.info("Starting transcription from buffer", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
+        logger.info(
+            "Starting transcription from buffer",
+            buffer_size_bytes=len(audio_data),
+            sample_rate=self.recorder.sample_rate,
+        )
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
@@ -526,16 +529,29 @@ class MainWindow(QMainWindow):
     def _transcribe_thread(self, audio_data, sample_rate):
         """Background thread for transcription - emits signal, doesn't write directly"""
         start_time = time.perf_counter()
-        logger.info("Transcription thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
+        logger.info(
+            "Transcription thread started",
+            buffer_size_bytes=len(audio_data),
+            sample_rate=sample_rate,
+        )
         try:
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
             duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info("Transcription complete", transcript_length=len(text), duration_ms=f"{duration_ms:.2f}")
+            logger.info(
+                "Transcription complete",
+                transcript_length=len(text),
+                duration_ms=f"{duration_ms:.2f}",
+            )
             # Emit signal to update transcript in GUI thread (thread-safe)
             self.transcription_complete.emit(text)
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error("Transcription failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
+            logger.error(
+                "Transcription failed",
+                error=str(e),
+                duration_ms=f"{duration_ms:.2f}",
+                exc_info=True,
+            )
             self.transcription_complete.emit(f"Transcription error: {str(e)}")
 
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
@@ -612,13 +628,21 @@ class MainWindow(QMainWindow):
     def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
         """Background thread for transcription followed by processing with a specific prompt"""
         start_time = time.perf_counter()
-        logger.info("Transcribe and process thread started", buffer_size_bytes=len(audio_data), sample_rate=sample_rate)
+        logger.info(
+            "Transcribe and process thread started",
+            buffer_size_bytes=len(audio_data),
+            sample_rate=sample_rate,
+        )
         try:
             # First transcribe
             self.progress_update.emit("Transcribing audio...")
             text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
             transcribe_duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info("Transcription phase complete", transcript_length=len(text), duration_ms=f"{transcribe_duration_ms:.2f}")
+            logger.info(
+                "Transcription phase complete",
+                transcript_length=len(text),
+                duration_ms=f"{transcribe_duration_ms:.2f}",
+            )
 
             # Update UI with transcript via signal (thread-safe)
             # The slot handler will set self.current_transcript
@@ -627,10 +651,17 @@ class MainWindow(QMainWindow):
             # Then process with the specific prompt
             self._run_specific_prompt(text, prompt_template)
             total_duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info("Transcribe and process complete", total_duration_ms=f"{total_duration_ms:.2f}")
+            logger.info(
+                "Transcribe and process complete", total_duration_ms=f"{total_duration_ms:.2f}"
+            )
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error("Transcribe and process failed", error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
+            logger.error(
+                "Transcribe and process failed",
+                error=str(e),
+                duration_ms=f"{duration_ms:.2f}",
+                exc_info=True,
+            )
             self.processing_complete.emit({"error": str(e)})
         finally:
             # Emit signal to update processing state in GUI thread (thread-safe)
@@ -640,7 +671,11 @@ class MainWindow(QMainWindow):
     def _run_specific_prompt(self, transcript, prompt_template):
         """Process transcript with a specific prompt template"""
         start_time = time.perf_counter()
-        logger.info("Starting LLM processing", transcript_length=len(transcript), template_type=str(prompt_template)[:50])
+        logger.info(
+            "Starting LLM processing",
+            transcript_length=len(transcript),
+            template_type=str(prompt_template)[:50],
+        )
         try:
             # Update output to show progress
             self.progress_update.emit("Processing with Claude...")
@@ -667,13 +702,24 @@ class MainWindow(QMainWindow):
                 transcript, prompt_template, stream=True, callback=handle_stream
             )
             duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info("LLM processing complete", template_type=template_type, duration_ms=f"{duration_ms:.2f}", result_length=len(str(result)))
+            logger.info(
+                "LLM processing complete",
+                template_type=template_type,
+                duration_ms=f"{duration_ms:.2f}",
+                result_length=len(str(result)),
+            )
 
             # Final update with complete response
             self.processing_complete.emit({"result": result})
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error("LLM processing failed", template_type=str(prompt_template)[:50], error=str(e), duration_ms=f"{duration_ms:.2f}", exc_info=True)
+            logger.error(
+                "LLM processing failed",
+                template_type=str(prompt_template)[:50],
+                error=str(e),
+                duration_ms=f"{duration_ms:.2f}",
+                exc_info=True,
+            )
             self.processing_complete.emit({"error": str(e)})
 
     def _setup_static_template(self, prompt_template):
@@ -1019,7 +1065,11 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(dict)
     def on_processing_complete(self, result):
-        logger.info("Processing complete signal received", has_error="error" in result, has_result="result" in result)
+        logger.info(
+            "Processing complete signal received",
+            has_error="error" in result,
+            has_result="result" in result,
+        )
         # Reset processing state in GUI thread (thread-safe)
         self.is_processing = False
 
@@ -1160,7 +1210,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
@@ -1213,7 +1263,7 @@ class MainWindow(QMainWindow):
             # Process subsequent lines as list items
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Add formatting if needed (ensure class and style)
@@ -1239,7 +1289,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
@@ -1265,7 +1315,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
@@ -1291,7 +1341,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Add formatting if needed (ensure class and style, no bold)
@@ -1317,7 +1367,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Determine target list based on class
@@ -1341,7 +1391,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Determine target list based on class
@@ -1365,7 +1415,7 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li[^>]*>.*?</li>')
+                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
 
                 for item in extracted_items:
                     # Determine target list based on class
@@ -1389,7 +1439,9 @@ class MainWindow(QMainWindow):
             items_to_append = []
             with self._html_state_lock:
                 # Use shared extraction function with specific pattern (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r'<li class=["\']fact-check-item["\']>.*?</li>')
+                extracted_items = self._extract_html_items(
+                    text, r'<li class=["\']fact-check-item["\']>.*?</li>'
+                )
 
                 items_to_append.extend(extracted_items)
 
@@ -1405,7 +1457,7 @@ class MainWindow(QMainWindow):
                 # Pattern matches any of the three class types
                 extracted_items = self._extract_html_items(
                     text,
-                    r'<li class=["\'](?:answer-item|rationale-item|example-item)["\']>.*?</li>'
+                    r'<li class=["\'](?:answer-item|rationale-item|example-item)["\']>.*?</li>',
                 )
 
                 for item in extracted_items:
@@ -1434,7 +1486,7 @@ class MainWindow(QMainWindow):
                 # Pattern matches all 9 class types
                 extracted_items = self._extract_html_items(
                     text,
-                    r'<li class=["\'](?:core-problem|logic-tree-component|evaluation-(?:mece|assumption|logic|data)|challenge-(?:weakness|question|reframe))["\']>.*?</li>'
+                    r'<li class=["\'](?:core-problem|logic-tree-component|evaluation-(?:mece|assumption|logic|data)|challenge-(?:weakness|question|reframe))["\']>.*?</li>',
                 )
 
                 for item in extracted_items:
@@ -1442,11 +1494,25 @@ class MainWindow(QMainWindow):
                     target_list_id = None
                     if 'class="core-problem"' in item or "class='core-problem'" in item:
                         target_list_id = "core-problem-list"
-                    elif 'class="logic-tree-component"' in item or "class='logic-tree-component'" in item:
+                    elif (
+                        'class="logic-tree-component"' in item
+                        or "class='logic-tree-component'" in item
+                    ):
                         target_list_id = "logic-tree-list"
-                    elif any(cls in item for cls in ['evaluation-mece', 'evaluation-assumption', 'evaluation-logic', 'evaluation-data']):
+                    elif any(
+                        cls in item
+                        for cls in [
+                            "evaluation-mece",
+                            "evaluation-assumption",
+                            "evaluation-logic",
+                            "evaluation-data",
+                        ]
+                    ):
                         target_list_id = "evaluation-list"
-                    elif any(cls in item for cls in ['challenge-weakness', 'challenge-question', 'challenge-reframe']):
+                    elif any(
+                        cls in item
+                        for cls in ["challenge-weakness", "challenge-question", "challenge-reframe"]
+                    ):
                         target_list_id = "challenge-list"
 
                     # Append the complete item to the correct list
@@ -1465,7 +1531,7 @@ class MainWindow(QMainWindow):
                 # Pattern matches all 6 SCQA class types
                 extracted_items = self._extract_html_items(
                     text,
-                    r'<li class=["\']scqa-(?:situation|complication|question|answer|assessment|roadmap)["\']>.*?</li>'
+                    r'<li class=["\']scqa-(?:situation|complication|question|answer|assessment|roadmap)["\']>.*?</li>',
                 )
 
                 for item in extracted_items:
@@ -1488,25 +1554,32 @@ class MainWindow(QMainWindow):
                 # Pattern matches all 9 hypothesis class types
                 extracted_items = self._extract_html_items(
                     text,
-                    r'<li class=["\']hypothesis-(?:problem|hypothesis|evidence-(?:support|contradict|missing)|priority|testing|decision|assessment)["\']>.*?</li>'
+                    r'<li class=["\']hypothesis-(?:problem|hypothesis|evidence-(?:support|contradict|missing)|priority|testing|decision|assessment)["\']>.*?</li>',
                 )
 
                 for item in extracted_items:
                     # Determine target list based on class
                     target_list_id = None
-                    if 'hypothesis-problem' in item:
+                    if "hypothesis-problem" in item:
                         target_list_id = "hypothesis-problem-list"
-                    elif 'hypothesis-hypothesis' in item:
+                    elif "hypothesis-hypothesis" in item:
                         target_list_id = "hypothesis-hypothesis-list"
-                    elif any(cls in item for cls in ['hypothesis-evidence-support', 'hypothesis-evidence-contradict', 'hypothesis-evidence-missing']):
+                    elif any(
+                        cls in item
+                        for cls in [
+                            "hypothesis-evidence-support",
+                            "hypothesis-evidence-contradict",
+                            "hypothesis-evidence-missing",
+                        ]
+                    ):
                         target_list_id = "hypothesis-evidence-list"
-                    elif 'hypothesis-priority' in item:
+                    elif "hypothesis-priority" in item:
                         target_list_id = "hypothesis-priority-list"
-                    elif 'hypothesis-testing' in item:
+                    elif "hypothesis-testing" in item:
                         target_list_id = "hypothesis-testing-list"
-                    elif 'hypothesis-decision' in item:
+                    elif "hypothesis-decision" in item:
                         target_list_id = "hypothesis-decision-list"
-                    elif 'hypothesis-assessment' in item:
+                    elif "hypothesis-assessment" in item:
                         target_list_id = "hypothesis-assessment-list"
 
                     # Append the complete item to the correct list
@@ -1525,7 +1598,7 @@ class MainWindow(QMainWindow):
                 # Pattern matches all 7 first-principles class types
                 extracted_items = self._extract_html_items(
                     text,
-                    r'<li class=["\']fp-(?:conventional|fundamental|assumption|rebuild|insight|implementation|metacognitive)["\']>.*?</li>'
+                    r'<li class=["\']fp-(?:conventional|fundamental|assumption|rebuild|insight|implementation|metacognitive)["\']>.*?</li>',
                 )
 
                 for item in extracted_items:
@@ -1546,8 +1619,7 @@ class MainWindow(QMainWindow):
                 # Use shared extraction function (fixes O(n²) bug)
                 # Pattern matches both reframing class types
                 extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>'
+                    text, r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>'
                 )
 
                 for item in extracted_items:
@@ -1628,7 +1700,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
             return
 
-        logger.info("Starting transcription from last 30s", buffer_size_bytes=len(audio_data), sample_rate=self.recorder.sample_rate)
+        logger.info(
+            "Starting transcription from last 30s",
+            buffer_size_bytes=len(audio_data),
+            sample_rate=self.recorder.sample_rate,
+        )
         # Start transcription in a separate thread
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
