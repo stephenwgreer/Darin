@@ -9,19 +9,18 @@ Tests end-to-end workflows:
 """
 
 import sys
-import threading
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
+
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from prompts.templates import TOPIC_SUMMARY_PROMPT
 from ui.main_window import MainWindow
-from prompts.templates import TOPIC_SUMMARY_PROMPT, SENTIMENT_ANALYSIS_PROMPT
 
 
 @pytest.fixture(scope="session")
@@ -36,7 +35,7 @@ def qapp():
 @pytest.fixture
 def mock_recorder():
     """Mock ContinuousRecorder."""
-    with patch('ui.main_window.ContinuousRecorder') as mock:
+    with patch("ui.main_window.ContinuousRecorder") as mock:
         recorder_instance = MagicMock()
         recorder_instance.is_recording = False
         recorder_instance.sample_rate = 16000
@@ -52,7 +51,7 @@ def mock_recorder():
 @pytest.fixture
 def mock_api_client():
     """Mock ApiClient."""
-    with patch('ui.main_window.ApiClient') as mock:
+    with patch("ui.main_window.ApiClient") as mock:
         api_instance = MagicMock()
         api_instance.transcribe_with_deepgram.return_value = "Test transcript text"
         api_instance.process_with_anthropic.return_value = "Processed result"
@@ -63,8 +62,7 @@ def mock_api_client():
 @pytest.fixture
 def main_window(qapp, mock_recorder, mock_api_client):
     """Create MainWindow instance for testing."""
-    with patch('ui.main_window.FontManager'), \
-         patch('ui.main_window.logger'):
+    with patch("ui.main_window.FontManager"), patch("ui.main_window.logger"):
         window = MainWindow()
         yield window
         window.close()
@@ -152,6 +150,7 @@ class TestTranscriptionWorkflow:
 
         # Give thread time to execute
         import time
+
         time.sleep(0.1)
         QApplication.processEvents()
 
@@ -182,6 +181,7 @@ class TestTranscriptionWorkflow:
 
         # Wait for thread
         import time
+
         time.sleep(0.2)
         QApplication.processEvents()
 
@@ -204,6 +204,7 @@ class TestTranscriptionWorkflow:
 
         # Wait for thread
         import time
+
         time.sleep(0.2)
         QApplication.processEvents()
 
@@ -217,6 +218,7 @@ class TestTranscriptionWorkflow:
 
         # Wait for thread
         import time
+
         time.sleep(0.1)
         QApplication.processEvents()
 
@@ -260,6 +262,7 @@ class TestLLMProcessingWorkflow:
         # Should call save_buffer
         # Wait a bit for thread
         import time
+
         time.sleep(0.1)
 
         # Processing should be set
@@ -335,6 +338,7 @@ class TestErrorHandling:
 
         # Processing should be reset
         import time
+
         time.sleep(0.1)
         QApplication.processEvents()
 
@@ -350,6 +354,7 @@ class TestErrorHandling:
 
         # Wait for thread
         import time
+
         time.sleep(0.2)
         QApplication.processEvents()
 

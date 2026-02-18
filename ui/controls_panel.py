@@ -43,20 +43,22 @@ class ControlsPanel(QWidget):
 
         # Recording controls section
         controls_label = QLabel("Recording Controls")
+        controls_label.setObjectName("sectionLabel")
         controls_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         layout.addWidget(controls_label)
 
         # Record button
         self.record_button = QPushButton("Start Recording")
+        self.record_button.setObjectName("recordButton")
         self.record_button.setFont(FontManager.get_font(12, QFont.Weight.Normal))
         self.record_button.clicked.connect(self.record_clicked.emit)
         layout.addWidget(self.record_button)
 
         # Timestamp label
         self.timestamp_label = QLabel("00:00:00")
+        self.timestamp_label.setObjectName("timestampLabel")
         self.timestamp_label.setFont(FontManager.get_font(12, QFont.Weight.Normal))
         self.timestamp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.timestamp_label.setStyleSheet("color: #666666;")
         self.timestamp_label.hide()
         layout.addWidget(self.timestamp_label)
 
@@ -76,9 +78,9 @@ class ControlsPanel(QWidget):
 
         # Clear output button
         self.clear_button = QPushButton("Clear Output")
+        self.clear_button.setObjectName("clearButton")
         self.clear_button.setFont(FontManager.get_font(12, QFont.Weight.Normal))
         self.clear_button.clicked.connect(self.clear_output_clicked.emit)
-        self.clear_button.setStyleSheet("background-color: #ffebee; color: #c62828;")
         layout.addWidget(self.clear_button)
 
         # Spacer
@@ -86,6 +88,7 @@ class ControlsPanel(QWidget):
 
         # Prompt buttons section
         prompt_label = QLabel("Specific Prompts")
+        prompt_label.setObjectName("sectionLabel")
         prompt_label.setFont(FontManager.get_font(14, QFont.Weight.Normal))
         layout.addWidget(prompt_label)
 

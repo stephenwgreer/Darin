@@ -10,10 +10,11 @@ Tests core functionality including:
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PyQt6.QtWidgets import QApplication
+
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -34,7 +35,7 @@ def qapp():
 @pytest.fixture
 def mock_recorder():
     """Mock ContinuousRecorder to avoid audio hardware dependencies."""
-    with patch('ui.main_window.ContinuousRecorder') as mock:
+    with patch("ui.main_window.ContinuousRecorder") as mock:
         recorder_instance = MagicMock()
         recorder_instance.is_recording = False
         recorder_instance.sample_rate = 16000
@@ -46,7 +47,7 @@ def mock_recorder():
 @pytest.fixture
 def mock_api_client():
     """Mock ApiClient to avoid network dependencies."""
-    with patch('ui.main_window.ApiClient') as mock:
+    with patch("ui.main_window.ApiClient") as mock:
         api_instance = MagicMock()
         mock.return_value = api_instance
         yield api_instance
@@ -55,7 +56,7 @@ def mock_api_client():
 @pytest.fixture
 def mock_font_manager():
     """Mock FontManager to avoid font loading."""
-    with patch('ui.main_window.FontManager') as mock:
+    with patch("ui.main_window.FontManager") as mock:
         mock.load_fonts.return_value = None
         mock.get_font.return_value = MagicMock()
         yield mock
@@ -64,7 +65,7 @@ def mock_font_manager():
 @pytest.fixture
 def main_window(qapp, mock_recorder, mock_api_client, mock_font_manager):
     """Create MainWindow instance for testing."""
-    with patch('ui.main_window.logger'):
+    with patch("ui.main_window.logger"):
         window = MainWindow()
         yield window
         window.close()
@@ -208,27 +209,27 @@ class TestSignalConnections:
 
     def test_custom_signals_defined(self, main_window):
         """Test all custom signals are defined."""
-        assert hasattr(main_window, 'recording_started')
-        assert hasattr(main_window, 'recording_stopped')
-        assert hasattr(main_window, 'transcription_complete')
-        assert hasattr(main_window, 'processing_complete')
-        assert hasattr(main_window, 'progress_update')
-        assert hasattr(main_window, 'stream_update')
+        assert hasattr(main_window, "recording_started")
+        assert hasattr(main_window, "recording_stopped")
+        assert hasattr(main_window, "transcription_complete")
+        assert hasattr(main_window, "processing_complete")
+        assert hasattr(main_window, "progress_update")
+        assert hasattr(main_window, "stream_update")
 
     def test_controls_panel_signals_connected(self, main_window):
         """Test controls panel signals are connected."""
         # Verify controls panel exists
-        assert hasattr(main_window, 'controls_panel')
+        assert hasattr(main_window, "controls_panel")
         assert main_window.controls_panel is not None
 
     def test_output_panel_exists(self, main_window):
         """Test output panel is created."""
-        assert hasattr(main_window, 'output_panel')
+        assert hasattr(main_window, "output_panel")
         assert main_window.output_panel is not None
 
     def test_content_splitter_exists(self, main_window):
         """Test content splitter is created."""
-        assert hasattr(main_window, 'content_splitter')
+        assert hasattr(main_window, "content_splitter")
         assert main_window.content_splitter is not None
 
 

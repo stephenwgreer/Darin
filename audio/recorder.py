@@ -1,6 +1,5 @@
 import threading
 from collections import deque
-from typing import Optional
 
 import numpy as np
 import soundcard as sc
@@ -9,7 +8,9 @@ from loguru import logger
 
 
 class ContinuousRecorder:
-    def __init__(self, buffer_minutes: int = 3, sample_rate: int = 48000, chunk_seconds: int = 1) -> None:
+    def __init__(
+        self, buffer_minutes: int = 3, sample_rate: int = 48000, chunk_seconds: int = 1
+    ) -> None:
         self.sample_rate: int = sample_rate
         self.chunk_seconds: int = chunk_seconds
         self.chunk_frames: int = chunk_seconds * sample_rate
@@ -23,7 +24,7 @@ class ContinuousRecorder:
         # Recording control - using private variable with lock for thread safety
         self._is_recording: bool = False
         self._recording_lock: threading.Lock = threading.Lock()
-        self.record_thread: Optional[threading.Thread] = None
+        self.record_thread: threading.Thread | None = None
 
         # Setup microphone
         self.mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
@@ -75,7 +76,7 @@ class ContinuousRecorder:
                     # deque with maxlen automatically drops oldest when full
                     self.audio_buffer.append(data)
 
-    def save_buffer(self, filename: Optional[str] = None) -> Optional[np.ndarray]:
+    def save_buffer(self, filename: str | None = None) -> np.ndarray | None:
         """Save the current audio buffer to a file and return mono data"""
 
         with self.buffer_lock:
@@ -101,7 +102,7 @@ class ContinuousRecorder:
         with self.buffer_lock:
             return len(self.audio_buffer) * self.chunk_seconds
 
-    def get_last_n_seconds(self, seconds: float) -> Optional[np.ndarray]:
+    def get_last_n_seconds(self, seconds: float) -> np.ndarray | None:
         """Get the last N seconds of audio from the buffer"""
         with self.buffer_lock:
             if not self.audio_buffer:
