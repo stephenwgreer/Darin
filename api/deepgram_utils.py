@@ -48,7 +48,9 @@ def transcribe_with_deepgram(api_key: str, audio_data: Any, sample_rate: int) ->
 
         # Extract transcript from response
         try:
-            transcript: str = response_json["results"]["channels"][0]["alternatives"][0]["transcript"]
+            transcript: str = response_json["results"]["channels"][0]["alternatives"][0][
+                "transcript"
+            ]
             print(f"Found transcript: {transcript}")
             return transcript
         except KeyError:
