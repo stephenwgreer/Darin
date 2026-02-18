@@ -88,8 +88,8 @@ jobs:
       # CRITICAL: Enforce no pip usage
       - name: Verify no pip/conda usage
         run: |
-          if grep -r "pip install" .github/ 2>/dev/null | grep -v "uv pip"; then
-            echo "ERROR: Found 'pip install' without 'uv' prefix in CI files"
+          if grep -r "pip install" . --include="*.py" --include="*.sh" --include="*.cfg" --include="*.toml" 2>/dev/null | grep -v "uv pip"; then
+            echo "ERROR: Found 'pip install' without 'uv' prefix in source files"
             echo "REQUIRED: Use 'uv pip install' instead"
             exit 1
           fi
@@ -199,8 +199,8 @@ jobs:
             echo "REQUIRED: Use bun.lockb only"
             exit 1
           fi
-          if grep -r "npm install\|yarn add\|pnpm add" .github/ 2>/dev/null; then
-            echo "ERROR: Found unauthorized package manager usage in CI files"
+          if grep -r "npm install\|yarn add\|pnpm add" . --include="*.ts" --include="*.tsx" --include="*.js" --include="*.sh" --include="*.json" --exclude="package.json" --exclude="bun.lockb" 2>/dev/null; then
+            echo "ERROR: Found unauthorized package manager usage in source files"
             echo "REQUIRED: Use 'bun install' or 'bun add' only"
             exit 1
           fi
