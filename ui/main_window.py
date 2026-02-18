@@ -50,6 +50,7 @@ from ui import theme
 from ui.animated_label import AnimatedLabel
 from ui.controls_panel import ControlsPanel
 from ui.font_manager import FontManager
+from ui.html_templates import create_topic_section
 from ui.output_panel import OutputPanel
 
 
@@ -762,7 +763,7 @@ class MainWindow(QMainWindow):
             static_template = """
             <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
                 <h3 style="font-weight: bold;">Overall Sentiment</h3>
-                <p id="overall-sentiment-value" style="margin-left: 10px;"></p> 
+                <p id="overall-sentiment-value" style="margin-left: 10px;"></p>
                 <h3 style="font-weight: bold; margin-top: 20px;">Key Emotional Moments</h3>
                 <ul class="insight-list" id="dynamic-content" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
                     <!-- Dynamic list items will be inserted here -->
@@ -847,7 +848,7 @@ class MainWindow(QMainWindow):
             static_template = """
             <div class="insight-block" style="margin-top: 0; padding-top: 10px;">
                 <h3 style="font-weight: bold;">Fact Check Analysis</h3>
-                <ul id="fact-check-list" style="list-style-type: none; margin-top: 0; padding-left: 0;"> 
+                <ul id="fact-check-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
                     <!-- Fact check items will be inserted here -->
                 </ul>
             </div>

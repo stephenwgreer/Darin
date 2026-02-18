@@ -3,7 +3,7 @@
 PROBLEM_SOLVING_PROMPT = """
 **Act as a Management Consultant specializing in Structured Problem Solving.**
 
-Your task is to rigorously analyze the following transcript. Your goal is to deconstruct the core topic or problem being discussed, challenge the underlying thinking, identify gaps, and reframe the issue to facilitate better problem-solving, 
+Your task is to rigorously analyze the following transcript. Your goal is to deconstruct the core topic or problem being discussed, challenge the underlying thinking, identify gaps, and reframe the issue to facilitate better problem-solving,
 using the principles of an Issue Tree / Logic Tree.
 
 **Instructions & Output Format:**

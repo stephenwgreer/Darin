@@ -155,7 +155,7 @@ Text to analyze:
 
 # Follow-up questions prompt
 FOLLOW_UP_QUESTIONS_PROMPT = """
-Based on the following transcript, generate 5 insightful follow-up questions that would 
+Based on the following transcript, generate 5 insightful follow-up questions that would
 help clarify or expand on the topics discussed.
 
 The format for the response should be exactly as shown below. ONLY include the list items

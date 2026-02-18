@@ -7,6 +7,7 @@ import anthropic
 from loguru import logger
 
 import config
+from prompts.templates import PRACTITIONER_INSIGHTS_STREAMING_PROMPT, TOPIC_SUMMARY_PROMPT
 
 
 def get_anthropic_client(api_key: str) -> anthropic.Anthropic:
@@ -122,7 +123,7 @@ def get_practitioner_insights(client: anthropic.Anthropic, transcript: str) -> d
         # For each topic, get practitioner insights
         for key, topic in topics_data.items():
             insight = process_transcript(
-                client, transcript, PRACTITIONER_INSIGHTS_PROMPT, topic=topic
+                client, transcript, PRACTITIONER_INSIGHTS_STREAMING_PROMPT, topic=topic
             )
             insights_results["insights"][key] = insight
 

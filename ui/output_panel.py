@@ -263,7 +263,7 @@ class OutputPanel(QWidget):
                 item_html = item_html.replace("<li", f'<li style="{base_style}"')
 
         # Escape the item_html for safe insertion into JavaScript string
-        escaped_item_html = item_html.replace("`", "\\`").replace("$", "\$")
+        escaped_item_html = item_html.replace("`", "\\`").replace("$", "\\$")
 
         js = f'''
         var list = document.getElementById("{list_id}");
