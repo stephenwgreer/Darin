@@ -32,9 +32,15 @@ class ApiClient:
             If keys are not provided, uses validated keys from config module.
             Keys are validated at application startup in main.py.
         """
-        # Use provided keys or fall back to validated config module keys
-        self.anthropic_api_key = anthropic_api_key or config.ANTHROPIC_API_KEY
-        self.deepgram_api_key = deepgram_api_key or config.DEEPGRAM_API_KEY
+        # Use provided keys or fall back to validated config module keys.
+        # Use explicit None check so an empty string ("") bypasses the fallback
+        # and reaches the validation block below, raising ValueError as expected.
+        self.anthropic_api_key = (
+            anthropic_api_key if anthropic_api_key is not None else config.ANTHROPIC_API_KEY
+        )
+        self.deepgram_api_key = (
+            deepgram_api_key if deepgram_api_key is not None else config.DEEPGRAM_API_KEY
+        )
 
         # Validate keys are present and non-empty
         if not self.anthropic_api_key or not self.anthropic_api_key.strip():
