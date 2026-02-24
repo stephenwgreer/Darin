@@ -1,9 +1,11 @@
 import html
 import io
 import json
+import logging
 import re
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -23,6 +25,9 @@ from PyQt6.QtWidgets import (
 import config
 from api.client import ApiClient
 from audio.recorder import ContinuousRecorder
+from storage.models import AnalysisOutput, SessionData
+from storage.session_store import SessionStore
+from ui.session_history_dialog import SessionHistoryDialog
 
 # Import from new logic_templates file
 from prompts.logic_templates import (
@@ -54,6 +59,30 @@ from ui.html_templates import create_topic_section
 from ui.output_panel import OutputPanel
 
 
+# Mapping from the string returned by _setup_static_template() to the prompt ID
+# used as the storage key in session_analyses.  The template type strings use
+# the value returned by _setup_static_template(); prompt IDs use underscores.
+# Note: "fill-gaps", "brainstorm", and "problem-solving" are the internal
+# template type names; they map to underscore storage keys for the DB.
+TEMPLATE_TYPE_TO_PROMPT_ID: dict[str, str] = {
+    "topic-summary": "topic_summary",
+    "meeting-summary": "meeting_summary",
+    "sentiment-analysis": "sentiment_analysis",
+    "practitioner-insights": "practitioner_insights",
+    "follow-up-questions": "follow_up_questions",
+    "first-principles": "first_principles",
+    "reframing": "reframing",
+    "scqa": "scqa",
+    "hypothesis-driven": "hypothesis_driven",
+    "fill-gaps": "gaps_reasoning",
+    "brainstorm": "brainstorming",
+    "problem-solving": "issue_tree",
+    "company-fit": "company_fit",
+    "fact-check": "fact_check",
+    "answer-question": "answer_question",
+}
+
+
 class MainWindow(QMainWindow):
     # Custom signals
     recording_started = pyqtSignal()
@@ -62,6 +91,7 @@ class MainWindow(QMainWindow):
     processing_complete = pyqtSignal(dict)
     progress_update = pyqtSignal(str)  # Signal for thread-safe progress updates
     stream_update = pyqtSignal(str)  # New signal for streaming updates
+    prompt_started = pyqtSignal(str)  # carries prompt_id; routes bg-thread writes to main thread
 
     def __init__(self):
         super().__init__()
@@ -122,6 +152,20 @@ class MainWindow(QMainWindow):
         # Sentiment analysis specific state
         self._overall_sentiment_received = False
 
+        # Session persistence state
+        try:
+            self._session_store: SessionStore | None = SessionStore()
+            self._persistence_available = True
+        except Exception as e:
+            logger.error(f"Session persistence unavailable: {e}")
+            self._session_store = None
+            self._persistence_available = False
+
+        self._session_start_time: datetime | None = None
+        self._session_outputs: dict[str, str] = {}
+        self._active_prompt_id: str | None = None
+        self._active_prompt_chunks: list[str] = []
+
         # Setup UI
         self.setup_ui()
 
@@ -143,6 +187,16 @@ class MainWindow(QMainWindow):
         title_bar_layout.addWidget(title_label)
 
         title_bar_layout.addStretch()
+
+        # History button — only shown when session persistence is available
+        # (attribute may not exist during initial UI setup before __init__ sets it,
+        # so we guard with getattr)
+        if getattr(self, "_persistence_available", False):
+            self._history_button = QPushButton("History")
+            self._history_button.setObjectName("historyButton")
+            self._history_button.setFixedHeight(28)
+            self._history_button.clicked.connect(self._open_history_dialog)
+            title_bar_layout.addWidget(self._history_button)
 
         # Window control buttons
         minimize_btn = QPushButton("−")
@@ -477,6 +531,7 @@ class MainWindow(QMainWindow):
         self.processing_complete.connect(self.on_processing_complete)
         self.progress_update.connect(self.on_progress_update)
         self.stream_update.connect(self.on_stream_update)
+        self.prompt_started.connect(self._on_prompt_started)
 
     def toggle_recording(self):
         if not self.recorder.is_recording:
@@ -484,6 +539,9 @@ class MainWindow(QMainWindow):
             logger.info("Starting audio recording")
             if self.recorder.start_recording():
                 logger.info("Audio recording started successfully")
+                # Track session start time for persistence
+                self._session_start_time = datetime.now()
+                self._session_outputs = {}
                 self.recording_started.emit()
                 # Update UI to show recording state
                 self.controls_panel.set_recording_active(True)
@@ -495,6 +553,8 @@ class MainWindow(QMainWindow):
             if self.recorder.stop_recording():
                 logger.info("Audio recording stopped successfully")
                 self.recording_stopped.emit()
+                # Save session after recording stops
+                self._save_current_session()
                 # Update UI to show stopped state
                 self.controls_panel.set_recording_active(False)
             else:
@@ -693,6 +753,15 @@ class MainWindow(QMainWindow):
                 self._is_first_update = False  # Already set up the template
                 self._current_list_items = []
                 self._template_type = template_type  # Store the template type for use in streaming
+
+            # Capture prompt ID for session persistence (streaming-time accumulation).
+            # Emit signal so the main thread sets _active_prompt_id/_active_prompt_chunks
+            # (direct writes from this background thread are not thread-safe).
+            prompt_id = TEMPLATE_TYPE_TO_PROMPT_ID.get(template_type)
+            if prompt_id:
+                self.prompt_started.emit(prompt_id)
+            else:
+                self.prompt_started.emit("")
 
             def handle_stream(text):
                 """Callback to handle streaming text"""
@@ -1071,6 +1140,13 @@ class MainWindow(QMainWindow):
             has_error="error" in result,
             has_result="result" in result,
         )
+        # Finalise plain text accumulation for session persistence.
+        # Capture before clearing so we don't lose the last chunk.
+        if self._active_prompt_id and self._active_prompt_chunks:
+            self._session_outputs[self._active_prompt_id] = " ".join(self._active_prompt_chunks)
+        self._active_prompt_id = None
+        self._active_prompt_chunks = []
+
         # Reset processing state in GUI thread (thread-safe)
         self.is_processing = False
 
@@ -1663,11 +1739,29 @@ class MainWindow(QMainWindow):
         </div>"""
                         )
 
+        # Plain text accumulation for session persistence.
+        # Strip HTML tags from each incoming chunk and accumulate as plain text.
+        # This runs after all display logic so it never blocks rendering.
+        if self._active_prompt_id is not None:
+            plain = re.sub(r"<[^>]+>", "", text).strip()
+            if plain:
+                self._active_prompt_chunks.append(plain)
+
     @pyqtSlot(str)
     def on_progress_update(self, message):
         """Handle progress updates in a thread-safe way"""
         logger.debug("Progress update", message=message)
         self.output_panel.set_status(message)
+
+    @pyqtSlot(str)
+    def _on_prompt_started(self, prompt_id: str) -> None:
+        """Set active prompt tracking state safely on the main thread.
+
+        An empty string means no known prompt_id — sets _active_prompt_id to None
+        so plain-text accumulation in on_stream_update is correctly skipped.
+        """
+        self._active_prompt_id = prompt_id if prompt_id else None
+        self._active_prompt_chunks = []
 
     def clear_output(self):
         """Clear the output panel and reset HTML streaming state"""
@@ -1710,3 +1804,67 @@ class MainWindow(QMainWindow):
         threading.Thread(
             target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
         ).start()
+
+    # ------------------------------------------------------------------
+    # Session persistence helpers
+    # ------------------------------------------------------------------
+
+    def _save_current_session(self) -> None:
+        """Persist the current session to SQLite.
+
+        Called when recording stops or the window closes.
+        Sessions shorter than SessionStore.MIN_DURATION_S are silently
+        discarded by the store.  Errors are logged but never raised so
+        that the app continues to function normally.
+        """
+        if not self._persistence_available or self._session_start_time is None:
+            return
+
+        ended_at = datetime.now()
+        duration_s = int((ended_at - self._session_start_time).total_seconds())
+
+        # Note: %-d and %-I are Linux/GNU libc strftime extensions (no zero-padding).
+        # This is intentional — the app targets WSL/Linux only.
+        title = self._session_start_time.strftime("Session %a %b %-d, %Y at %-I:%M %p")
+
+        analyses = [
+            AnalysisOutput(prompt_id=pid, output_text=text, created_at=ended_at)
+            for pid, text in self._session_outputs.items()
+        ]
+        session = SessionData(
+            title=title,
+            started_at=self._session_start_time,
+            ended_at=ended_at,
+            duration_s=duration_s,
+            transcript=self.current_transcript,
+            analyses=analyses,
+        )
+        try:
+            if self._session_store is None:
+                logger.error("_save_current_session called but _session_store is None")
+                return
+            self._session_store.save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to save session: {e}")
+        finally:
+            self._session_start_time = None
+            self._session_outputs = {}
+
+    def _open_history_dialog(self) -> None:
+        """Open the session history modal dialog."""
+        if self._session_store is None:
+            return
+        dialog = SessionHistoryDialog(self._session_store, parent=self)
+        dialog.exec()
+
+    # ------------------------------------------------------------------
+    # Qt lifecycle
+    # ------------------------------------------------------------------
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        """Save any in-progress session and close the database on window close."""
+        if self._session_start_time is not None:
+            self._save_current_session()
+        if self._session_store is not None:
+            self._session_store.close()
+        event.accept()
