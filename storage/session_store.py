@@ -190,12 +190,11 @@ class SessionStore:
         cutoff = datetime.now() - timedelta(days=self.RETENTION_DAYS)
         cutoff_iso = _dt_to_iso(cutoff)
 
-        with self._lock:
-            with self._conn:
-                cursor = self._conn.execute(
-                    "DELETE FROM sessions WHERE started_at < ?", (cutoff_iso,)
-                )
-            return cursor.rowcount
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "DELETE FROM sessions WHERE started_at < ?", (cutoff_iso,)
+            )
+        return cursor.rowcount
 
     # ------------------------------------------------------------------
     # Read operations
