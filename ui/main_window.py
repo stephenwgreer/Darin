@@ -1823,9 +1823,11 @@ class MainWindow(QMainWindow):
         ended_at = datetime.now()
         duration_s = int((ended_at - self._session_start_time).total_seconds())
 
-        # Note: %-d and %-I are Linux/GNU libc strftime extensions (no zero-padding).
-        # This is intentional — the app targets WSL/Linux only.
-        title = self._session_start_time.strftime("Session %a %b %-d, %Y at %-I:%M %p")
+        # Build title without zero-padding using int() — cross-platform (Windows + Linux)
+        t = self._session_start_time
+        hour = t.hour % 12 or 12
+        ampm = "AM" if t.hour < 12 else "PM"
+        title = f"Session {t.strftime('%a %b')} {t.day}, {t.year} at {hour}:{t.strftime('%M')} {ampm}"
 
         analyses = [
             AnalysisOutput(prompt_id=pid, output_text=text, created_at=ended_at)
