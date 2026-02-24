@@ -1,7 +1,6 @@
 import html
 import io
 import json
-import logging
 import re
 import threading
 import time
@@ -1863,7 +1862,7 @@ class MainWindow(QMainWindow):
     # Qt lifecycle
     # ------------------------------------------------------------------
 
-    def closeEvent(self, event) -> None:  # type: ignore[override]
+    def closeEvent(self, event) -> None:  # type: ignore[override]  # noqa: N802
         """Save any in-progress session and close the database on window close."""
         if self._session_start_time is not None:
             self._save_current_session()
