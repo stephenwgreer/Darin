@@ -21,6 +21,7 @@ import config
 from api.client import ApiClient
 from api.deepgram_streaming import DeepgramStreamingClient
 from audio.recorder import ContinuousRecorder
+from storage.meeting_store import MeetingStore
 
 
 class AppController:
@@ -75,6 +76,10 @@ class AppController:
         # HTML streaming state (needed by _setup_static_template flow)
         self._template_type: str | None = None
 
+        # Meeting storage (DAR2-25)
+        self._meeting_store: MeetingStore | None = None
+        self._active_meeting_id: int | None = None
+
         logger.info("AppController initialized", buffer_minutes=config.BUFFER_MINUTES)
 
     # ------------------------------------------------------------------
@@ -116,6 +121,14 @@ class AppController:
     @template_type.setter
     def template_type(self, value: str | None) -> None:
         self._template_type = value
+
+    @property
+    def meeting_store(self) -> MeetingStore | None:
+        return self._meeting_store
+
+    @meeting_store.setter
+    def meeting_store(self, store: MeetingStore | None) -> None:
+        self._meeting_store = store
 
     # ------------------------------------------------------------------
     # Recording lifecycle
@@ -171,7 +184,7 @@ class AppController:
             api_key=self.api_client.deepgram_api_key,
             sample_rate=self.recorder.sample_rate,
             on_interim_transcript=self._on_interim_transcript,
-            on_final_transcript=self._on_final_transcript,
+            on_final_transcript=self._on_final_transcript_with_storage,
             on_utterance_end=self._handle_utterance_end,
             on_error=self._on_streaming_error,
         )
@@ -184,6 +197,10 @@ class AppController:
 
         # Wire the recorder's chunk consumer to forward audio to the streaming client
         self.recorder.add_chunk_consumer(self._on_recorder_chunk)
+
+        # Create meeting record if storage is available
+        if self._meeting_store is not None:
+            self._active_meeting_id = self._meeting_store.start_meeting()
 
         # Start recording if not already
         if not self.recorder.is_recording:
@@ -202,12 +219,17 @@ class AppController:
         self._streaming_client.disconnect()
         transcript = self._streaming_client.get_full_transcript()
 
+        # Finalize meeting record
+        if self._meeting_store is not None and self._active_meeting_id is not None:
+            self._meeting_store.end_meeting(self._active_meeting_id)
+
         # Update current transcript with the accumulated result
         self.current_transcript = transcript
 
         # Unhook the chunk consumer
         self.recorder.remove_chunk_consumer(self._on_recorder_chunk)
         self._streaming_client = None
+        self._active_meeting_id = None
 
         # Notify via standard transcription callback
         if self._on_transcription_complete and transcript:
@@ -234,6 +256,17 @@ class AppController:
     def _on_streaming_error(self, error: str) -> None:
         """Handle streaming errors."""
         logger.error(f"Streaming error: {error}")
+
+    def _handle_meeting_segment(self, text: str) -> None:
+        """Append a final transcript segment to the active meeting."""
+        if self._meeting_store is not None and self._active_meeting_id is not None:
+            self._meeting_store.append_segment(self._active_meeting_id, text)
+
+    def _on_final_transcript_with_storage(self, text: str) -> None:
+        """Handle final transcript: store segment AND notify UI."""
+        self._handle_meeting_segment(text)
+        if self._on_final_transcript:
+            self._on_final_transcript(text)
 
     # ------------------------------------------------------------------
     # Transcription (batch/REST)
