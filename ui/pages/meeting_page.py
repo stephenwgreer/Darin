@@ -1,8 +1,60 @@
-"""NiceGUI meeting page — top-level layout (DAR2-26)."""
+"""NiceGUI meeting page — top-level layout (DAR2-26).
+
+Registers the "/" route with NiceGUI. Creates all five components
+and wires AppController callbacks to them.
+
+Key principle: raw Deepgram transcript is NEVER displayed.
+Output panel shows only Claude analysis results.
+"""
 
 from __future__ import annotations
 
+from nicegui import ui
 
-def create_meeting_page(controller: object) -> None:
-    """Stub — implemented in Task 8."""
-    pass
+from app_controller import AppController
+from ui.components.capture_buttons import CaptureButtons
+from ui.components.meeting_controls import MeetingControls
+from ui.components.output_panel import OutputPanel
+from ui.components.prompt_buttons import PromptButtons
+
+
+def create_meeting_page(controller: AppController) -> None:
+    """Register the NiceGUI meeting page. Called once at app startup."""
+
+    @ui.page("/")
+    async def meeting_page() -> None:
+        # All state lives in AppController — page reads it, never owns it.
+
+        with ui.column().classes("w-full max-w-4xl mx-auto gap-4 p-4"):
+            # Header
+            ui.label("DARIN").classes("text-2xl font-bold")
+
+            # Meeting controls (start/stop + pulsing indicator + timer)
+            controls = MeetingControls(controller)
+
+            # Bounded capture (Last 30s / Last 1m — always available)
+            CaptureButtons(controller)
+
+            # Context-aware prompt buttons
+            prompts = PromptButtons(controller)
+
+            # Claude analysis output panel
+            OutputPanel(controller)
+
+        # Wire AppController state changes to components
+        controller.on_meeting_state_change(
+            lambda state: _handle_state_change(state, controls, prompts)
+        )
+        controller.on_timer_tick(
+            lambda elapsed: controls.update_timer(elapsed)
+        )
+
+
+def _handle_state_change(
+    state: str,
+    controls: MeetingControls,
+    prompts: PromptButtons,
+) -> None:
+    """Dispatch state changes to component methods."""
+    controls.set_state(state)
+    prompts.set_state(state)
