@@ -140,6 +140,42 @@ class AppController:
         self._meeting_store = store
 
     # ------------------------------------------------------------------
+    # Callback setters (DAR2-36)
+    #
+    # Allow UI components to register callbacks after construction.
+    # The setters write directly into the private fields that
+    # _run_prompt_thread reads, so late-binding (e.g. NiceGUI) works
+    # identically to constructor-time wiring (e.g. PyQt6).
+    # ------------------------------------------------------------------
+
+    @property
+    def on_stream_chunk(self) -> Callable[[str], None] | None:
+        """Callback invoked with each streaming text chunk from Claude."""
+        return self._on_stream_chunk
+
+    @on_stream_chunk.setter
+    def on_stream_chunk(self, callback: Callable[[str], None] | None) -> None:
+        self._on_stream_chunk = callback
+
+    @property
+    def on_processing_complete(self) -> Callable[[dict], None] | None:
+        """Callback invoked when Claude finishes processing a prompt."""
+        return self._on_processing_complete
+
+    @on_processing_complete.setter
+    def on_processing_complete(self, callback: Callable[[dict], None] | None) -> None:
+        self._on_processing_complete = callback
+
+    @property
+    def on_progress(self) -> Callable[[str], None] | None:
+        """Callback invoked with progress status messages."""
+        return self._on_progress
+
+    @on_progress.setter
+    def on_progress(self, callback: Callable[[str], None] | None) -> None:
+        self._on_progress = callback
+
+    # ------------------------------------------------------------------
     # Recording lifecycle
     # ------------------------------------------------------------------
 
