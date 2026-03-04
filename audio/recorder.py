@@ -1,5 +1,6 @@
 import threading
 from collections import deque
+from collections.abc import Callable
 
 import numpy as np
 import soundcard as sc
@@ -9,7 +10,11 @@ from loguru import logger
 
 class ContinuousRecorder:
     def __init__(
-        self, buffer_minutes: int = 3, sample_rate: int = 48000, chunk_seconds: int = 1
+        self,
+        buffer_minutes: int = 3,
+        sample_rate: int = 48000,
+        chunk_seconds: int = 1,
+        on_chunk: Callable[[np.ndarray], None] | None = None,
     ) -> None:
         self.sample_rate: int = sample_rate
         self.chunk_seconds: int = chunk_seconds
@@ -25,6 +30,9 @@ class ContinuousRecorder:
         self._is_recording: bool = False
         self._recording_lock: threading.Lock = threading.Lock()
         self.record_thread: threading.Thread | None = None
+
+        # Optional callback for real-time chunk forwarding (e.g. to WebSocket streaming)
+        self._on_chunk = on_chunk
 
         # Setup microphone
         self.mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
@@ -75,6 +83,12 @@ class ContinuousRecorder:
                 with self.buffer_lock:
                     # deque with maxlen automatically drops oldest when full
                     self.audio_buffer.append(data)
+
+                # Forward chunk to streaming client (outside buffer lock)
+                # Capture local reference to avoid TOCTOU race with clearing
+                chunk_callback = self._on_chunk
+                if chunk_callback:
+                    chunk_callback(data)
 
     def save_buffer(self, filename: str | None = None) -> np.ndarray | None:
         """Save the current audio buffer to a file and return mono data"""
