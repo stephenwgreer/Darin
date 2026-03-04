@@ -4,15 +4,11 @@ Tests the add_chunk_consumer / remove_chunk_consumer fan-out pattern
 that replaces the single-slot _on_chunk callback.
 """
 
-import sys
 import threading
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from audio.recorder import ContinuousRecorder
 
