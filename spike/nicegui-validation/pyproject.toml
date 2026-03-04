@@ -5,7 +5,9 @@ description = "Validation spike: NiceGUI + soundcard COM compatibility, streamin
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "nicegui>=3.0.0,<3.1",
+    "pywebview>=5.0",
     "numpy>=1.26.0,<2.0",
+    "sounddevice==0.4.6",
     "soundcard==0.4.3",
     "comtypes==1.4.10",
     "loguru>=0.7.0",

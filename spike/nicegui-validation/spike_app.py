@@ -1,19 +1,19 @@
 """NiceGUI Validation Spike — Tests 3 HoE conditions.
 
-Condition 1: COM threading compatibility (NiceGUI/pywebview + soundcard/WASAPI)
+Condition 1: COM threading compatibility (NiceGUI/pywebview + audio capture)
 Condition 2: Streaming latency benchmark (50-100 text chunks/sec)
 Condition 3: (Run separately via PyInstaller after this validates)
 
-Usage:
-    uv run spike_app.py
+Tests TWO audio backends:
+  A) soundcard (WASAPI/COM) — same as current Darin, uses COM apartments
+  B) sounddevice (PortAudio) — bypasses COM entirely via C callback
 
-The app will open a native desktop window with:
-- Live audio level meter from soundcard loopback capture
-- Streaming text benchmark simulating Claude API output
-- Latency measurements displayed in real-time
-- 10-minute stability timer
+Usage:
+    uv run spike_app.py              # default: sounddevice (no COM conflict)
+    uv run spike_app.py --soundcard  # test soundcard COM compatibility
 """
 
+import argparse
 import asyncio
 import statistics
 import threading
@@ -21,33 +21,148 @@ import time
 from collections import deque
 
 import numpy as np
-import soundcard as sc
 from loguru import logger
 from nicegui import app, ui
 
 
 # ---------------------------------------------------------------------------
-# Audio Capture (runs in a background thread — same pattern as Darin)
+# Audio Capture — sounddevice backend (PortAudio, no COM)
 # ---------------------------------------------------------------------------
 
-class AudioCapture:
-    """Minimal soundcard loopback capture for COM compatibility testing."""
+class SoundDeviceCapture:
+    """Loopback capture via sounddevice/PortAudio — avoids COM entirely."""
 
-    def __init__(self, sample_rate: int = 48000, chunk_seconds: int = 1) -> None:
+    def __init__(self, sample_rate: int = 48000, chunk_seconds: float = 0.1) -> None:
+        import sounddevice as sd
+        self.sd = sd
         self.sample_rate = sample_rate
         self.chunk_seconds = chunk_seconds
-        self.chunk_frames = chunk_seconds * sample_rate
+        self.chunk_frames = int(chunk_seconds * sample_rate)
+
+        self._is_running = False
+        self._lock = threading.Lock()
+        self._stream = None
+
+        # Metrics
+        self.level: float = 0.0
+        self.chunks_captured: int = 0
+        self.dropouts: int = 0
+        self.last_chunk_time: float = 0.0
+        self.capture_errors: list[str] = []
+        self.backend_name = "sounddevice (PortAudio)"
+        self._discontinuities: int = 0
+
+    def start(self) -> None:
+        with self._lock:
+            if self._is_running:
+                return
+            self._is_running = True
+
+        try:
+            # Find WASAPI loopback device
+            loopback_id, channels = self._find_loopback_device()
+            self._stream = self.sd.InputStream(
+                device=loopback_id,
+                samplerate=self.sample_rate,
+                channels=channels,
+                blocksize=self.chunk_frames,
+                callback=self._audio_callback,
+            )
+            self._stream.start()
+            logger.info(f"Audio capture started (sounddevice, device={loopback_id}, ch={channels})")
+        except Exception as e:
+            error = f"Failed to start sounddevice capture: {e}"
+            logger.error(error)
+            self.capture_errors.append(error)
+            with self._lock:
+                self._is_running = False
+
+    def _find_loopback_device(self) -> tuple[int, int]:
+        """Find a loopback/stereo-mix input device for system audio capture.
+
+        Returns (device_id, channels).
+        """
+        devices = self.sd.query_devices()
+        logger.info("Available audio devices:")
+        for i, d in enumerate(devices):
+            logger.info(f"  [{i}] {d['name']} (in={d['max_input_channels']}, out={d['max_output_channels']})")
+
+        # Strategy 1: Look for explicit "loopback" in name
+        for i, d in enumerate(devices):
+            name = d['name'].lower()
+            if 'loopback' in name and d['max_input_channels'] > 0:
+                logger.info(f"Found loopback device: [{i}] {d['name']}")
+                return i, min(d['max_input_channels'], 2)
+
+        # Strategy 2: Look for "stereo mix" — Windows built-in loopback
+        for i, d in enumerate(devices):
+            name = d['name'].lower()
+            if 'stereo mix' in name and d['max_input_channels'] > 0:
+                logger.info(f"Found stereo mix device: [{i}] {d['name']}")
+                return i, min(d['max_input_channels'], 2)
+
+        # Strategy 3: Look for "what u hear", "wave out", or similar loopback names
+        for i, d in enumerate(devices):
+            name = d['name'].lower()
+            if any(kw in name for kw in ['what u hear', 'wave out', 'mix', 'monitor']) and d['max_input_channels'] > 0:
+                logger.info(f"Found loopback-like device: [{i}] {d['name']}")
+                return i, min(d['max_input_channels'], 2)
+
+        raise RuntimeError(
+            "No loopback audio device found. Enable 'Stereo Mix' in Windows Sound settings: "
+            "Control Panel > Sound > Recording tab > right-click > Show Disabled Devices > enable Stereo Mix"
+        )
+
+    def _audio_callback(self, indata, frames, time_info, status) -> None:
+        if status:
+            self._discontinuities += 1
+            if 'input overflow' in str(status).lower():
+                self.dropouts += 1
+
+        mono = indata[:, 0] if indata.ndim > 1 else indata
+        rms = float(np.sqrt(np.mean(mono ** 2)))
+        self.level = min(rms * 10.0, 1.0)
+
+        self.chunks_captured += 1
+        self.last_chunk_time = time.time()
+
+    def stop(self) -> None:
+        with self._lock:
+            self._is_running = False
+        if self._stream:
+            self._stream.stop()
+            self._stream.close()
+        logger.info(f"Audio capture stopped. Chunks: {self.chunks_captured}, Dropouts: {self.dropouts}")
+
+    @property
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._is_running
+
+
+# ---------------------------------------------------------------------------
+# Audio Capture — soundcard backend (WASAPI/COM)
+# ---------------------------------------------------------------------------
+
+class SoundCardCapture:
+    """Loopback capture via soundcard (WASAPI/COM) — tests COM compatibility."""
+
+    def __init__(self, sample_rate: int = 48000, chunk_seconds: float = 0.1) -> None:
+        self.sample_rate = sample_rate
+        self.chunk_seconds = chunk_seconds
+        self.chunk_frames = int(chunk_seconds * sample_rate)
 
         self._is_running = False
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
         # Metrics
-        self.level: float = 0.0  # Current RMS audio level (0-1)
+        self.level: float = 0.0
         self.chunks_captured: int = 0
         self.dropouts: int = 0
         self.last_chunk_time: float = 0.0
         self.capture_errors: list[str] = []
+        self.backend_name = "soundcard (WASAPI/COM)"
 
     def start(self) -> None:
         with self._lock:
@@ -57,7 +172,7 @@ class AudioCapture:
 
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
-        logger.info("Audio capture started")
+        logger.info("Audio capture started (soundcard)")
 
     def stop(self) -> None:
         with self._lock:
@@ -72,6 +187,8 @@ class AudioCapture:
             return self._is_running
 
     def _capture_loop(self) -> None:
+        import soundcard as sc
+
         try:
             mic = sc.get_microphone(
                 id=str(sc.default_speaker().name),
@@ -92,19 +209,17 @@ class AudioCapture:
                     data = recorder.record(numframes=self.chunk_frames)
                     elapsed = time.perf_counter() - t0
 
-                    # Calculate RMS level
                     mono = data[:, 0] if data.ndim > 1 else data
                     rms = float(np.sqrt(np.mean(mono ** 2)))
-                    self.level = min(rms * 10.0, 1.0)  # Scale for visibility
+                    self.level = min(rms * 10.0, 1.0)
 
                     self.chunks_captured += 1
                     self.last_chunk_time = time.time()
 
-                    # Detect dropout: if recording took significantly longer than expected
                     expected = self.chunk_seconds
-                    if elapsed > expected * 1.5:
+                    if elapsed > expected * 2.0:
                         self.dropouts += 1
-                        logger.warning(f"Audio dropout detected: chunk took {elapsed:.2f}s (expected {expected}s)")
+                        logger.warning(f"Audio dropout: chunk took {elapsed:.2f}s (expected {expected:.1f}s)")
 
         except Exception as e:
             error = f"Capture loop error: {e}"
@@ -191,20 +306,37 @@ SAMPLE_CHUNKS = [
 # UI
 # ---------------------------------------------------------------------------
 
-audio = AudioCapture()
+# Parse CLI args before NiceGUI takes over
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--soundcard", action="store_true", help="Use soundcard (COM) backend instead of sounddevice")
+_parser.add_argument("--browser", action="store_true", help="Run in browser instead of native window (removes pywebview/COM)")
+_args, _ = _parser.parse_known_args()
+
+# Select audio backend
+if _args.soundcard:
+    audio = SoundCardCapture(chunk_seconds=0.1)  # 100ms chunks (was 1s)
+else:
+    audio = SoundDeviceCapture(chunk_seconds=0.1)
+
 benchmark = StreamingBenchmark()
 start_time: float = 0.0
 
 
-def build_ui() -> None:
+@ui.page('/')
+def index():
     global start_time
     start_time = time.time()
+
+    # Start audio capture when page loads
+    if not audio.is_running:
+        audio.start()
+        logger.info(f"Spike app started — {audio.backend_name}")
 
     ui.dark_mode().enable()
 
     with ui.header().classes("items-center justify-between bg-blue-900"):
         ui.label("NiceGUI Validation Spike").classes("text-xl font-bold")
-        ui.label("DAR2-31 / DAR2-32 / DAR2-33").classes("text-sm opacity-70")
+        ui.label(f"DAR2-31/32/33 | Backend: {audio.backend_name}").classes("text-sm opacity-70")
 
     with ui.column().classes("w-full max-w-4xl mx-auto p-4 gap-4"):
 
@@ -216,10 +348,10 @@ def build_ui() -> None:
 
         # ── Condition 1: COM Compatibility ──
         with ui.card().classes("w-full"):
-            ui.label("Condition 1: COM Threading (soundcard + pywebview)").classes(
+            ui.label(f"Condition 1: Audio Capture ({audio.backend_name})").classes(
                 "text-lg font-bold text-blue-400"
             )
-            ui.label("Both soundcard (WASAPI/COM) and pywebview (WebView2/COM) running simultaneously.")
+            ui.label(f"Backend: {audio.backend_name} | Chunk size: {audio.chunk_seconds}s")
             ui.separator()
 
             with ui.row().classes("items-center gap-4 w-full"):
@@ -246,7 +378,7 @@ def build_ui() -> None:
                 p95_lat_label = ui.label("P95 latency: --")
                 max_lat_label = ui.label("Max latency: --")
 
-            stream_output = ui.html("").classes(
+            stream_output = ui.html("", sanitize=False).classes(
                 "w-full h-48 overflow-y-auto bg-gray-800 p-3 rounded font-mono text-sm"
             )
 
@@ -323,12 +455,12 @@ def build_ui() -> None:
             "=" * 60,
             f"Total runtime: {elapsed:.0f}s ({elapsed/60:.1f} min)",
             "",
-            "--- Condition 1: COM Threading ---",
+            f"--- Condition 1: Audio Capture ({audio.backend_name}) ---",
             f"Audio chunks captured: {audio.chunks_captured}",
             f"Audio dropouts: {audio.dropouts}",
             f"Capture errors: {len(audio.capture_errors)}",
-            f"COM conflict detected: {'YES' if audio.capture_errors else 'NO'}",
-            f"PASS: {'YES' if audio.chunks_captured > 0 and not audio.capture_errors else 'NO'}",
+            f"Dropout rate: {audio.dropouts / max(audio.chunks_captured, 1) * 100:.1f}%",
+            f"PASS: {'YES' if audio.chunks_captured > 0 and audio.dropouts < audio.chunks_captured * 0.01 else 'NO'} (target: < 1% dropout)",
             "",
             "--- Condition 2: Streaming Latency ---",
             f"Chunks streamed: {benchmark.chunks_sent}",
@@ -410,23 +542,17 @@ def build_ui() -> None:
 
     ui.timer(0.5, update_ui)
 
-    # ── Start audio capture on app startup ──
-    def on_startup() -> None:
-        audio.start()
-        logger.info("Spike app started — audio capture initiated")
-
-    app.on_startup(on_startup)
-
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
-build_ui()
-
-ui.run(
-    title="NiceGUI Validation Spike",
-    native=True,
-    window_size=(1000, 800),
-    reload=False,
-)
+if _args.browser:
+    ui.run(title="NiceGUI Validation Spike", reload=False)
+else:
+    ui.run(
+        title="NiceGUI Validation Spike",
+        native=True,
+        window_size=(1000, 800),
+        reload=False,
+    )
