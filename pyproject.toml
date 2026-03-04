@@ -34,6 +34,7 @@ dependencies = [
     "ruff>=0.15.0",
     "mypy>=1.19.1",
     "loguru>=0.7.0",
+    "nicegui>=3.0.0",
 ]
 
 [dependency-groups]
@@ -85,5 +86,6 @@ module = [
     "markdown2.*",
     "scipy.*",
     "PyQt6.*",
+    "nicegui.*",
 ]
 ignore_missing_imports = true
