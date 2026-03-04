@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# Add project root to path so app_controller is importable
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app_controller import AppController
 

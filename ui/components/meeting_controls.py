@@ -11,8 +11,7 @@ class MeetingControls:
     def __init__(self, controller: object) -> None:
         self._controller = controller
 
-        with ui.card().classes("w-full"):
-            with ui.row().classes("w-full items-center gap-4"):
+        with ui.card().classes("w-full"), ui.row().classes("w-full items-center gap-4"):
                 # Start Meeting button — visible in IDLE only
                 self._start_btn = ui.button(
                     "Start Meeting",
