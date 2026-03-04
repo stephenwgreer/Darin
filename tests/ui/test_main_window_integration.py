@@ -426,7 +426,7 @@ class TestTemplateTypeTracking:
         """Test HTML state is reset before new processing."""
         # Set some state
         with main_window._html_state_lock:
-            main_window._html_buffer = "old data"
+            main_window._buffer_io.write("old data")
             main_window._current_element = {"type": "old"}
             main_window._is_first_update = False
 
@@ -434,7 +434,7 @@ class TestTemplateTypeTracking:
         main_window.clear_output()
 
         with main_window._html_state_lock:
-            assert main_window._html_buffer == ""
+            assert main_window._buffer_io.getvalue() == ""
             assert main_window._current_element is None
             assert main_window._is_first_update is True
 

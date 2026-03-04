@@ -49,7 +49,7 @@ from ui.controls_panel import ControlsPanel
 from ui.font_manager import FontManager
 from ui.html_templates import create_topic_section
 from ui.output_panel import OutputPanel
-from ui.stream_handlers import TEMPLATE_REGISTRY, route_stream_item
+from ui.stream_handlers import TEMPLATE_REGISTRY, parse_first_line_value, route_stream_item
 
 
 class MainWindow(QMainWindow):
@@ -109,15 +109,14 @@ class MainWindow(QMainWindow):
 
         # HTML streaming state (UI concern — stays here)
         self._html_state_lock = threading.Lock()
-        self._html_buffer = ""
         self._buffer_io = io.StringIO()
         self._current_element = None
         self._element_stack = []
         self._is_first_update = True
         self._current_list_items = []
 
-        # Sentiment analysis specific state
-        self._overall_sentiment_received = False
+        # First-line parser state (e.g., sentiment overall value)
+        self._first_line_received = False
 
         # Setup UI
         self.setup_ui()
@@ -507,11 +506,12 @@ class MainWindow(QMainWindow):
             template_type = self._setup_static_template(prompt_tmpl)
             # Reset HTML streaming state for new dynamic content
             with self._html_state_lock:
-                self._html_buffer = ""
+                self._buffer_io = io.StringIO()
                 self._current_element = None
                 self._element_stack = []
                 self._is_first_update = False
                 self._current_list_items = []
+                self._first_line_received = False
             # Store template_type on controller for on_stream_update to read
             self.controller.template_type = template_type
             return template_type
@@ -893,168 +893,134 @@ class MainWindow(QMainWindow):
         self.controls_panel.set_prompt_buttons_enabled(True)
 
     def _process_html_chunk(self, chunk):
-        """
-        Process a chunk of HTML text and return complete elements if found.
+        """Process a chunk of HTML text and return complete elements if found.
 
-        Fixes O(n²) bug by using io.StringIO for efficient buffer management.
+        Uses io.StringIO for O(n) append, then reads into a local string for
+        parsing. Only rebuilds _buffer_io when content is consumed.
         """
         with self._html_state_lock:
-            # Use shared buffer_io for O(n) append (fixes BUG-2026-02-09-005)
+            self._buffer_io.seek(0, 2)
             self._buffer_io.write(chunk)
-            self._html_buffer = self._buffer_io.getvalue()
+            buf = self._buffer_io.getvalue()
 
-            # Look for complete HTML elements
             while True:
-                # If we don't have a current element, look for the start of one
                 if not self._current_element:
-                    # Find the next opening tag for a topic section
-                    start_idx = self._html_buffer.find('<div class="topic-section">')
+                    start_idx = buf.find('<div class="topic-section">')
                     if start_idx == -1:
-                        # If no topic section, look for individual list items
-                        item_start = self._html_buffer.find('<li class="insight-item">')
+                        item_start = buf.find('<li class="insight-item">')
                         if item_start != -1:
-                            item_end = self._html_buffer.find("</li>", item_start)
+                            item_end = buf.find("</li>", item_start)
                             if item_end != -1:
-                                # Extract the complete list item
-                                item = self._html_buffer[item_start : item_end + 5]
-                                # Remove the processed item from buffer - update both representations
-                                self._html_buffer = (
-                                    self._html_buffer[:item_start]
-                                    + self._html_buffer[item_end + 5 :]
-                                )
-                                self._buffer_io = io.StringIO(self._html_buffer)
+                                item = buf[item_start : item_end + 5]
+                                buf = buf[:item_start] + buf[item_end + 5 :]
+                                self._buffer_io = io.StringIO(buf)
                                 return item
-                        break  # No new elements found
+                        break
 
-                    # Found a topic section, extract the title if present
-                    title_start = self._html_buffer.find('<h2 class="topic-title">', start_idx)
+                    title_start = buf.find('<h2 class="topic-title">', start_idx)
                     title_end = (
-                        self._html_buffer.find("</h2>", title_start) if title_start != -1 else -1
+                        buf.find("</h2>", title_start) if title_start != -1 else -1
                     )
 
                     if title_start != -1 and title_end != -1:
-                        # Found a title, extract the complete section
-                        section_end = self._html_buffer.find("</div>", title_end)
+                        section_end = buf.find("</div>", title_end)
                         if section_end != -1:
-                            # Extract the complete section
-                            section = self._html_buffer[start_idx : section_end + 6]
-                            # Remove the processed section from buffer - update both representations
-                            self._html_buffer = (
-                                self._html_buffer[:start_idx] + self._html_buffer[section_end + 6 :]
-                            )
-                            self._buffer_io = io.StringIO(self._html_buffer)
+                            section = buf[start_idx : section_end + 6]
+                            buf = buf[:start_idx] + buf[section_end + 6 :]
+                            self._buffer_io = io.StringIO(buf)
                             return section
                         else:
-                            # Title found but section not complete
                             self._current_element = {
                                 "type": "topic-section",
-                                "title": self._html_buffer[
+                                "title": buf[
                                     title_start + len('<h2 class="topic-title">') : title_end
                                 ].strip(),
                             }
                     else:
-                        # No title found yet, keep accumulating
                         self._current_element = {"type": "topic-section", "title": None}
 
                     self._element_stack.append(self._current_element)
 
-                # If we have a current element, try to complete it
                 if self._current_element and self._current_element["type"] == "topic-section":
-                    # Look for the end of the section
-                    end_idx = self._html_buffer.find("</div>", self._html_buffer.find("</div>") + 1)
+                    end_idx = buf.find("</div>", buf.find("</div>") + 1)
                     if end_idx != -1:
-                        # Section is complete, extract it all
-                        complete_element = self._html_buffer[: end_idx + 6]
-                        # Update both representations
-                        self._html_buffer = self._html_buffer[end_idx + 6 :]
-                        self._buffer_io = io.StringIO(self._html_buffer)
+                        complete_element = buf[: end_idx + 6]
+                        buf = buf[end_idx + 6 :]
+                        self._buffer_io = io.StringIO(buf)
                         self._current_element = None
                         self._element_stack.pop()
                         return complete_element
 
-                break  # No complete elements found
+                break
 
             return None
 
     @pyqtSlot(str)
     def on_stream_update(self, text):
-        """Handle streaming updates in a thread-safe way"""
+        """Handle streaming updates in a thread-safe way.
+
+        Uses TEMPLATE_REGISTRY for data-driven routing of all registered
+        template types (including sentiment-analysis via first_line_parser).
+        Falls back to _process_html_chunk() for unregistered templates.
+        """
         # Skip status messages
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
 
-        # Get template type from controller
         template_type = self.controller.template_type
 
-        # Handle sentiment analysis streaming (special case: first-line parsing)
-        if template_type == "sentiment-analysis":
-            overall_sentiment_value = None
+        # Registry-driven path (covers all registered templates)
+        if template_type in TEMPLATE_REGISTRY:
+            config = TEMPLATE_REGISTRY[template_type]
+            first_line_value = None
             items_to_append = []
 
             with self._html_state_lock:
-                if not self._overall_sentiment_received:
-                    lines = text.split("\n", 1)
-                    overall_sentiment = lines[0].strip()
-                    if overall_sentiment in ["Positive", "Negative", "Neutral"]:
-                        overall_sentiment_value = overall_sentiment
-                        self._overall_sentiment_received = True
-                        if len(lines) > 1:
-                            text = lines[1]
+                # Handle first-line parsing (e.g., sentiment overall value)
+                flp = config.get("first_line_parser")
+                if flp and not self._first_line_received:
+                    value, text = parse_first_line_value(text, config)
+                    if value:
+                        first_line_value = value
+                        self._first_line_received = True
+                        if not text.strip():
+                            # Only the first-line value, no list items yet
+                            pass
 
-            if overall_sentiment_value:
-                self.output_panel.set_overall_sentiment(overall_sentiment_value)
-                if "\n" not in text or text == overall_sentiment_value:
-                    return
-
-            # List items use the shared single-list handler
-            config = TEMPLATE_REGISTRY.get("follow-up-questions")  # same style
-            if config:
-                with self._html_state_lock:
+                if text.strip():
                     extracted = self._extract_html_items(text, config["pattern"])
                     for item in extracted:
                         result = route_stream_item(item, config)
                         if result:
                             items_to_append.append(result)
-                for list_id, item_html in items_to_append:
-                    self.output_panel.append_to_dynamic_content(item_html)
 
-        # Data-driven handler for all registered template types
-        elif template_type in TEMPLATE_REGISTRY:
-            config = TEMPLATE_REGISTRY[template_type]
-            items_to_append = []
-            with self._html_state_lock:
-                extracted = self._extract_html_items(text, config["pattern"])
-                for item in extracted:
-                    result = route_stream_item(item, config)
-                    if result:
-                        items_to_append.append(result)
+            # UI updates outside lock
+            if first_line_value and flp:
+                callback = getattr(self.output_panel, flp["callback_method"], None)
+                if callback:
+                    callback(first_line_value)
+
             for list_id, item_html in items_to_append:
                 if list_id == "dynamic-content":
                     self.output_panel.append_to_dynamic_content(item_html)
                 else:
                     self.output_panel.append_to_list_by_id(list_id, item_html)
 
-        # Default behavior for other template types
+        # Fallback for unregistered templates (topic-section HTML chunks)
         else:
             complete_element = self._process_html_chunk(text)
             if complete_element:
-                # Check is_first_update with lock
                 with self._html_state_lock:
                     is_first = self._is_first_update
                     if is_first:
                         self._is_first_update = False
 
-                # If this is the first update, set the output
                 if is_first:
                     self.output_panel.set_output(complete_element)
                 else:
-                    # For subsequent elements, we want to append only new content
-                    # First, check if this is a new section or a list item
                     if complete_element.startswith('<div class="topic-section">'):
-                        # This is a new section, append it
                         self.output_panel.append_output(complete_element)
                     elif complete_element.startswith('<li class="insight-item">'):
-                        # This is a list item, append it to the current list
                         self.output_panel.append_output(
                             f"""<div class="insight-block">
             <ul class="insight-list">
@@ -1077,12 +1043,12 @@ class MainWindow(QMainWindow):
         # Clear transcript (property handles locking)
         self.current_transcript = ""
         with self._html_state_lock:
-            self._html_buffer = ""
+            self._buffer_io = io.StringIO()
             self._current_element = None
             self._element_stack = []
             self._is_first_update = True
             self._current_list_items = []
-            self._overall_sentiment_received = False  # Reset sentiment flag
+            self._first_line_received = False
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""

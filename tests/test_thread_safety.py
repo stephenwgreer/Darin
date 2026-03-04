@@ -2,8 +2,7 @@
 Thread Safety Tests for BUG-2026-02-09-003
 
 Tests the thread safety fixes implemented to prevent race conditions
-in shared state access across audio/recorder.py, ui/main_window.py,
-and processing/controller.py.
+in shared state access across audio/recorder.py and ui/main_window.py.
 
 This test module verifies:
 1. is_recording property thread safety in ContinuousRecorder
@@ -27,11 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from PyQt6.QtWidgets import QApplication
 
-from api.client import ApiClient
-
 # Module imports
 from audio.recorder import ContinuousRecorder
-from processing.controller import AnalysisController
 from ui.main_window import MainWindow
 
 
@@ -57,22 +53,6 @@ def mock_recorder():
         mock_mic.return_value = Mock()
         recorder = ContinuousRecorder(buffer_minutes=3, chunk_seconds=1)
     return recorder
-
-
-@pytest.fixture
-def mock_api_client():
-    """Create a mocked ApiClient"""
-    client = Mock(spec=ApiClient)
-    client.transcribe_with_deepgram = Mock(return_value="Test transcript")
-    client.process_with_anthropic = Mock(return_value="Test result")
-    return client
-
-
-@pytest.fixture
-def analysis_controller(mock_api_client, mock_recorder):
-    """Create an AnalysisController with mocked dependencies"""
-    controller = AnalysisController(api_client=mock_api_client, recorder=mock_recorder)
-    return controller
 
 
 # ============================================================================
@@ -369,68 +349,7 @@ def test_is_processing_prevents_duplicate_operations(qapp):
 
 
 # ============================================================================
-# TEST 4: AnalysisController Thread Safety
-# ============================================================================
-
-
-def test_controller_current_transcript_thread_safety(analysis_controller):
-    """Verify AnalysisController current_transcript is thread-safe"""
-
-    def write_transcript(value):
-        """Write transcript value"""
-        for _ in range(50):
-            analysis_controller.current_transcript = value
-            time.sleep(0.0001)
-
-    def read_transcript():
-        """Read transcript value"""
-        results = []
-        for _ in range(50):
-            results.append(analysis_controller.current_transcript)
-            time.sleep(0.0001)
-        return results
-
-    # Spawn concurrent readers and writers
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = []
-
-        # 5 writer threads
-        for i in range(5):
-            futures.append(executor.submit(write_transcript, f"Transcript {i}"))
-
-        # 5 reader threads
-        for _ in range(5):
-            futures.append(executor.submit(read_transcript))
-
-        # All operations should complete without exception
-        for future in as_completed(futures):
-            future.result()
-
-
-def test_controller_processing_state_consistency(analysis_controller):
-    """Verify AnalysisController processing state is consistent"""
-
-    # Initially not processing
-    assert analysis_controller.is_processing == False
-
-    # Simulate multiple threads checking processing state
-    def check_processing_state():
-        """Check processing state multiple times"""
-        for _ in range(100):
-            state = analysis_controller.is_processing
-            assert isinstance(state, bool)
-            time.sleep(0.0001)
-
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(check_processing_state) for _ in range(10)]
-
-        # All checks should complete without exception
-        for future in as_completed(futures):
-            future.result()
-
-
-# ============================================================================
-# TEST 5: Stress Tests - No Deadlocks
+# TEST 4: Stress Tests - No Deadlocks
 # ============================================================================
 
 
@@ -493,7 +412,7 @@ def test_no_deadlock_mixed_operations(qapp):
 
 
 # ============================================================================
-# TEST 6: Regression Tests
+# TEST 5: Regression Tests
 # ============================================================================
 
 

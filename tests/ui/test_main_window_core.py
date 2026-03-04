@@ -102,7 +102,7 @@ class TestMainWindowInitialization:
 
     def test_html_state_initialized(self, main_window):
         """Test HTML streaming state is initialized."""
-        assert main_window._html_buffer == ""
+        assert main_window._buffer_io.getvalue() == ""
         assert main_window._current_element is None
         assert main_window._element_stack == []
         assert main_window._is_first_update is True
@@ -110,7 +110,7 @@ class TestMainWindowInitialization:
 
     def test_sentiment_state_initialized(self, main_window):
         """Test sentiment analysis state is initialized."""
-        assert main_window._overall_sentiment_received is False
+        assert main_window._first_line_received is False
 
 
 class TestThreadSafeProperties:
@@ -260,7 +260,7 @@ class TestClearOutput:
 
     def test_clear_output_resets_html_state(self, main_window):
         """Test clear_output resets HTML streaming state."""
-        main_window._html_buffer = "<li>Test</li>"
+        main_window._buffer_io.write("<li>Test</li>")
         main_window._current_element = {"type": "test"}
         main_window._element_stack = [{"type": "test"}]
         main_window._is_first_update = False
@@ -268,7 +268,7 @@ class TestClearOutput:
 
         main_window.clear_output()
 
-        assert main_window._html_buffer == ""
+        assert main_window._buffer_io.getvalue() == ""
         assert main_window._current_element is None
         assert main_window._element_stack == []
         assert main_window._is_first_update is True
@@ -276,6 +276,6 @@ class TestClearOutput:
 
     def test_clear_output_resets_sentiment_flag(self, main_window):
         """Test clear_output resets sentiment received flag."""
-        main_window._overall_sentiment_received = True
+        main_window._first_line_received = True
         main_window.clear_output()
-        assert main_window._overall_sentiment_received is False
+        assert main_window._first_line_received is False
