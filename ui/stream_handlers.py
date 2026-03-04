@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 
+
 # Default inline styles applied to single-list items
 _STYLE_BOLD = (
     'display: list-item !important; list-style-type: disc !important; '
