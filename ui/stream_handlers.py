@@ -44,6 +44,11 @@ _STYLE_NORMAL = (
 #
 # class-derived also has:
 #   list_suffix — appended to class name to form list ID
+#
+# Optional on any entry:
+#   first_line_parser — extract a value from the first line of stream text
+#     valid_values    — list of accepted string values
+#     callback_method — output_panel method name to call with the value
 
 TEMPLATE_REGISTRY: dict[str, dict] = {
     # --- Single-list templates (items → #dynamic-content) ---
@@ -70,6 +75,16 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "pattern": r"<li[^>]*>.*?</li>",
         "target": "dynamic-content",
         "style": "normal",
+    },
+    "sentiment-analysis": {
+        "type": "single-list",
+        "pattern": r"<li[^>]*>.*?</li>",
+        "target": "dynamic-content",
+        "style": "normal",
+        "first_line_parser": {
+            "valid_values": ["Positive", "Negative", "Neutral"],
+            "callback_method": "set_overall_sentiment",
+        },
     },
     # --- Multi-list templates (items routed by CSS class) ---
     "fill-gaps": {
@@ -186,6 +201,27 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "list_suffix": "-list",
     },
 }
+
+
+def parse_first_line_value(text: str, config: dict) -> tuple[str | None, str]:
+    """Extract a first-line value from stream text if the config has a first_line_parser.
+
+    Some templates (e.g. sentiment-analysis) expect the first line of the stream
+    to contain a standalone value (e.g. "Positive") before the HTML list items begin.
+    This function checks for that value and returns it along with the remaining text.
+
+    Returns:
+        (value, remaining_text) — value is None if no match or no parser configured.
+    """
+    flp = config.get("first_line_parser")
+    if not flp:
+        return None, text
+    lines = text.split("\n", 1)
+    value = lines[0].strip()
+    if value in flp["valid_values"]:
+        remaining = lines[1] if len(lines) > 1 else ""
+        return value, remaining
+    return None, text
 
 
 def _apply_single_list_style(item: str, style: str) -> str:

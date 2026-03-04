@@ -413,8 +413,7 @@ class TestTemplateTypeTracking:
 
     def test_template_type_set_during_setup(self, main_window):
         """Test _template_type is set during template setup."""
-        with main_window._html_state_lock:
-            main_window._template_type = None
+        main_window.controller.template_type = None
 
         # Setup template
         template_type = main_window._setup_static_template(TOPIC_SUMMARY_PROMPT)
@@ -426,7 +425,7 @@ class TestTemplateTypeTracking:
         """Test HTML state is reset before new processing."""
         # Set some state
         with main_window._html_state_lock:
-            main_window._html_buffer = "old data"
+            main_window._buffer_io.write("old data")
             main_window._current_element = {"type": "old"}
             main_window._is_first_update = False
 
@@ -434,7 +433,7 @@ class TestTemplateTypeTracking:
         main_window.clear_output()
 
         with main_window._html_state_lock:
-            assert main_window._html_buffer == ""
+            assert main_window._buffer_io.getvalue() == ""
             assert main_window._current_element is None
             assert main_window._is_first_update is True
 

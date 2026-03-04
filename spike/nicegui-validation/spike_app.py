@@ -22,7 +22,7 @@ from collections import deque
 
 import numpy as np
 from loguru import logger
-from nicegui import app, ui
+from nicegui import ui  # noqa: F401 - app used implicitly by nicegui
 
 
 # ---------------------------------------------------------------------------
@@ -481,7 +481,7 @@ def index():
         # Also write to file
         with open("spike_results.txt", "w") as f:
             f.write(report_text)
-        results_log.push(f"Results exported to spike_results.txt")
+        results_log.push("Results exported to spike_results.txt")
 
     def elapsed_str() -> str:
         e = int(time.time() - start_time)

@@ -302,14 +302,14 @@ class TestOnStreamUpdateSignal:
     def test_stream_update_without_template_type(self, main_window):
         """Test stream update when template_type not set."""
         # Should handle gracefully without template type
-        main_window._template_type = None
+        main_window.controller.template_type = None
         # Should not raise errors
         main_window.on_stream_update("<li>Test</li>")
 
     def test_stream_update_with_unknown_template(self, main_window):
         """Test stream update with unknown template type."""
         with main_window._html_state_lock:
-            main_window._template_type = "unknown-template"
+            main_window.controller.template_type = "unknown-template"
         # Should fall through to default behavior without errors
         main_window.on_stream_update("<li>Test</li>")
 
@@ -320,38 +320,38 @@ class TestSentimentAnalysisStreaming:
     def test_overall_sentiment_extraction(self, main_window):
         """Test extraction of overall sentiment value."""
         with main_window._html_state_lock:
-            main_window._template_type = "sentiment-analysis"
-            main_window._overall_sentiment_received = False
+            main_window.controller.template_type = "sentiment-analysis"
+            main_window._first_line_received = False
 
         # Send sentiment value
         main_window.on_stream_update("Positive\n")
 
         # Check sentiment was received
         with main_window._html_state_lock:
-            assert main_window._overall_sentiment_received is True
+            assert main_window._first_line_received is True
 
     def test_sentiment_only_accepted_values(self, main_window):
         """Test only Positive/Negative/Neutral are accepted as sentiment."""
         with main_window._html_state_lock:
-            main_window._template_type = "sentiment-analysis"
-            main_window._overall_sentiment_received = False
+            main_window.controller.template_type = "sentiment-analysis"
+            main_window._first_line_received = False
 
         # Send invalid sentiment
         main_window.on_stream_update("InvalidSentiment\n")
 
         # Should not be accepted
         with main_window._html_state_lock:
-            assert main_window._overall_sentiment_received is False
+            assert main_window._first_line_received is False
 
     def test_sentiment_list_items_after_value(self, main_window):
         """Test list items are processed after sentiment value."""
         with main_window._html_state_lock:
-            main_window._template_type = "sentiment-analysis"
-            main_window._overall_sentiment_received = False
+            main_window.controller.template_type = "sentiment-analysis"
+            main_window._first_line_received = False
 
         # Send sentiment
         main_window.on_stream_update("Positive\n<li>Moment 1</li>")
 
         # Sentiment should be received
         with main_window._html_state_lock:
-            assert main_window._overall_sentiment_received is True
+            assert main_window._first_line_received is True
