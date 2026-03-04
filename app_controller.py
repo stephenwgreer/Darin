@@ -182,8 +182,8 @@ class AppController:
             self._streaming_client = None
             return False
 
-        # Wire the recorder's on_chunk to forward audio to the streaming client
-        self.recorder._on_chunk = self._on_recorder_chunk
+        # Wire the recorder's chunk consumer to forward audio to the streaming client
+        self.recorder.add_chunk_consumer(self._on_recorder_chunk)
 
         # Start recording if not already
         if not self.recorder.is_recording:
@@ -205,8 +205,8 @@ class AppController:
         # Update current transcript with the accumulated result
         self.current_transcript = transcript
 
-        # Unhook the chunk callback
-        self.recorder._on_chunk = None
+        # Unhook the chunk consumer
+        self.recorder.remove_chunk_consumer(self._on_recorder_chunk)
         self._streaming_client = None
 
         # Notify via standard transcription callback

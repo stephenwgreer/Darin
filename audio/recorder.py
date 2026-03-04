@@ -31,8 +31,11 @@ class ContinuousRecorder:
         self._recording_lock: threading.Lock = threading.Lock()
         self.record_thread: threading.Thread | None = None
 
-        # Optional callback for real-time chunk forwarding (e.g. to WebSocket streaming)
-        self._on_chunk = on_chunk
+        # Fan-out consumers for real-time chunk forwarding (e.g. WebSocket streaming)
+        self._chunk_consumers: list[Callable[[np.ndarray], None]] = []
+        self._consumers_lock: threading.Lock = threading.Lock()
+        if on_chunk is not None:
+            self._chunk_consumers.append(on_chunk)
 
         # Setup microphone
         self.mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
@@ -48,6 +51,45 @@ class ContinuousRecorder:
         """Thread-safe setter for recording state"""
         with self._recording_lock:
             self._is_recording = value
+
+    def add_chunk_consumer(self, callback: Callable[[np.ndarray], None]) -> None:
+        """Register a consumer to receive audio chunks in real time.
+
+        Thread-safe. Duplicate registrations are silently ignored.
+        """
+        with self._consumers_lock:
+            if callback not in self._chunk_consumers:
+                self._chunk_consumers.append(callback)
+                logger.debug(f"Chunk consumer registered: {callback!r}")
+
+    def remove_chunk_consumer(self, callback: Callable[[np.ndarray], None]) -> None:
+        """Unregister a previously added consumer.
+
+        Thread-safe. Removing a consumer that was never added is a no-op.
+        """
+        with self._consumers_lock:
+            try:
+                self._chunk_consumers.remove(callback)
+                logger.debug(f"Chunk consumer removed: {callback!r}")
+            except ValueError:
+                pass  # Not registered — silently ignore
+
+    def _deliver_to_consumers(self, chunk: np.ndarray) -> None:
+        """Deliver an audio chunk to all registered consumers.
+
+        Iterates over a snapshot of the consumer list so that add/remove
+        operations from other threads during delivery are safe. Each
+        consumer is called inside its own try/except so that a failing
+        consumer cannot prevent others from receiving the chunk.
+        """
+        with self._consumers_lock:
+            consumers = list(self._chunk_consumers)
+
+        for consumer in consumers:
+            try:
+                consumer(chunk)
+            except Exception:
+                logger.exception(f"Chunk consumer {consumer!r} raised an exception")
 
     def start_recording(self) -> bool:
         """Start the recording process in a separate thread"""
@@ -84,11 +126,8 @@ class ContinuousRecorder:
                     # deque with maxlen automatically drops oldest when full
                     self.audio_buffer.append(data)
 
-                # Forward chunk to streaming client (outside buffer lock)
-                # Capture local reference to avoid TOCTOU race with clearing
-                chunk_callback = self._on_chunk
-                if chunk_callback:
-                    chunk_callback(data)
+                # Deliver to all registered consumers (outside buffer lock)
+                self._deliver_to_consumers(data)
 
     def save_buffer(self, filename: str | None = None) -> np.ndarray | None:
         """Save the current audio buffer to a file and return mono data"""
