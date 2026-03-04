@@ -413,8 +413,7 @@ class TestTemplateTypeTracking:
 
     def test_template_type_set_during_setup(self, main_window):
         """Test _template_type is set during template setup."""
-        with main_window._html_state_lock:
-            main_window._template_type = None
+        main_window.controller.template_type = None
 
         # Setup template
         template_type = main_window._setup_static_template(TOPIC_SUMMARY_PROMPT)

@@ -879,7 +879,7 @@ class MainWindow(QMainWindow):
         elif "result" in result:
             # For registered streaming types, don't overwrite formatted content
             template_type = self.controller.template_type
-            if template_type not in TEMPLATE_REGISTRY and template_type != "sentiment-analysis":
+            if template_type not in TEMPLATE_REGISTRY:
                 self.output_panel.set_output(result["result"])
         else:
             # Format the result as a topic section
@@ -974,10 +974,10 @@ class MainWindow(QMainWindow):
             config = TEMPLATE_REGISTRY[template_type]
             first_line_value = None
             items_to_append = []
+            flp = config.get("first_line_parser")
 
             with self._html_state_lock:
                 # Handle first-line parsing (e.g., sentiment overall value)
-                flp = config.get("first_line_parser")
                 if flp and not self._first_line_received:
                     value, text = parse_first_line_value(text, config)
                     if value:
