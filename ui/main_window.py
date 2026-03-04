@@ -52,6 +52,7 @@ from ui.controls_panel import ControlsPanel
 from ui.font_manager import FontManager
 from ui.html_templates import create_topic_section
 from ui.output_panel import OutputPanel
+from ui.stream_handlers import TEMPLATE_REGISTRY, route_stream_item
 
 
 class MainWindow(QMainWindow):
@@ -1206,433 +1207,53 @@ class MainWindow(QMainWindow):
         with self._html_state_lock:
             template_type = self._template_type if hasattr(self, "_template_type") else None
 
-        # Handle follow-up questions streaming
-        if template_type == "follow-up-questions":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Add formatting if needed (ensure class and style)
-                    if "class=" not in item:
-                        item = item.replace(
-                            "<li",
-                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
-                        )
-                    elif 'style="' not in item:
-                        item = item.replace(
-                            'class="',
-                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
-                        )
-
-                    items_to_append.append(item)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_dynamic_content(item)
-
-        # Handle sentiment analysis streaming
-        elif template_type == "sentiment-analysis":
+        # Handle sentiment analysis streaming (special case: first-line parsing)
+        if template_type == "sentiment-analysis":
             overall_sentiment_value = None
             items_to_append = []
 
             with self._html_state_lock:
                 if not self._overall_sentiment_received:
-                    # First line should be the overall sentiment
                     lines = text.split("\n", 1)
                     overall_sentiment = lines[0].strip()
                     if overall_sentiment in ["Positive", "Negative", "Neutral"]:
                         overall_sentiment_value = overall_sentiment
                         self._overall_sentiment_received = True
-                        # Process the rest of the text if any
                         if len(lines) > 1:
                             text = lines[1]
-                        else:
-                            # Will set sentiment below and return
-                            pass
-                    else:
-                        # If first line isn't sentiment, buffer it for list item processing
-                        pass  # Fall through to list item processing
 
-            # Update overall sentiment UI outside lock
             if overall_sentiment_value:
                 self.output_panel.set_overall_sentiment(overall_sentiment_value)
                 if "\n" not in text or text == overall_sentiment_value:
-                    return  # Wait for next chunk
+                    return
 
-            # Process subsequent lines as list items
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
+            # List items use the shared single-list handler
+            config = TEMPLATE_REGISTRY.get("follow-up-questions")  # same style
+            if config:
+                with self._html_state_lock:
+                    extracted = self._extract_html_items(text, config["pattern"])
+                    for item in extracted:
+                        result = route_stream_item(item, config)
+                        if result:
+                            items_to_append.append(result)
+                for list_id, item_html in items_to_append:
+                    self.output_panel.append_to_dynamic_content(item_html)
 
-                for item in extracted_items:
-                    # Add formatting if needed (ensure class and style)
-                    if "class=" not in item:
-                        item = item.replace(
-                            "<li",
-                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
-                        )
-                    elif 'style="' not in item:
-                        item = item.replace(
-                            'class="',
-                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"',
-                        )
-
-                    items_to_append.append(item)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_dynamic_content(item)
-
-        # Handle meeting summary streaming
-        elif template_type == "meeting-summary":
+        # Data-driven handler for all registered template types
+        elif template_type in TEMPLATE_REGISTRY:
+            config = TEMPLATE_REGISTRY[template_type]
             items_to_append = []
             with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Add formatting if needed (ensure class and style, no bold)
-                    if "class=" not in item:
-                        item = item.replace(
-                            "<li",
-                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-                    elif 'style="' not in item:
-                        item = item.replace(
-                            'class="',
-                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-
-                    items_to_append.append(item)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_dynamic_content(item)
-
-        # Handle practitioner insights streaming
-        elif template_type == "practitioner-insights":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Add formatting if needed (ensure class and style, no bold)
-                    if "class=" not in item:
-                        item = item.replace(
-                            "<li",
-                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-                    elif 'style="' not in item:
-                        item = item.replace(
-                            'class="',
-                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-
-                    items_to_append.append(item)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_dynamic_content(item)
-
-        # Handle topic summary streaming
-        elif template_type == "topic-summary":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Add formatting if needed (ensure class and style, no bold)
-                    if "class=" not in item:
-                        item = item.replace(
-                            "<li",
-                            '<li class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-                    elif 'style="' not in item:
-                        item = item.replace(
-                            'class="',
-                            'class="insight-item" style="display: list-item !important; list-style-type: disc !important;"',
-                        )
-
-                    items_to_append.append(item)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_dynamic_content(item)
-
-        # Handle Fill Gaps streaming
-        elif template_type == "fill-gaps":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if 'class="core-thinking"' in item:
-                        target_list_id = "core-thinking-list"
-                    elif 'class="gap-item"' in item:
-                        target_list_id = "gaps-list"
-                    elif 'class="recommendation-item"' in item:
-                        target_list_id = "recommendations-list"
-
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Brainstorm Questions streaming
-        elif template_type == "brainstorm":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if 'class="challenge-question"' in item:
-                        target_list_id = "challenge-questions-list"
-                    elif 'class="alternative-frame"' in item:
-                        target_list_id = "alternative-frames-list"
-                    elif 'class="provocative-idea"' in item:
-                        target_list_id = "provocative-ideas-list"
-
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Company Fit streaming
-        elif template_type == "company-fit":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(text, r"<li[^>]*>.*?</li>")
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if 'class="key-topic"' in item:
-                        target_list_id = "key-topics-list"
-                    elif 'class="viya-connection"' in item:
-                        target_list_id = "viya-connections-list"
-                    elif 'class="missing-consideration"' in item:
-                        target_list_id = "missing-considerations-list"
-
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Fact Checking streaming
-        elif template_type == "fact-check":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function with specific pattern (fixes O(n²) bug)
-                extracted_items = self._extract_html_items(
-                    text, r'<li class=["\']fact-check-item["\']>.*?</li>'
-                )
-
-                items_to_append.extend(extracted_items)
-
-            # Update UI without lock
-            for item in items_to_append:
-                self.output_panel.append_to_list_by_id("fact-check-list", item)
-
-        # Handle Answer Question streaming
-        elif template_type == "answer-question":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches any of the three class types
-                extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\'](?:answer-item|rationale-item|example-item)["\']>.*?</li>',
-                )
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if 'class="answer-item"' in item or "class='answer-item'" in item:
-                        target_list_id = "answer-list"
-                    elif 'class="rationale-item"' in item or "class='rationale-item'" in item:
-                        target_list_id = "rationale-list"
-                    elif 'class="example-item"' in item or "class='example-item'" in item:
-                        target_list_id = "examples-list"
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Problem Solving / Issue Tree Logic streaming
-        elif template_type == "problem-solving":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches all 9 class types
-                extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\'](?:core-problem|logic-tree-component|evaluation-(?:mece|assumption|logic|data)|challenge-(?:weakness|question|reframe))["\']>.*?</li>',
-                )
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if 'class="core-problem"' in item or "class='core-problem'" in item:
-                        target_list_id = "core-problem-list"
-                    elif (
-                        'class="logic-tree-component"' in item
-                        or "class='logic-tree-component'" in item
-                    ):
-                        target_list_id = "logic-tree-list"
-                    elif any(
-                        cls in item
-                        for cls in [
-                            "evaluation-mece",
-                            "evaluation-assumption",
-                            "evaluation-logic",
-                            "evaluation-data",
-                        ]
-                    ):
-                        target_list_id = "evaluation-list"
-                    elif any(
-                        cls in item
-                        for cls in ["challenge-weakness", "challenge-question", "challenge-reframe"]
-                    ):
-                        target_list_id = "challenge-list"
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle SCQA Framework streaming
-        elif template_type == "scqa":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches all 6 SCQA class types
-                extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\']scqa-(?:situation|complication|question|answer|assessment|roadmap)["\']>.*?</li>',
-                )
-
-                for item in extracted_items:
-                    # Extract class name and map to list ID
-                    # Find the class attribute value
-                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
-                    if class_match:
-                        target_list_id = f"{class_match.group(1)}-list"
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Hypothesis Driven Thinking streaming
-        elif template_type == "hypothesis-driven":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches all 9 hypothesis class types
-                extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\']hypothesis-(?:problem|hypothesis|evidence-(?:support|contradict|missing)|priority|testing|decision|assessment)["\']>.*?</li>',
-                )
-
-                for item in extracted_items:
-                    # Determine target list based on class
-                    target_list_id = None
-                    if "hypothesis-problem" in item:
-                        target_list_id = "hypothesis-problem-list"
-                    elif "hypothesis-hypothesis" in item:
-                        target_list_id = "hypothesis-hypothesis-list"
-                    elif any(
-                        cls in item
-                        for cls in [
-                            "hypothesis-evidence-support",
-                            "hypothesis-evidence-contradict",
-                            "hypothesis-evidence-missing",
-                        ]
-                    ):
-                        target_list_id = "hypothesis-evidence-list"
-                    elif "hypothesis-priority" in item:
-                        target_list_id = "hypothesis-priority-list"
-                    elif "hypothesis-testing" in item:
-                        target_list_id = "hypothesis-testing-list"
-                    elif "hypothesis-decision" in item:
-                        target_list_id = "hypothesis-decision-list"
-                    elif "hypothesis-assessment" in item:
-                        target_list_id = "hypothesis-assessment-list"
-
-                    # Append the complete item to the correct list
-                    if target_list_id:
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle First Principles Thinking streaming
-        elif template_type == "first-principles":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches all 7 first-principles class types
-                extracted_items = self._extract_html_items(
-                    text,
-                    r'<li class=["\']fp-(?:conventional|fundamental|assumption|rebuild|insight|implementation|metacognitive)["\']>.*?</li>',
-                )
-
-                for item in extracted_items:
-                    # Extract class name and map to list ID
-                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
-                    if class_match:
-                        target_list_id = f"{class_match.group(1)}-list"
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
-
-        # Handle Reframing streaming
-        elif template_type == "reframing":
-            items_to_append = []
-            with self._html_state_lock:
-                # Use shared extraction function (fixes O(n²) bug)
-                # Pattern matches both reframing class types
-                extracted_items = self._extract_html_items(
-                    text, r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>'
-                )
-
-                for item in extracted_items:
-                    # Extract class name and map to list ID
-                    class_match = re.search(r'class=["\']([^"\']+)["\']', item)
-                    if class_match:
-                        target_list_id = f"{class_match.group(1)}-list"
-                        items_to_append.append((target_list_id, item))
-
-            # Update UI without lock
-            for target_list_id, item in items_to_append:
-                self.output_panel.append_to_list_by_id(target_list_id, item)
+                extracted = self._extract_html_items(text, config["pattern"])
+                for item in extracted:
+                    result = route_stream_item(item, config)
+                    if result:
+                        items_to_append.append(result)
+            for list_id, item_html in items_to_append:
+                if list_id == "dynamic-content":
+                    self.output_panel.append_to_dynamic_content(item_html)
+                else:
+                    self.output_panel.append_to_list_by_id(list_id, item_html)
 
         # Default behavior for other template types
         else:
