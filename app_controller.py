@@ -14,10 +14,12 @@ import threading
 import time
 from collections.abc import Callable
 
+import numpy as np
 from loguru import logger
 
 import config
 from api.client import ApiClient
+from api.deepgram_streaming import DeepgramStreamingClient
 from audio.recorder import ContinuousRecorder
 
 
@@ -39,6 +41,10 @@ class AppController:
         on_processing_complete: Callable[[dict], None] | None = None,
         on_progress: Callable[[str], None] | None = None,
         on_stream_chunk: Callable[[str], None] | None = None,
+        # Live streaming callbacks (DAR2-23)
+        on_interim_transcript: Callable[[str], None] | None = None,
+        on_final_transcript: Callable[[str], None] | None = None,
+        on_utterance_end: Callable[[str], None] | None = None,
     ) -> None:
         # Callbacks (UI layer provides these)
         self._on_recording_started = on_recording_started
@@ -48,9 +54,17 @@ class AppController:
         self._on_progress = on_progress
         self._on_stream_chunk = on_stream_chunk
 
+        # Live streaming callbacks (DAR2-23)
+        self._on_interim_transcript = on_interim_transcript
+        self._on_final_transcript = on_final_transcript
+        self._on_utterance_end = on_utterance_end
+
         # Backend components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
         self.api_client = ApiClient()
+
+        # Live streaming client (DAR2-23)
+        self._streaming_client: DeepgramStreamingClient | None = None
 
         # Thread-safe state
         self._transcript_lock = threading.Lock()
@@ -136,7 +150,93 @@ class AppController:
         return self.stop_recording()
 
     # ------------------------------------------------------------------
-    # Transcription
+    # Live streaming (DAR2-23)
+    # ------------------------------------------------------------------
+
+    def start_streaming(self) -> bool:
+        """Start live WebSocket transcription alongside recording.
+
+        Creates a DeepgramStreamingClient connected to Deepgram, then starts
+        the recorder with an on_chunk callback that forwards audio to the
+        WebSocket. Returns True on success.
+        """
+        if self._streaming_client is not None and self._streaming_client.is_connected:
+            logger.warning("Streaming already active")
+            return False
+
+        logger.info("Starting live streaming transcription")
+
+        # Create streaming client
+        self._streaming_client = DeepgramStreamingClient(
+            api_key=self.api_client.deepgram_api_key,
+            sample_rate=self.recorder.sample_rate,
+            on_interim_transcript=self._on_interim_transcript,
+            on_final_transcript=self._on_final_transcript,
+            on_utterance_end=self._handle_utterance_end,
+            on_error=self._on_streaming_error,
+        )
+        self._streaming_client.connect()
+
+        if not self._streaming_client.is_connected:
+            logger.error("Failed to establish Deepgram WebSocket connection")
+            self._streaming_client = None
+            return False
+
+        # Wire the recorder's on_chunk to forward audio to the streaming client
+        self.recorder._on_chunk = self._on_recorder_chunk
+
+        # Start recording if not already
+        if not self.recorder.is_recording:
+            self.start_recording()
+
+        return True
+
+    def stop_streaming(self) -> str:
+        """Stop live WebSocket streaming. Returns the accumulated transcript."""
+        if self._streaming_client is None:
+            return ""
+
+        logger.info("Stopping live streaming transcription")
+
+        # Disconnect streaming
+        self._streaming_client.disconnect()
+        transcript = self._streaming_client.get_full_transcript()
+
+        # Update current transcript with the accumulated result
+        self.current_transcript = transcript
+
+        # Unhook the chunk callback
+        self.recorder._on_chunk = None
+        self._streaming_client = None
+
+        # Notify via standard transcription callback
+        if self._on_transcription_complete and transcript:
+            self._on_transcription_complete(transcript)
+
+        return transcript
+
+    @property
+    def is_streaming(self) -> bool:
+        """Whether live WebSocket streaming is active."""
+        return self._streaming_client is not None and self._streaming_client.is_connected
+
+    def _on_recorder_chunk(self, audio_chunk: np.ndarray) -> None:
+        """Forward audio chunks from the recorder to the streaming client."""
+        if self._streaming_client is not None:
+            self._streaming_client.send_audio(audio_chunk)
+
+    def _handle_utterance_end(self, full_transcript: str) -> None:
+        """Handle utterance end — update current transcript."""
+        self.current_transcript = full_transcript
+        if self._on_utterance_end:
+            self._on_utterance_end(full_transcript)
+
+    def _on_streaming_error(self, error: str) -> None:
+        """Handle streaming errors."""
+        logger.error(f"Streaming error: {error}")
+
+    # ------------------------------------------------------------------
+    # Transcription (batch/REST)
     # ------------------------------------------------------------------
 
     def transcribe_buffer(self) -> None:

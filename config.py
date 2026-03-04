@@ -22,6 +22,11 @@ BUFFER_MINUTES: Final[int] = 5
 SAMPLE_RATE: Final[int] = 48000
 CHUNK_SECONDS: Final[int] = 1
 
+# Deepgram Streaming Settings
+DEEPGRAM_MODEL: Final[str] = "nova-2"
+DEEPGRAM_LANGUAGE: Final[str] = "en-US"
+DEEPGRAM_SAMPLE_RATE: Final[int] = 48000
+
 # Model Settings
 CLAUDE_MODEL: Final[str] = "claude-sonnet-4-5-20250929"
 MAX_TOKENS: Final[int] = 4096
