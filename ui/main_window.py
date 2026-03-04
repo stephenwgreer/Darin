@@ -3,7 +3,6 @@ import io
 import json
 import re
 import threading
-import time
 from pathlib import Path
 
 from loguru import logger
@@ -20,9 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-import config
-from api.client import ApiClient
-from audio.recorder import ContinuousRecorder
+from app_controller import AppController
 
 # Import from new logic_templates file
 from prompts.logic_templates import (
@@ -96,29 +93,28 @@ class MainWindow(QMainWindow):
         app_icon = QIcon("assets/Darin_ICON.png")
         self.setWindowIcon(app_icon)
 
-        # Initialize components
-        self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
-        self.api_client = ApiClient()
+        # Initialize AppController with callback→signal bridge.
+        # Callbacks are invoked from background threads; they emit Qt signals
+        # which are queued to the main thread automatically.
+        self.controller = AppController(
+            on_recording_started=lambda: self.recording_started.emit(),
+            on_recording_stopped=lambda: self.recording_stopped.emit(),
+            on_transcription_complete=lambda text: self.transcription_complete.emit(text),
+            on_processing_complete=lambda result: self.processing_complete.emit(result),
+            on_progress=lambda msg: self.progress_update.emit(msg),
+            on_stream_chunk=lambda text: self.stream_update.emit(text),
+        )
 
-        logger.info("Components initialized", buffer_minutes=config.BUFFER_MINUTES)
+        logger.info("AppController initialized")
 
-        # Threading locks for shared state protection
-        self._transcript_lock = threading.Lock()
-        self._processing_lock = threading.Lock()
+        # HTML streaming state (UI concern — stays here)
         self._html_state_lock = threading.Lock()
-
-        # Thread-safe shared state (private variables with property access)
-        self._current_transcript = ""
-        self._is_processing = False
-
-        # HTML streaming state
-        self._html_buffer = ""  # Buffer for accumulating HTML chunks
-        self._buffer_io = io.StringIO()  # Efficient buffer for O(n) string building
-        self._current_element = None  # Track the current HTML element being built
-        self._element_stack = []  # Stack to track nested HTML elements
-        self._is_first_update = True  # Track if this is the first stream update
-        self._current_list_items = []  # Track list items for the current section
-        self._template_type = None  # Track the current template type
+        self._html_buffer = ""
+        self._buffer_io = io.StringIO()
+        self._current_element = None
+        self._element_stack = []
+        self._is_first_update = True
+        self._current_list_items = []
 
         # Sentiment analysis specific state
         self._overall_sentiment_received = False
@@ -216,30 +212,22 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-    # Thread-safe properties for shared state
+    # Delegate thread-safe state to AppController
     @property
     def current_transcript(self):
-        """Thread-safe property for current transcript"""
-        with self._transcript_lock:
-            return self._current_transcript
+        return self.controller.current_transcript
 
     @current_transcript.setter
     def current_transcript(self, value):
-        """Thread-safe setter for current transcript"""
-        with self._transcript_lock:
-            self._current_transcript = value
+        self.controller.current_transcript = value
 
     @property
     def is_processing(self):
-        """Thread-safe property for processing state"""
-        with self._processing_lock:
-            return self._is_processing
+        return self.controller.is_processing
 
     @is_processing.setter
     def is_processing(self, value):
-        """Thread-safe setter for processing state"""
-        with self._processing_lock:
-            self._is_processing = value
+        self.controller.is_processing = value
 
     def _extract_html_items(self, text: str, pattern: str = r"<li[^>]*>(.*?)</li>") -> list[str]:
         """
@@ -480,93 +468,29 @@ class MainWindow(QMainWindow):
         self.stream_update.connect(self.on_stream_update)
 
     def toggle_recording(self):
-        if not self.recorder.is_recording:
-            # Start recording
-            logger.info("Starting audio recording")
-            if self.recorder.start_recording():
-                logger.info("Audio recording started successfully")
-                self.recording_started.emit()
-                # Update UI to show recording state
+        if not self.controller.is_recording:
+            if self.controller.start_recording():
                 self.controls_panel.set_recording_active(True)
-            else:
-                logger.error("Failed to start audio recording")
         else:
-            # Stop recording
-            logger.info("Stopping audio recording")
-            if self.recorder.stop_recording():
-                logger.info("Audio recording stopped successfully")
-                self.recording_stopped.emit()
-                # Update UI to show stopped state
+            if self.controller.stop_recording():
                 self.controls_panel.set_recording_active(False)
-            else:
-                logger.error("Failed to stop audio recording")
 
     def transcribe_buffer(self):
         """Transcribe the current audio buffer"""
-        logger.info("Transcribe buffer requested")
-        # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_button.setEnabled(False)
         self.controls_panel.transcribe_button.setText("Transcribing...")
 
-        # Get audio data from buffer
-        audio_data = self.recorder.save_buffer()
-
-        if audio_data is None:
-            logger.warning("Transcription failed: No audio in buffer")
+        if self.controller.buffer_seconds == 0:
             self.controls_panel.transcribe_button.setText("Transcribe Buffer")
             self.controls_panel.transcribe_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "No audio in buffer to transcribe")
             return
 
-        logger.info(
-            "Starting transcription from buffer",
-            buffer_size_bytes=len(audio_data),
-            sample_rate=self.recorder.sample_rate,
-        )
-        # Start transcription in a separate thread
-        threading.Thread(
-            target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
-        ).start()
-
-    def _transcribe_thread(self, audio_data, sample_rate):
-        """Background thread for transcription - emits signal, doesn't write directly"""
-        start_time = time.perf_counter()
-        logger.info(
-            "Transcription thread started",
-            buffer_size_bytes=len(audio_data),
-            sample_rate=sample_rate,
-        )
-        try:
-            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                "Transcription complete",
-                transcript_length=len(text),
-                duration_ms=f"{duration_ms:.2f}",
-            )
-            # Emit signal to update transcript in GUI thread (thread-safe)
-            self.transcription_complete.emit(text)
-        except Exception as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                "Transcription failed",
-                error=str(e),
-                duration_ms=f"{duration_ms:.2f}",
-                exc_info=True,
-            )
-            self.transcription_complete.emit(f"Transcription error: {str(e)}")
+        self.controller.transcribe_buffer()
 
     def run_prompt_with_auto_transcribe(self, prompt_template=None, title=None):
-        """Auto transcribe and then run a specific prompt"""
-        logger.info("Prompt with auto-transcribe requested", title=title)
-        # Atomic check-and-set for processing state
-        with self._processing_lock:
-            if self._is_processing:
-                logger.warning("Prompt request rejected: already processing")
-                return
-            self._is_processing = True
-
-        # Disable all prompt buttons
+        """Auto transcribe and then run a specific prompt via AppController"""
+        # Disable all prompt buttons (UI concern)
         self.controls_panel.set_prompt_buttons_enabled(False)
 
         # Clear output before running new prompt
@@ -576,153 +500,27 @@ class MainWindow(QMainWindow):
         if title:
             self.output_panel.set_title(title)
 
-        # Update output to show progress
         self.output_panel.set_output("Capturing audio and transcribing...")
 
-        # If we already have a transcript, use it directly
-        # Read atomically to avoid race condition
-        with self._transcript_lock:
-            has_transcript = bool(self._current_transcript)
-            transcript_copy = self._current_transcript if has_transcript else None
-
-        if has_transcript:
-            self._run_specific_prompt(transcript_copy, prompt_template)
-            return
-
-        # Otherwise get audio data
-        audio_data = None  # Initialize audio_data
-        # For specific prompts, only use last 30s if no transcript exists
-        use_last_30s = prompt_template in [
-            PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-            ANSWER_QUESTION_PROMPT,
-        ]
-
-        if use_last_30s and not self.current_transcript:
-            audio_data = self.recorder.get_last_n_seconds(30)
-            if audio_data is None:
-                logger.warning("Processing failed: Not enough audio in buffer (last 30s)")
-                QMessageBox.warning(
-                    self, "Processing Error", "Not enough audio (last 30s) in buffer to process"
-                )
-                self.controls_panel.set_prompt_buttons_enabled(True)
-                self.is_processing = False  # Property handles locking
-                return  # Return early if 30s failed
-
-        # If we didn't get 30s audio (either not applicable or it succeeded but we proceed),
-        # get the full buffer instead.
-        if audio_data is None:  # This means we need the full buffer
-            audio_data = self.recorder.save_buffer()
-            if audio_data is None:
-                # Check if getting the full buffer failed
-                logger.warning("Processing failed: No audio in buffer")
-                QMessageBox.warning(self, "Processing Error", "No audio in buffer to process")
-                self.controls_panel.set_prompt_buttons_enabled(True)
-                self.is_processing = False  # Property handles locking
-                return  # Return early if full buffer failed
-
-        # We should now have valid audio_data (either 30s or full buffer)
-        # Start transcription and processing in a separate thread
-        threading.Thread(
-            target=self._transcribe_and_process_thread,
-            args=(audio_data, self.recorder.sample_rate, prompt_template),
-        ).start()
-
-    def _transcribe_and_process_thread(self, audio_data, sample_rate, prompt_template):
-        """Background thread for transcription followed by processing with a specific prompt"""
-        start_time = time.perf_counter()
-        logger.info(
-            "Transcribe and process thread started",
-            buffer_size_bytes=len(audio_data),
-            sample_rate=sample_rate,
-        )
-        try:
-            # First transcribe
-            self.progress_update.emit("Transcribing audio...")
-            text = self.api_client.transcribe_with_deepgram(audio_data, sample_rate)
-            transcribe_duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                "Transcription phase complete",
-                transcript_length=len(text),
-                duration_ms=f"{transcribe_duration_ms:.2f}",
-            )
-
-            # Update UI with transcript via signal (thread-safe)
-            # The slot handler will set self.current_transcript
-            self.transcription_complete.emit(text)
-
-            # Then process with the specific prompt
-            self._run_specific_prompt(text, prompt_template)
-            total_duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                "Transcribe and process complete", total_duration_ms=f"{total_duration_ms:.2f}"
-            )
-        except Exception as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                "Transcribe and process failed",
-                error=str(e),
-                duration_ms=f"{duration_ms:.2f}",
-                exc_info=True,
-            )
-            self.processing_complete.emit({"error": str(e)})
-        finally:
-            # Emit signal to update processing state in GUI thread (thread-safe)
-            # We need to emit processing_complete which will handle this
-            pass  # is_processing will be set to False by on_processing_complete slot
-
-    def _run_specific_prompt(self, transcript, prompt_template):
-        """Process transcript with a specific prompt template"""
-        start_time = time.perf_counter()
-        logger.info(
-            "Starting LLM processing",
-            transcript_length=len(transcript),
-            template_type=str(prompt_template)[:50],
-        )
-        try:
-            # Update output to show progress
-            self.progress_update.emit("Processing with Claude...")
-
-            # Set up the static template based on the prompt type
-            template_type = self._setup_static_template(prompt_template)
-            logger.info("Template set up", template_type=template_type)
-
+        def on_template_setup(prompt_tmpl):
+            """Called from background thread — sets up static HTML template."""
+            template_type = self._setup_static_template(prompt_tmpl)
             # Reset HTML streaming state for new dynamic content
             with self._html_state_lock:
                 self._html_buffer = ""
                 self._current_element = None
                 self._element_stack = []
-                self._is_first_update = False  # Already set up the template
+                self._is_first_update = False
                 self._current_list_items = []
-                self._template_type = template_type  # Store the template type for use in streaming
+            # Store template_type on controller for on_stream_update to read
+            self.controller.template_type = template_type
+            return template_type
 
-            def handle_stream(text):
-                """Callback to handle streaming text"""
-                self.stream_update.emit(text)
-
-            # Process with the template
-            result = self.api_client.process_with_anthropic(
-                transcript, prompt_template, stream=True, callback=handle_stream
-            )
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.info(
-                "LLM processing complete",
-                template_type=template_type,
-                duration_ms=f"{duration_ms:.2f}",
-                result_length=len(str(result)),
-            )
-
-            # Final update with complete response
-            self.processing_complete.emit({"result": result})
-        except Exception as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                "LLM processing failed",
-                template_type=str(prompt_template)[:50],
-                error=str(e),
-                duration_ms=f"{duration_ms:.2f}",
-                exc_info=True,
-            )
-            self.processing_complete.emit({"error": str(e)})
+        self.controller.run_prompt(
+            prompt_template,
+            title=title,
+            on_template_setup=on_template_setup,
+        )
 
     def _setup_static_template(self, prompt_template):
         """Set up a static template based on the prompt type"""
@@ -1043,7 +841,7 @@ class MainWindow(QMainWindow):
     def on_recording_stopped(self):
         # Keep buttons enabled even when recording stops
         # as long as we have buffer data
-        if self.recorder.get_buffer_seconds() > 0:
+        if self.controller.buffer_seconds > 0:
             self.controls_panel.transcribe_button.setEnabled(True)
             self.controls_panel.set_prompt_buttons_enabled(True)
 
@@ -1077,29 +875,11 @@ class MainWindow(QMainWindow):
 
         if "error" in result:
             logger.error("Processing completed with error", error=result["error"])
-            # Show error using template
             self.output_panel.set_error(result["error"])
         elif "result" in result:
-            # For specific streaming types, we don't want to overwrite our formatted content
-            # as the final output might be raw text without the template structure.
-            if not hasattr(self, "_template_type") or self._template_type not in [
-                "follow-up-questions",
-                "sentiment-analysis",
-                "meeting-summary",
-                "practitioner-insights",
-                "topic-summary",
-                "fill-gaps",
-                "brainstorm",
-                "company-fit",
-                "fact-check",
-                "answer-question",
-                "problem-solving",
-                "scqa",
-                "hypothesis-driven",
-                "first-principles",
-                "reframing",
-            ]:
-                # Show result text for other non-streaming or differently handled types
+            # For registered streaming types, don't overwrite formatted content
+            template_type = self.controller.template_type
+            if template_type not in TEMPLATE_REGISTRY and template_type != "sentiment-analysis":
                 self.output_panel.set_output(result["result"])
         else:
             # Format the result as a topic section
@@ -1203,9 +983,8 @@ class MainWindow(QMainWindow):
         if text.startswith("Generating insights") or text.startswith("Processing topic"):
             return
 
-        # Get template type with lock
-        with self._html_state_lock:
-            template_type = self._template_type if hasattr(self, "_template_type") else None
+        # Get template type from controller
+        template_type = self.controller.template_type
 
         # Handle sentiment analysis streaming (special case: first-line parsing)
         if template_type == "sentiment-analysis":
@@ -1307,27 +1086,13 @@ class MainWindow(QMainWindow):
 
     def transcribe_last_30_seconds(self):
         """Transcribe only the last 30 seconds of audio"""
-        logger.info("Transcribe last 30 seconds requested")
-        # Disable button to prevent multiple clicks
         self.controls_panel.transcribe_last_30_button.setEnabled(False)
         self.controls_panel.transcribe_last_30_button.setText("Transcribing...")
 
-        # Get last 30 seconds of audio data
-        audio_data = self.recorder.get_last_n_seconds(30)
-
-        if audio_data is None:
-            logger.warning("Transcription failed: Not enough audio in buffer (last 30s)")
+        if self.controller.buffer_seconds == 0:
             self.controls_panel.transcribe_last_30_button.setText("Transcribe Last 30s")
             self.controls_panel.transcribe_last_30_button.setEnabled(True)
             QMessageBox.warning(self, "Transcription Error", "Not enough audio in buffer")
             return
 
-        logger.info(
-            "Starting transcription from last 30s",
-            buffer_size_bytes=len(audio_data),
-            sample_rate=self.recorder.sample_rate,
-        )
-        # Start transcription in a separate thread
-        threading.Thread(
-            target=self._transcribe_thread, args=(audio_data, self.recorder.sample_rate)
-        ).start()
+        self.controller.transcribe_last_n_seconds(30)
