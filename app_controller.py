@@ -10,6 +10,7 @@ consume the same interface.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections.abc import Callable
@@ -80,6 +81,14 @@ class AppController:
         self._meeting_store: MeetingStore | None = None
         self._active_meeting_id: int | None = None
 
+        # Meeting state machine (DAR2-26)
+        self._meeting_state: str = "idle"  # idle | active | post_meeting
+        self._state_change_callbacks: list[Callable[[str], None]] = []
+        self._timer_callbacks: list[Callable[[int], None]] = []
+        self._timer_task: asyncio.Task | None = None
+        self._meeting_start_time: float | None = None
+        self._last_meeting_id: int | None = None
+
         logger.info("AppController initialized", buffer_minutes=config.BUFFER_MINUTES)
 
     # ------------------------------------------------------------------
@@ -129,6 +138,42 @@ class AppController:
     @meeting_store.setter
     def meeting_store(self, store: MeetingStore | None) -> None:
         self._meeting_store = store
+
+    # ------------------------------------------------------------------
+    # Callback setters (DAR2-36)
+    #
+    # Allow UI components to register callbacks after construction.
+    # The setters write directly into the private fields that
+    # _run_prompt_thread reads, so late-binding (e.g. NiceGUI) works
+    # identically to constructor-time wiring (e.g. PyQt6).
+    # ------------------------------------------------------------------
+
+    @property
+    def on_stream_chunk(self) -> Callable[[str], None] | None:
+        """Callback invoked with each streaming text chunk from Claude."""
+        return self._on_stream_chunk
+
+    @on_stream_chunk.setter
+    def on_stream_chunk(self, callback: Callable[[str], None] | None) -> None:
+        self._on_stream_chunk = callback
+
+    @property
+    def on_processing_complete(self) -> Callable[[dict], None] | None:
+        """Callback invoked when Claude finishes processing a prompt."""
+        return self._on_processing_complete
+
+    @on_processing_complete.setter
+    def on_processing_complete(self, callback: Callable[[dict], None] | None) -> None:
+        self._on_processing_complete = callback
+
+    @property
+    def on_progress(self) -> Callable[[str], None] | None:
+        """Callback invoked with progress status messages."""
+        return self._on_progress
+
+    @on_progress.setter
+    def on_progress(self, callback: Callable[[str], None] | None) -> None:
+        self._on_progress = callback
 
     # ------------------------------------------------------------------
     # Recording lifecycle
@@ -267,6 +312,74 @@ class AppController:
         self._handle_meeting_segment(text)
         if self._on_final_transcript:
             self._on_final_transcript(text)
+
+    # ------------------------------------------------------------------
+    # Meeting lifecycle (DAR2-26)
+    # ------------------------------------------------------------------
+
+    @property
+    def meeting_state(self) -> str:
+        """Current meeting state: 'idle', 'active', or 'post_meeting'."""
+        return self._meeting_state
+
+    async def start_meeting(self) -> None:
+        """Begin a meeting session."""
+        self.start_streaming()
+        self._meeting_state = "active"
+        self._meeting_start_time = time.monotonic()
+        self._timer_task = asyncio.create_task(self._run_timer())
+        self._emit_state_change("active")
+
+    async def stop_meeting(self) -> None:
+        """End the meeting session."""
+        if self._timer_task is not None:
+            self._timer_task.cancel()
+            try:
+                await self._timer_task
+            except asyncio.CancelledError:
+                pass
+            self._timer_task = None
+
+        self._last_meeting_id = self._active_meeting_id  # preserve for post-meeting
+        self.stop_streaming()
+        self._meeting_state = "post_meeting"
+        self._emit_state_change("post_meeting")
+
+    async def reset_to_idle(self) -> None:
+        """Return to idle state."""
+        self._meeting_state = "idle"
+        self._meeting_start_time = None
+        self._last_meeting_id = None
+        self._emit_state_change("idle")
+
+    def on_meeting_state_change(self, callback: Callable[[str], None]) -> None:
+        """Register callback for state transitions."""
+        self._state_change_callbacks.append(callback)
+
+    def on_timer_tick(self, callback: Callable[[int], None]) -> None:
+        """Register callback for elapsed timer ticks (every second)."""
+        self._timer_callbacks.append(callback)
+
+    def get_meeting_transcript(self) -> str | None:
+        """Retrieve full transcript for the current/last meeting."""
+        meeting_id = self._active_meeting_id or self._last_meeting_id
+        if self._meeting_store is None or meeting_id is None:
+            return None
+        return self._meeting_store.get_full_transcript(meeting_id)
+
+    def _emit_state_change(self, state: str) -> None:
+        """Notify all registered state-change callbacks."""
+        for cb in self._state_change_callbacks:
+            cb(state)
+
+    async def _run_timer(self) -> None:
+        """Tick every second with elapsed time since meeting start."""
+        while True:
+            await asyncio.sleep(1)
+            if self._meeting_start_time is not None:
+                elapsed = int(time.monotonic() - self._meeting_start_time)
+                for cb in self._timer_callbacks:
+                    cb(elapsed)
 
     # ------------------------------------------------------------------
     # Transcription (batch/REST)
