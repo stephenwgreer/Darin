@@ -35,11 +35,12 @@ def create_meeting_page(controller: AppController) -> None:
             # Bounded capture (Last 30s / Last 1m — always available)
             CaptureButtons(controller)
 
-            # Context-aware prompt buttons
-            prompts = PromptButtons(controller)
+            # Claude analysis output panel (created before PromptButtons so the
+            # reference can be passed in for on_template_setup wiring)
+            output = OutputPanel(controller)
 
-            # Claude analysis output panel
-            OutputPanel(controller)
+            # Context-aware prompt buttons
+            prompts = PromptButtons(controller, output_panel=output)
 
         # Wire AppController state changes to components
         controller.on_meeting_state_change(

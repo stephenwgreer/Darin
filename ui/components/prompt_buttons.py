@@ -18,12 +18,20 @@ import json
 
 from nicegui import ui
 
+from prompts.registry import PROMPT_REGISTRY
+
+
+_TEMPLATE_TO_TYPE: dict[str, str] = {
+    cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY
+}
+
 
 class PromptButtons:
     """Context-aware prompt buttons with processing guard."""
 
-    def __init__(self, controller: object) -> None:
+    def __init__(self, controller: object, output_panel: object | None = None) -> None:
         self._controller = controller
+        self._output_panel = output_panel
         self._prompt_buttons: list[ui.button] = []
 
         # Mid-meeting prompts (hidden by default)
@@ -61,11 +69,27 @@ class PromptButtons:
                 ).classes("bg-gray-600 text-white")
         self._post_meeting_card.set_visibility(False)
 
+    def _make_template_setup(self, prompt_template: str):
+        """Create the on_template_setup callback for a prompt template."""
+        if self._output_panel is None:
+            return None
+
+        def on_template_setup(pt: str) -> str | None:
+            template_type = _TEMPLATE_TO_TYPE.get(pt)
+            if template_type and self._output_panel is not None:
+                self._output_panel.setup_template(template_type)  # type: ignore[attr-defined]
+            return template_type
+
+        return on_template_setup
+
     async def _run_prompt(self, template: str) -> None:
         """Run prompt with processing guard — disables all prompt buttons."""
         self._set_buttons_enabled(False)
         try:
-            self._controller.run_prompt(template)  # type: ignore[attr-defined]
+            self._controller.run_prompt(  # type: ignore[attr-defined]
+                template,
+                on_template_setup=self._make_template_setup(template),
+            )
         finally:
             self._set_buttons_enabled(True)
 

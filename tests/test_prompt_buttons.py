@@ -102,3 +102,24 @@ class TestPromptTemplates:
             for name, template in prompts:
                 assert isinstance(name, str)
                 assert isinstance(template, str)
+
+
+class TestPromptButtonsTemplateSetup:
+    """Verify PromptButtons passes on_template_setup to controller (DAR2-37)."""
+
+    def test_run_prompt_passes_template_setup(self) -> None:
+        with patch("ui.components.prompt_buttons.ui"):
+            from ui.components.prompt_buttons import PromptButtons
+
+            controller = MagicMock()
+            output_panel = MagicMock()
+            buttons = PromptButtons(controller, output_panel=output_panel)
+
+            import asyncio
+            asyncio.get_event_loop().run_until_complete(
+                buttons._run_prompt("some_template")
+            )
+
+            controller.run_prompt.assert_called_once()
+            call_kwargs = controller.run_prompt.call_args
+            assert call_kwargs.kwargs.get("on_template_setup") is not None
