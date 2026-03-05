@@ -15,6 +15,7 @@ Processing guard: all prompt buttons disabled while a prompt is executing.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from nicegui import ui
 
@@ -69,7 +70,7 @@ class PromptButtons:
                 ).classes("bg-gray-600 text-white")
         self._post_meeting_card.set_visibility(False)
 
-    def _make_template_setup(self, prompt_template: str):
+    def _make_template_setup(self, prompt_template: str) -> Callable[[str], str | None] | None:
         """Create the on_template_setup callback for a prompt template."""
         if self._output_panel is None:
             return None

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+from collections.abc import Callable
 
 from nicegui import ui
 
@@ -50,7 +51,7 @@ class OutputPanel:
         controller.on_stream_chunk = lambda chunk: self.handle_stream_chunk(chunk)  # type: ignore[attr-defined]
         controller.on_processing_complete = lambda result: self._finalize(result)  # type: ignore[attr-defined]
 
-    def _call_on_ui_thread(self, fn: object, *args: object) -> None:
+    def _call_on_ui_thread(self, fn: Callable[..., object], *args: object) -> None:
         """Schedule a UI callback on the event loop (thread-safe).
 
         When called from a background thread (streaming callbacks), pushes the
@@ -62,11 +63,11 @@ class OutputPanel:
         """
         try:
             if self._loop.is_running():
-                self._loop.call_soon_threadsafe(functools.partial(fn, *args))  # type: ignore[arg-type]
+                self._loop.call_soon_threadsafe(functools.partial(fn, *args))
             else:
-                fn(*args)  # type: ignore[call-arg]
+                fn(*args)
         except RuntimeError:
-            fn(*args)  # type: ignore[call-arg]
+            fn(*args)
 
     def setup_template(self, template_type: str) -> None:
         """Install scaffold HTML and configure buffer for a template type.
@@ -166,7 +167,7 @@ class OutputPanel:
         )
         self._call_on_ui_thread(ui.run_javascript, js_code)
 
-    def _finalize(self, result: dict) -> None:
+    def _finalize(self, result: dict[str, object]) -> None:
         """Called when streaming is complete.
 
         Called from a background thread via on_processing_complete. All UI
