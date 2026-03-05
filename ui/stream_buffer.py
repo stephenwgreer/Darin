@@ -33,7 +33,6 @@ class StreamBuffer:
         Incomplete items remain in the buffer for the next call.
         """
         with self._lock:
-            self._buffer.seek(0, 2)
             self._buffer.write(text)
             content = self._buffer.getvalue()
 
@@ -42,15 +41,15 @@ class StreamBuffer:
                 return []
 
             items = []
-            removals = []
+            last_end = 0
+            remainder_parts = []
             for match in matches:
                 items.append(match.group(0))
-                removals.append((match.start(), match.end()))
-
-            for start, end in reversed(removals):
-                content = content[:start] + content[end:]
-
-            self._buffer = io.StringIO(content)
+                remainder_parts.append(content[last_end:match.start()])
+                last_end = match.end()
+            remainder_parts.append(content[last_end:])
+            self._buffer = io.StringIO("".join(remainder_parts))
+            self._buffer.seek(0, 2)
             return items
 
     def clear(self) -> None:
