@@ -39,16 +39,15 @@ def test_configure_security_registers_csp_middleware() -> None:
 
 
 def test_configure_security_rejects_empty_token() -> None:
+    """Empty token must be rejected — guard is in TokenAuthMiddleware.__init__.
+
+    FastAPI/Starlette defers middleware construction until the first request,
+    so we must send a request via TestClient to trigger instantiation.
+    """
+    from starlette.testclient import TestClient
+
     app = FastAPI()
-    # configure_security with empty token should raise ValueError
-    # (propagated from TokenAuthMiddleware.__init__ guard — but since middleware
-    # is lazy in FastAPI/Starlette, this may only raise on first request)
-    # If the ValueError is raised at configure_security time, test it directly.
-    # If not, just confirm we can't configure with empty token without error for now.
-    # Adjust based on actual FastAPI behavior.
-    try:
-        configure_security(app, "")
-        # If no error raised at configuration time, that's ok for this task —
-        # the guard exists in the middleware constructor
-    except ValueError:
-        pass  # Good — caught early
+    configure_security(app, "")
+    # Trigger middleware instantiation — Starlette is lazy
+    with pytest.raises(ValueError, match="non-empty token"):
+        TestClient(app).get("/")

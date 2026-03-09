@@ -24,10 +24,6 @@ from storage.meeting_store import MeetingStore
 from ui.pages.meeting_page import create_meeting_page
 
 
-# --- Security: generate token once at startup ---
-_TOKEN: str = generate_token()
-
-
 def configure_security(app: FastAPI, token: str) -> None:
     """Apply DAR2-34 localhost hardening controls to the FastAPI app.
 
@@ -52,6 +48,9 @@ def configure_security(app: FastAPI, token: str) -> None:
 
 def main() -> None:
     """Initialize AppController and start NiceGUI server."""
+    # Generate token once at startup (inside main to avoid module-level side effects)
+    _token: str = generate_token()
+
     # Validate API keys
     config.validate_api_keys()
 
@@ -66,7 +65,7 @@ def main() -> None:
     create_meeting_page(controller)
 
     # Apply security hardening to NiceGUI's underlying FastAPI app
-    configure_security(nicegui_app, _TOKEN)
+    configure_security(nicegui_app, _token)
 
     # Open browser with token URL after server starts
     @nicegui_app.on_startup
@@ -78,12 +77,15 @@ def main() -> None:
         try:
             # uvicorn stores bound sockets in app.servers after startup
             servers = getattr(nicegui_app, "servers", None)
-            if servers:
+            if servers and servers[0].sockets:
                 socket = servers[0].sockets[0]
                 port = socket.getsockname()[1]
         except Exception:  # noqa: BLE001
             pass
-        webbrowser.open(f"http://127.0.0.1:{port}/?token={_TOKEN}")
+        # Token is intentionally passed as a query param — the browser opener
+        # cannot set headers. This means the token appears in browser history,
+        # which is an accepted trade-off for a localhost-only single-user app.
+        webbrowser.open(f"http://127.0.0.1:{port}/?token={_token}")
 
     # Start NiceGUI server on localhost
     # Control 1: host="127.0.0.1" — never 0.0.0.0
