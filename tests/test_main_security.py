@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 
+
 # Add project root to path so that root-level modules are importable,
 # consistent with the pattern used by other test modules in this project.
 sys.path.insert(0, str(Path(__file__).parent.parent))

@@ -9,6 +9,7 @@ from starlette.testclient import TestClient
 
 from middleware.token_auth import TokenAuthMiddleware
 
+
 TOKEN = "test-secret-token-abc123"
 
 
