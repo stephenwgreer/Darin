@@ -60,9 +60,22 @@ def test_nicegui_internal_paths_exempt() -> None:
     assert resp.status_code == 200
 
 
-def test_timing_safe_comparison() -> None:
-    """Ensure different tokens produce 403, not timing side-channels."""
+def test_wrong_length_tokens_rejected() -> None:
+    """Tokens of different lengths (shorter and longer than the real token) are rejected."""
     client = TestClient(_make_app(TOKEN), raise_server_exceptions=True)
-    # Both wrong tokens should be rejected identically
     assert client.get("/?token=a").status_code == 403
     assert client.get("/?token=" + "x" * 100).status_code == 403
+
+
+def test_empty_token_raises_value_error() -> None:
+    """Constructing TokenAuthMiddleware with an empty token raises ValueError."""
+    app = Starlette()
+    app.add_middleware(TokenAuthMiddleware, token="")
+
+    @app.route("/")
+    async def index(request: Request) -> PlainTextResponse:
+        return PlainTextResponse("ok")
+
+    client = TestClient(app, raise_server_exceptions=True)
+    with pytest.raises((ValueError, Exception), match="non-empty token"):
+        client.get("/")

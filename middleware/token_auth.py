@@ -24,6 +24,8 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: ASGIApp, token: str) -> None:
         super().__init__(app)
+        if not token:
+            raise ValueError("TokenAuthMiddleware requires a non-empty token")
         self._token = token
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -35,7 +37,7 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
 
         # Validate token via timing-safe comparison
         provided = request.query_params.get("token", "")
-        if not hmac.compare_digest(provided, self._token):
+        if not hmac.compare_digest(provided.encode("utf-8", errors="replace"), self._token.encode()):
             return PlainTextResponse("Forbidden", status_code=403)
 
         return await call_next(request)
