@@ -12,37 +12,35 @@ class MeetingControls:
         self._controller = controller
 
         with ui.card().classes("w-full"), ui.row().classes("w-full items-center gap-4"):
-                # Start Meeting button — visible in IDLE only
-                self._start_btn = ui.button(
-                    "Start Meeting",
-                    on_click=self._on_start,
-                    icon="fiber_manual_record",
-                ).classes("bg-green-600 text-white")
+            # Start Meeting button — visible in IDLE only
+            self._start_btn = ui.button(
+                "Start Meeting",
+                on_click=self._on_start,
+                icon="fiber_manual_record",
+            ).classes("bg-green-600 text-white")
 
-                # Stop Meeting button — visible in ACTIVE only
-                self._stop_btn = ui.button(
-                    "Stop Meeting",
-                    on_click=self._on_stop,
-                    icon="stop",
-                ).classes("bg-red-600 text-white")
-                self._stop_btn.set_visibility(False)
+            # Stop Meeting button — visible in ACTIVE only
+            self._stop_btn = ui.button(
+                "Stop Meeting",
+                on_click=self._on_stop,
+                icon="stop",
+            ).classes("bg-red-600 text-white")
+            self._stop_btn.set_visibility(False)
 
-                # New Meeting button — visible in POST-MEETING only
-                self._new_btn = ui.button(
-                    "New Meeting",
-                    on_click=self._on_new,
+            # New Meeting button — visible in POST-MEETING only
+            self._new_btn = ui.button(
+                "New Meeting",
+                on_click=self._on_new,
+            )
+            self._new_btn.set_visibility(False)
+
+            # Recording indicator + timer row
+            with ui.row().classes("items-center gap-2") as self._timer_row:
+                self._indicator = ui.icon("fiber_manual_record").classes(
+                    "text-red-500 animate-pulse"
                 )
-                self._new_btn.set_visibility(False)
-
-                # Recording indicator + timer row
-                with ui.row().classes("items-center gap-2") as self._timer_row:
-                    self._indicator = ui.icon("fiber_manual_record").classes(
-                        "text-red-500 animate-pulse"
-                    )
-                    self._timer_label = ui.label("00:00:00").classes(
-                        "text-xl font-mono font-bold"
-                    )
-                self._timer_row.set_visibility(False)
+                self._timer_label = ui.label("00:00:00").classes("text-xl font-mono font-bold")
+            self._timer_row.set_visibility(False)
 
     async def _on_start(self) -> None:
         await self._controller.start_meeting()  # type: ignore[attr-defined]

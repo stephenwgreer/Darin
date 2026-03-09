@@ -160,8 +160,7 @@ class MeetingStore:
         loading full TranscriptSegment objects.
         """
         rows = self._conn.execute(
-            "SELECT text FROM transcript_segments "
-            "WHERE meeting_id = ? ORDER BY timestamp, id",
+            "SELECT text FROM transcript_segments WHERE meeting_id = ? ORDER BY timestamp, id",
             (meeting_id,),
         ).fetchall()
         return " ".join(row[0] for row in rows)
@@ -169,8 +168,7 @@ class MeetingStore:
     def list_meetings(self) -> list[MeetingRecord]:
         """List all meetings, newest first. Segments are NOT loaded."""
         rows = self._conn.execute(
-            "SELECT id, title, start_time, end_time FROM meetings "
-            "ORDER BY start_time DESC",
+            "SELECT id, title, start_time, end_time FROM meetings ORDER BY start_time DESC",
         ).fetchall()
 
         return [

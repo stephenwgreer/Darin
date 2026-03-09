@@ -20,8 +20,10 @@ def tmp_store(tmp_path: Path) -> MeetingStore:
 @pytest.fixture
 def controller(tmp_store: MeetingStore):
     """Create an AppController with mocked recorder and a temp MeetingStore."""
-    with patch("app_controller.ContinuousRecorder") as mock_rec_cls, \
-         patch("app_controller.ApiClient"):
+    with (
+        patch("app_controller.ContinuousRecorder") as mock_rec_cls,
+        patch("app_controller.ApiClient"),
+    ):
         mock_rec = Mock()
         mock_rec.is_recording = False
         mock_rec.sample_rate = 48000
@@ -37,7 +39,9 @@ def controller(tmp_store: MeetingStore):
 class TestMeetingLifecycle:
     """Test that streaming start/stop creates and finalizes meetings."""
 
-    def test_start_streaming_creates_meeting(self, controller: AppController, tmp_store: MeetingStore):
+    def test_start_streaming_creates_meeting(
+        self, controller: AppController, tmp_store: MeetingStore
+    ):
         """start_streaming should create a meeting row when store is set."""
         controller._streaming_client = None
 
@@ -80,7 +84,9 @@ class TestMeetingLifecycle:
 class TestSegmentAppend:
     """Test that final transcript callbacks append segments."""
 
-    def test_handle_final_transcript_appends_segment(self, controller: AppController, tmp_store: MeetingStore):
+    def test_handle_final_transcript_appends_segment(
+        self, controller: AppController, tmp_store: MeetingStore
+    ):
         """_handle_meeting_segment should append to the active meeting."""
         meeting_id = tmp_store.start_meeting()
         controller._active_meeting_id = meeting_id
@@ -96,7 +102,9 @@ class TestSegmentAppend:
         controller._active_meeting_id = None
         controller._handle_meeting_segment("text")  # should not raise
 
-    def test_multiple_segments_accumulated(self, controller: AppController, tmp_store: MeetingStore):
+    def test_multiple_segments_accumulated(
+        self, controller: AppController, tmp_store: MeetingStore
+    ):
         meeting_id = tmp_store.start_meeting()
         controller._active_meeting_id = meeting_id
 

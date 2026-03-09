@@ -141,9 +141,7 @@ class TestConsumerThreadSafety:
         # Deliver chunks while another thread adds/removes consumers
         deliver_thread = threading.Thread(
             target=lambda: [
-                recorder._deliver_to_consumers(
-                    np.zeros((100, 2), dtype=np.float32)
-                )
+                recorder._deliver_to_consumers(np.zeros((100, 2), dtype=np.float32))
                 for _ in range(50)
             ]
         )

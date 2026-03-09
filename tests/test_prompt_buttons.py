@@ -116,9 +116,8 @@ class TestPromptButtonsTemplateSetup:
             buttons = PromptButtons(controller, output_panel=output_panel)
 
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                buttons._run_prompt("some_template")
-            )
+
+            asyncio.get_event_loop().run_until_complete(buttons._run_prompt("some_template"))
 
             controller.run_prompt.assert_called_once()
             call_kwargs = controller.run_prompt.call_args

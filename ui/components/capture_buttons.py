@@ -31,9 +31,7 @@ class CaptureButtons:
                     on_click=lambda: self._capture(60),
                 ).classes("bg-blue-600 text-white")
 
-                self._status = ui.label("").classes(
-                    "text-sm text-gray-500 self-center"
-                )
+                self._status = ui.label("").classes("text-sm text-gray-500 self-center")
 
     async def _capture(self, seconds: int) -> None:
         """Disable buttons, show status, trigger capture."""

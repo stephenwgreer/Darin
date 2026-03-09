@@ -14,12 +14,9 @@ import re
 
 # Default inline styles applied to single-list items
 _STYLE_BOLD = (
-    'display: list-item !important; list-style-type: disc !important; '
-    'font-weight: bold !important;'
+    "display: list-item !important; list-style-type: disc !important; font-weight: bold !important;"
 )
-_STYLE_NORMAL = (
-    'display: list-item !important; list-style-type: disc !important;'
-)
+_STYLE_NORMAL = "display: list-item !important; list-style-type: disc !important;"
 
 # ---------------------------------------------------------------------------
 # Template registry
@@ -134,7 +131,7 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "type": "multi-list",
         "pattern": (
             r'<li class=["\'](?:core-problem|logic-tree-component|'
-            r'evaluation-(?:mece|assumption|logic|data)|'
+            r"evaluation-(?:mece|assumption|logic|data)|"
             r'challenge-(?:weakness|question|reframe))["\']>.*?</li>'
         ),
         "class_to_list": {
@@ -159,7 +156,7 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "type": "multi-list",
         "pattern": (
             r'<li class=["\']hypothesis-(?:problem|hypothesis|'
-            r'evidence-(?:support|contradict|missing)|'
+            r"evidence-(?:support|contradict|missing)|"
             r'priority|testing|decision|assessment)["\']>.*?</li>'
         ),
         "class_to_list": {
@@ -240,9 +237,7 @@ def _apply_single_list_style(item: str, style: str) -> str:
     return item
 
 
-def route_stream_item(
-    item: str, config: dict
-) -> tuple[str, str] | None:
+def route_stream_item(item: str, config: dict) -> tuple[str, str] | None:
     """Route a single extracted HTML item to its target list.
 
     Returns (list_id, processed_item_html) or None if no match.
