@@ -8,14 +8,17 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 
-# NiceGUI injects inline scripts and styles — 'unsafe-inline' is required.
-# Acceptable for a localhost-only app with no sensitive data in the browser.
+# NiceGUI injects inline scripts/styles. Vue.js requires the unsafe-eval
+# CSP directive (a browser security policy string, not Python eval).
+# font-src needs data: for NiceGUI's inline base64 woff2 fonts.
+# All acceptable for a localhost-only app with no sensitive data in the browser.
+_SCRIPT_SRC = "'self' 'unsafe-inline' 'unsafe-eval'"  # Vue.js runtime requirement
 _CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    f"script-src {_SCRIPT_SRC}; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
-    "font-src 'self'; "
+    "font-src 'self' data:; "
     "connect-src 'self' ws: wss:; "
     "frame-ancestors 'none'"
 )
