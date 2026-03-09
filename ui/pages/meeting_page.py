@@ -46,9 +46,7 @@ def create_meeting_page(controller: AppController) -> None:
         controller.on_meeting_state_change(
             lambda state: _handle_state_change(state, controls, prompts)
         )
-        controller.on_timer_tick(
-            lambda elapsed: controls.update_timer(elapsed)
-        )
+        controller.on_timer_tick(lambda elapsed: controls.update_timer(elapsed))
 
 
 def _handle_state_change(

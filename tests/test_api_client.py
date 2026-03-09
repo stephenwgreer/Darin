@@ -76,9 +76,7 @@ class TestAnthropicClientReuse:
 
         _ = client.anthropic_client
 
-        mock_anthropic_class.assert_called_once_with(
-            api_key=valid_keys["anthropic_api_key"]
-        )
+        mock_anthropic_class.assert_called_once_with(api_key=valid_keys["anthropic_api_key"])
 
     def test_anthropic_client_same_instance_on_second_access(
         self, mock_anthropic_class: MagicMock, valid_keys: dict[str, str]
@@ -134,9 +132,7 @@ class TestAnthropicClientReuse:
 
         _ = client.anthropic_client
 
-        mock_anthropic_class.assert_called_once_with(
-            api_key="test-anthropic-key-abc123"
-        )
+        mock_anthropic_class.assert_called_once_with(api_key="test-anthropic-key-abc123")
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +230,7 @@ class TestProcessWithAnthropic:
 
         assert result == "Hello, world"
 
-    def test_process_with_anthropic_uses_cached_client(
-        self, valid_keys: dict[str, str]
-    ) -> None:
+    def test_process_with_anthropic_uses_cached_client(self, valid_keys: dict[str, str]) -> None:
         """Multiple process_with_anthropic calls must NOT create new Anthropic instances."""
         with patch("api.client.Anthropic") as mock_cls:
             mock_sdk = Mock()
@@ -278,9 +272,7 @@ class TestProcessWithAnthropic:
         messages = call_args.kwargs["messages"]
         assert messages[0]["content"] == "Summarise: my transcript"
 
-    def test_process_with_anthropic_raises_on_empty_key(
-        self, valid_keys: dict[str, str]
-    ) -> None:
+    def test_process_with_anthropic_raises_on_empty_key(self, valid_keys: dict[str, str]) -> None:
         """ValueError raised when anthropic_api_key is cleared after construction."""
         with patch("api.client.Anthropic"):
             client = ApiClient(**valid_keys)
@@ -303,9 +295,7 @@ class TestTranscribeWithDeeepgram:
         with pytest.raises(ValueError, match="Audio data cannot be empty"):
             api_client.transcribe_with_deepgram(audio_data=b"", sample_rate=16000)
 
-    def test_transcribe_raises_on_missing_deepgram_key(
-        self, valid_keys: dict[str, str]
-    ) -> None:
+    def test_transcribe_raises_on_missing_deepgram_key(self, valid_keys: dict[str, str]) -> None:
         """ValueError raised when deepgram_api_key is cleared after construction."""
         client = ApiClient(**valid_keys)
         client.deepgram_api_key = ""  # Simulate key removal
@@ -313,9 +303,7 @@ class TestTranscribeWithDeeepgram:
         with pytest.raises(ValueError, match="Deepgram API key not set"):
             client.transcribe_with_deepgram(audio_data=b"\x00\x01", sample_rate=16000)
 
-    def test_transcribe_delegates_to_deepgram_utils(
-        self, api_client: ApiClient
-    ) -> None:
+    def test_transcribe_delegates_to_deepgram_utils(self, api_client: ApiClient) -> None:
         """transcribe_with_deepgram passes key, audio, and sample_rate correctly."""
         with patch("api.client.transcribe_with_deepgram") as mock_transcribe:
             mock_transcribe.return_value = "hello world"

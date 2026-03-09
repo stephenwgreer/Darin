@@ -918,9 +918,7 @@ class MainWindow(QMainWindow):
                         break
 
                     title_start = buf.find('<h2 class="topic-title">', start_idx)
-                    title_end = (
-                        buf.find("</h2>", title_start) if title_start != -1 else -1
-                    )
+                    title_end = buf.find("</h2>", title_start) if title_start != -1 else -1
 
                     if title_start != -1 and title_end != -1:
                         section_end = buf.find("</div>", title_end)

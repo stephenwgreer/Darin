@@ -45,7 +45,7 @@ class StreamBuffer:
             remainder_parts = []
             for match in matches:
                 items.append(match.group(0))
-                remainder_parts.append(content[last_end:match.start()])
+                remainder_parts.append(content[last_end : match.start()])
                 last_end = match.end()
             remainder_parts.append(content[last_end:])
             self._buffer = io.StringIO("".join(remainder_parts))

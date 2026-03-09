@@ -29,11 +29,13 @@ from nicegui import ui  # noqa: F401 - app used implicitly by nicegui
 # Audio Capture — sounddevice backend (PortAudio, no COM)
 # ---------------------------------------------------------------------------
 
+
 class SoundDeviceCapture:
     """Loopback capture via sounddevice/PortAudio — avoids COM entirely."""
 
     def __init__(self, sample_rate: int = 48000, chunk_seconds: float = 0.1) -> None:
         import sounddevice as sd
+
         self.sd = sd
         self.sample_rate = sample_rate
         self.chunk_seconds = chunk_seconds
@@ -85,28 +87,33 @@ class SoundDeviceCapture:
         devices = self.sd.query_devices()
         logger.info("Available audio devices:")
         for i, d in enumerate(devices):
-            logger.info(f"  [{i}] {d['name']} (in={d['max_input_channels']}, out={d['max_output_channels']})")
+            logger.info(
+                f"  [{i}] {d['name']} (in={d['max_input_channels']}, out={d['max_output_channels']})"
+            )
 
         # Strategy 1: Look for explicit "loopback" in name
         for i, d in enumerate(devices):
-            name = d['name'].lower()
-            if 'loopback' in name and d['max_input_channels'] > 0:
+            name = d["name"].lower()
+            if "loopback" in name and d["max_input_channels"] > 0:
                 logger.info(f"Found loopback device: [{i}] {d['name']}")
-                return i, min(d['max_input_channels'], 2)
+                return i, min(d["max_input_channels"], 2)
 
         # Strategy 2: Look for "stereo mix" — Windows built-in loopback
         for i, d in enumerate(devices):
-            name = d['name'].lower()
-            if 'stereo mix' in name and d['max_input_channels'] > 0:
+            name = d["name"].lower()
+            if "stereo mix" in name and d["max_input_channels"] > 0:
                 logger.info(f"Found stereo mix device: [{i}] {d['name']}")
-                return i, min(d['max_input_channels'], 2)
+                return i, min(d["max_input_channels"], 2)
 
         # Strategy 3: Look for "what u hear", "wave out", or similar loopback names
         for i, d in enumerate(devices):
-            name = d['name'].lower()
-            if any(kw in name for kw in ['what u hear', 'wave out', 'mix', 'monitor']) and d['max_input_channels'] > 0:
+            name = d["name"].lower()
+            if (
+                any(kw in name for kw in ["what u hear", "wave out", "mix", "monitor"])
+                and d["max_input_channels"] > 0
+            ):
                 logger.info(f"Found loopback-like device: [{i}] {d['name']}")
-                return i, min(d['max_input_channels'], 2)
+                return i, min(d["max_input_channels"], 2)
 
         raise RuntimeError(
             "No loopback audio device found. Enable 'Stereo Mix' in Windows Sound settings: "
@@ -116,11 +123,11 @@ class SoundDeviceCapture:
     def _audio_callback(self, indata, frames, time_info, status) -> None:
         if status:
             self._discontinuities += 1
-            if 'input overflow' in str(status).lower():
+            if "input overflow" in str(status).lower():
                 self.dropouts += 1
 
         mono = indata[:, 0] if indata.ndim > 1 else indata
-        rms = float(np.sqrt(np.mean(mono ** 2)))
+        rms = float(np.sqrt(np.mean(mono**2)))
         self.level = min(rms * 10.0, 1.0)
 
         self.chunks_captured += 1
@@ -132,7 +139,9 @@ class SoundDeviceCapture:
         if self._stream:
             self._stream.stop()
             self._stream.close()
-        logger.info(f"Audio capture stopped. Chunks: {self.chunks_captured}, Dropouts: {self.dropouts}")
+        logger.info(
+            f"Audio capture stopped. Chunks: {self.chunks_captured}, Dropouts: {self.dropouts}"
+        )
 
     @property
     def is_running(self) -> bool:
@@ -143,6 +152,7 @@ class SoundDeviceCapture:
 # ---------------------------------------------------------------------------
 # Audio Capture — soundcard backend (WASAPI/COM)
 # ---------------------------------------------------------------------------
+
 
 class SoundCardCapture:
     """Loopback capture via soundcard (WASAPI/COM) — tests COM compatibility."""
@@ -179,7 +189,9 @@ class SoundCardCapture:
             self._is_running = False
         if self._thread:
             self._thread.join(timeout=3.0)
-        logger.info(f"Audio capture stopped. Chunks: {self.chunks_captured}, Dropouts: {self.dropouts}")
+        logger.info(
+            f"Audio capture stopped. Chunks: {self.chunks_captured}, Dropouts: {self.dropouts}"
+        )
 
     @property
     def is_running(self) -> bool:
@@ -210,7 +222,7 @@ class SoundCardCapture:
                     elapsed = time.perf_counter() - t0
 
                     mono = data[:, 0] if data.ndim > 1 else data
-                    rms = float(np.sqrt(np.mean(mono ** 2)))
+                    rms = float(np.sqrt(np.mean(mono**2)))
                     self.level = min(rms * 10.0, 1.0)
 
                     self.chunks_captured += 1
@@ -219,7 +231,9 @@ class SoundCardCapture:
                     expected = self.chunk_seconds
                     if elapsed > expected * 2.0:
                         self.dropouts += 1
-                        logger.warning(f"Audio dropout: chunk took {elapsed:.2f}s (expected {expected:.1f}s)")
+                        logger.warning(
+                            f"Audio dropout: chunk took {elapsed:.2f}s (expected {expected:.1f}s)"
+                        )
 
         except Exception as e:
             error = f"Capture loop error: {e}"
@@ -233,6 +247,7 @@ class SoundCardCapture:
 # ---------------------------------------------------------------------------
 # Streaming Latency Benchmark
 # ---------------------------------------------------------------------------
+
 
 class StreamingBenchmark:
     """Simulates Claude API streaming at 50-100 chunks/sec, measures latency."""
@@ -308,8 +323,14 @@ SAMPLE_CHUNKS = [
 
 # Parse CLI args before NiceGUI takes over
 _parser = argparse.ArgumentParser()
-_parser.add_argument("--soundcard", action="store_true", help="Use soundcard (COM) backend instead of sounddevice")
-_parser.add_argument("--browser", action="store_true", help="Run in browser instead of native window (removes pywebview/COM)")
+_parser.add_argument(
+    "--soundcard", action="store_true", help="Use soundcard (COM) backend instead of sounddevice"
+)
+_parser.add_argument(
+    "--browser",
+    action="store_true",
+    help="Run in browser instead of native window (removes pywebview/COM)",
+)
 _args, _ = _parser.parse_known_args()
 
 # Select audio backend
@@ -322,7 +343,7 @@ benchmark = StreamingBenchmark()
 start_time: float = 0.0
 
 
-@ui.page('/')
+@ui.page("/")
 def index():
     global start_time
     start_time = time.time()
@@ -339,7 +360,6 @@ def index():
         ui.label(f"DAR2-31/32/33 | Backend: {audio.backend_name}").classes("text-sm opacity-70")
 
     with ui.column().classes("w-full max-w-4xl mx-auto p-4 gap-4"):
-
         # ── Status Banner ──
         status_label = ui.label("Initializing...").classes(
             "text-lg font-bold p-3 rounded bg-yellow-900 w-full text-center"
@@ -369,7 +389,9 @@ def index():
             ui.label("Condition 2: Streaming Latency Benchmark").classes(
                 "text-lg font-bold text-green-400"
             )
-            ui.label(f"Target: {benchmark.target_rate} chunks/sec — simulating Claude API streaming")
+            ui.label(
+                f"Target: {benchmark.target_rate} chunks/sec — simulating Claude API streaming"
+            )
             ui.separator()
 
             with ui.row().classes("gap-8"):
@@ -383,7 +405,9 @@ def index():
             )
 
             with ui.row().classes("gap-4"):
-                stream_btn = ui.button("Start Streaming Benchmark", on_click=lambda: toggle_streaming())
+                stream_btn = ui.button(
+                    "Start Streaming Benchmark", on_click=lambda: toggle_streaming()
+                )
                 rate_slider = ui.slider(min=10, max=100, value=75, step=5).classes("w-48")
                 rate_label = ui.label("75 chunks/sec")
 
@@ -415,7 +439,9 @@ def index():
             benchmark.latencies.clear()
             stream_output.set_content("")
             stream_btn.text = "Stop Streaming Benchmark"
-            results_log.push(f"[{elapsed_str()}] Streaming benchmark started at {benchmark.target_rate} chunks/sec")
+            results_log.push(
+                f"[{elapsed_str()}] Streaming benchmark started at {benchmark.target_rate} chunks/sec"
+            )
             streaming_task["ref"] = asyncio.create_task(run_streaming())
 
     async def run_streaming() -> None:
@@ -453,7 +479,7 @@ def index():
             "=" * 60,
             "NiceGUI VALIDATION SPIKE — RESULTS",
             "=" * 60,
-            f"Total runtime: {elapsed:.0f}s ({elapsed/60:.1f} min)",
+            f"Total runtime: {elapsed:.0f}s ({elapsed / 60:.1f} min)",
             "",
             f"--- Condition 1: Audio Capture ({audio.backend_name}) ---",
             f"Audio chunks captured: {audio.chunks_captured}",

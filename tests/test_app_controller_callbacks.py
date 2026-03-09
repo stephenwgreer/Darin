@@ -102,9 +102,7 @@ class TestPostConstructionCallbackSetting:
     reads the private _on_stream_chunk / _on_processing_complete fields.
     """
 
-    def test_setting_on_stream_chunk_updates_private_field(
-        self, controller: AppController
-    ) -> None:
+    def test_setting_on_stream_chunk_updates_private_field(self, controller: AppController) -> None:
         callback: Callable[[str], None] = MagicMock()
         controller.on_stream_chunk = callback
 
@@ -118,9 +116,7 @@ class TestPostConstructionCallbackSetting:
 
         assert controller._on_processing_complete is callback
 
-    def test_setting_on_progress_updates_private_field(
-        self, controller: AppController
-    ) -> None:
+    def test_setting_on_progress_updates_private_field(self, controller: AppController) -> None:
         callback: Callable[[str], None] = MagicMock()
         controller.on_progress = callback
 
@@ -132,9 +128,7 @@ class TestPostConstructionCallbackSetting:
 
         assert controller.on_stream_chunk is callback
 
-    def test_callback_can_be_cleared_after_setting(
-        self, controller: AppController
-    ) -> None:
+    def test_callback_can_be_cleared_after_setting(self, controller: AppController) -> None:
         callback: Callable[[str], None] = MagicMock()
         controller.on_stream_chunk = callback
         controller.on_stream_chunk = None
@@ -151,9 +145,7 @@ class TestPostConstructionCallbackSetting:
 
         assert controller._on_stream_chunk is second_callback
 
-    def test_all_three_callbacks_set_independently(
-        self, controller: AppController
-    ) -> None:
+    def test_all_three_callbacks_set_independently(self, controller: AppController) -> None:
         stream_cb: Callable[[str], None] = MagicMock()
         complete_cb: Callable[[dict], None] = MagicMock()
         progress_cb: Callable[[str], None] = MagicMock()
@@ -170,9 +162,7 @@ class TestPostConstructionCallbackSetting:
 class TestOutputPanelStyleAssignment:
     """Simulate how OutputPanel assigns callbacks (the DAR2-36 bug scenario)."""
 
-    def test_nicegui_style_assignment_wires_private_field(
-        self, controller: AppController
-    ) -> None:
+    def test_nicegui_style_assignment_wires_private_field(self, controller: AppController) -> None:
         """Reproduce the exact OutputPanel assignment pattern.
 
         Before DAR2-36 this created a stray public attribute instead of

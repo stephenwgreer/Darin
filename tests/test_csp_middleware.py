@@ -1,4 +1,5 @@
 """Tests for CSPMiddleware (DAR2-34)."""
+
 from __future__ import annotations
 
 from starlette.applications import Starlette

@@ -223,7 +223,10 @@ class TestPerformance:
         now = datetime.now(tz=UTC).isoformat()
         conn.executemany(
             "INSERT INTO transcript_segments (meeting_id, timestamp, text, is_final) VALUES (?, ?, ?, ?)",
-            [(meeting_id, now, f"Segment number {i} with some realistic text content.", True) for i in range(3600)],
+            [
+                (meeting_id, now, f"Segment number {i} with some realistic text content.", True)
+                for i in range(3600)
+            ],
         )
         conn.commit()
         conn.close()

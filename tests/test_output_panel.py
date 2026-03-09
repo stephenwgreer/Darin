@@ -97,9 +97,7 @@ class TestOutputPanelStreaming:
             panel._scroll = MagicMock()
 
             panel.setup_template("fill-gaps")
-            panel.handle_stream_chunk(
-                '<li class="gap-item">Missing data</li>'
-            )
+            panel.handle_stream_chunk('<li class="gap-item">Missing data</li>')
 
             js_call = mock_ui.run_javascript.call_args[0][0]
             assert "gaps-list" in js_call

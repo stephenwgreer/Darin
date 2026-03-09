@@ -1,4 +1,5 @@
 """Tests verifying security controls are wired correctly (DAR2-34)."""
+
 from __future__ import annotations
 
 import sys

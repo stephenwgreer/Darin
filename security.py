@@ -1,4 +1,5 @@
 """Security utilities for DAR2-34 localhost hardening."""
+
 from __future__ import annotations
 
 import secrets

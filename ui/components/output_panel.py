@@ -126,8 +126,7 @@ class OutputPanel:
                 if callback_method == "set_overall_sentiment":
                     escaped = json.dumps(value)
                     js_code = (
-                        f'document.getElementById("overall-sentiment-value")'
-                        f".innerText = {escaped}"
+                        f'document.getElementById("overall-sentiment-value").innerText = {escaped}'
                     )
                     self._call_on_ui_thread(ui.run_javascript, js_code)
                 if not text.strip():

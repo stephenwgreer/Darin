@@ -1,4 +1,5 @@
 """Token authentication middleware for localhost NiceGUI server (DAR2-34)."""
+
 from __future__ import annotations
 
 import hmac
@@ -37,7 +38,9 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
 
         # Validate token via timing-safe comparison
         provided = request.query_params.get("token", "")
-        if not hmac.compare_digest(provided.encode("utf-8", errors="replace"), self._token.encode()):
+        if not hmac.compare_digest(
+            provided.encode("utf-8", errors="replace"), self._token.encode()
+        ):
             return PlainTextResponse("Forbidden", status_code=403)
 
         return await call_next(request)

@@ -92,9 +92,7 @@ class TestAudioConversion:
     def test_multichannel_takes_first_channel(self):
         """Test multichannel audio extracts first channel only."""
         # 3 frames, 2 channels
-        audio = np.array(
-            [[0.5, -0.5], [0.25, -0.25], [0.75, -0.75]], dtype=np.float32
-        )
+        audio = np.array([[0.5, -0.5], [0.25, -0.25], [0.75, -0.75]], dtype=np.float32)
         result = DeepgramStreamingClient._to_pcm_bytes(audio)
 
         # Should be 3 samples (mono)
@@ -178,18 +176,22 @@ class TestTranscriptCallbacks:
 
         # Simulate multiple final segments
         for text in ["Hello world.", "How are you?"]:
-            client._on_message({
-                "is_final": True,
-                "speech_final": False,
-                "channel": {"alternatives": [{"transcript": text}]},
-            })
+            client._on_message(
+                {
+                    "is_final": True,
+                    "speech_final": False,
+                    "channel": {"alternatives": [{"transcript": text}]},
+                }
+            )
 
         # Now speech_final fires
-        client._on_message({
-            "is_final": True,
-            "speech_final": True,
-            "channel": {"alternatives": [{"transcript": "I am fine."}]},
-        })
+        client._on_message(
+            {
+                "is_final": True,
+                "speech_final": True,
+                "channel": {"alternatives": [{"transcript": "I am fine."}]},
+            }
+        )
 
         assert len(received) == 1
         assert received[0] == "Hello world. How are you? I am fine."
@@ -199,11 +201,13 @@ class TestTranscriptCallbacks:
         received = []
         client._on_final_transcript = lambda text: received.append(text)
 
-        client._on_message({
-            "is_final": True,
-            "speech_final": False,
-            "channel": {"alternatives": [{"transcript": ""}]},
-        })
+        client._on_message(
+            {
+                "is_final": True,
+                "speech_final": False,
+                "channel": {"alternatives": [{"transcript": ""}]},
+            }
+        )
 
         assert received == []
         assert client._final_segments == []
@@ -270,11 +274,13 @@ class TestTranscriptAccumulation:
         def add_segments():
             try:
                 for i in range(100):
-                    client._on_message({
-                        "is_final": True,
-                        "speech_final": False,
-                        "channel": {"alternatives": [{"transcript": f"Segment {i}"}]},
-                    })
+                    client._on_message(
+                        {
+                            "is_final": True,
+                            "speech_final": False,
+                            "channel": {"alternatives": [{"transcript": f"Segment {i}"}]},
+                        }
+                    )
             except Exception as e:
                 errors.append(e)
 

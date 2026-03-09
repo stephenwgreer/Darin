@@ -22,9 +22,7 @@ from nicegui import ui
 from prompts.registry import PROMPT_REGISTRY
 
 
-_TEMPLATE_TO_TYPE: dict[str, str] = {
-    cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY
-}
+_TEMPLATE_TO_TYPE: dict[str, str] = {cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY}
 
 
 class PromptButtons:
@@ -103,9 +101,7 @@ class PromptButtons:
         """Copy full meeting transcript to clipboard (json.dumps for JS safety)."""
         transcript = self._controller.get_meeting_transcript()  # type: ignore[attr-defined]
         if transcript:
-            await ui.run_javascript(
-                f"navigator.clipboard.writeText({json.dumps(transcript)})"
-            )
+            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(transcript)})")
             ui.notify("Transcript copied to clipboard", type="positive")
         else:
             ui.notify("No transcript available", type="warning")

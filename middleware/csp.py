@@ -1,4 +1,5 @@
 """Content-Security-Policy middleware for localhost NiceGUI server (DAR2-34)."""
+
 from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

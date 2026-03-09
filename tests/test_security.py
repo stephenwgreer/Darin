@@ -1,4 +1,5 @@
 """Tests for security token generation (DAR2-34)."""
+
 from __future__ import annotations
 
 import re

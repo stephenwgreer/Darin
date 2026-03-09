@@ -21,14 +21,12 @@ class TestStreamBufferExtraction:
     def test_partial_then_complete(self) -> None:
         buf = StreamBuffer()
         buf.write_and_extract('<li class="x">hel')
-        items = buf.write_and_extract('lo</li>')
+        items = buf.write_and_extract("lo</li>")
         assert items == ['<li class="x">hello</li>']
 
     def test_multiple_items_in_one_chunk(self) -> None:
         buf = StreamBuffer()
-        items = buf.write_and_extract(
-            '<li>one</li><li>two</li>'
-        )
+        items = buf.write_and_extract("<li>one</li><li>two</li>")
         assert items == ["<li>one</li>", "<li>two</li>"]
 
     def test_custom_pattern(self) -> None:
@@ -40,9 +38,9 @@ class TestStreamBufferExtraction:
 
     def test_remainder_preserved(self) -> None:
         buf = StreamBuffer()
-        buf.write_and_extract('<li>done</li>leftover <li>par')
-        items = buf.write_and_extract('tial</li>')
-        assert items == ['<li>partial</li>']
+        buf.write_and_extract("<li>done</li>leftover <li>par")
+        items = buf.write_and_extract("tial</li>")
+        assert items == ["<li>partial</li>"]
 
     def test_clear_resets_buffer(self) -> None:
         buf = StreamBuffer()
@@ -65,4 +63,5 @@ class TestStreamBufferThreadSafety:
         buf = StreamBuffer()
         # Verify the lock exists and is a threading.Lock
         import threading
+
         assert isinstance(buf._lock, type(threading.Lock()))
