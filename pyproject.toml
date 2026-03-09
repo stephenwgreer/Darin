@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["api*", "audio*", "processing*", "prompts*", "storage*", "ui*"]
+include = ["api*", "audio*", "middleware*", "processing*", "prompts*", "storage*", "ui*"]
 exclude = ["tests*", "test_audio*", "assets*"]
 
 [project]

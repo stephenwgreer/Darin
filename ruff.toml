@@ -64,7 +64,7 @@ unfixable = []
 
 [lint.isort]
 # Import sorting configuration
-known-first-party = ["api", "audio", "processing", "prompts", "storage", "ui"]
+known-first-party = ["api", "audio", "middleware", "processing", "prompts", "storage", "ui"]
 force-single-line = false
 lines-after-imports = 2
 
