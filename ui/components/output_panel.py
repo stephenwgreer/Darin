@@ -36,11 +36,13 @@ class OutputPanel:
             )
             with ui.scroll_area().classes("w-full h-96 border rounded") as self._scroll:
                 self._content = ui.html("").classes("prose max-w-none p-3")
+                self._md_content = ui.markdown("").classes("prose max-w-none p-3")
 
         # Streaming state
         self._buffer = StreamBuffer()
         self._template_type: str | None = None
         self._first_line_received: bool = False
+        self._raw_text: str = ""  # accumulates text for non-template (markdown) responses
 
         # Capture the event loop for thread-safe UI marshalling.
         # handle_stream_chunk() and _finalize() are called from a background
@@ -78,6 +80,8 @@ class OutputPanel:
         """
         self._template_type = template_type
         self._first_line_received = False
+        self._raw_text = ""
+        self._call_on_ui_thread(self._md_content.set_content, "")
 
         # Get pattern from registry (or default)
         config = TEMPLATE_REGISTRY.get(template_type)
@@ -98,20 +102,18 @@ class OutputPanel:
         _call_on_ui_thread to prevent races on the WebSocket connection.
         """
         if not self._template_type:
-            # No template set up — fall back to raw append
-            current = self._content.content or ""
-            new_content = current + chunk
-            self._call_on_ui_thread(self._content.set_content, new_content)
-            self._call_on_ui_thread(self._scroll.scroll_to, 1.0)
+            # No template set up — accumulate markdown for final render
+            self._raw_text += chunk
+            self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
+            self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
             return
 
         config = TEMPLATE_REGISTRY.get(self._template_type)
         if not config:
-            # Unregistered template type — raw append
-            current = self._content.content or ""
-            new_content = current + chunk
-            self._call_on_ui_thread(self._content.set_content, new_content)
-            self._call_on_ui_thread(self._scroll.scroll_to, 1.0)
+            # Unregistered template type — accumulate markdown for final render
+            self._raw_text += chunk
+            self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
+            self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
             return
 
         text = chunk
@@ -146,7 +148,7 @@ class OutputPanel:
                 self._append_to_dom(list_id, item_html)
 
         if items:
-            self._call_on_ui_thread(self._scroll.scroll_to, 1.0)
+            self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
 
     def _append_to_dom(self, list_id: str, item_html: str) -> None:
         """Append an HTML item to a target element via JavaScript.
@@ -178,16 +180,18 @@ class OutputPanel:
         """
         if self._template_type and self._template_type in TEMPLATE_REGISTRY:
             # Streaming already populated the DOM — just scroll
-            self._call_on_ui_thread(self._scroll.scroll_to, 1.0)
+            self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
             return
 
         if "result" in result:
-            self._call_on_ui_thread(self._content.set_content, result["result"])
-        self._call_on_ui_thread(self._scroll.scroll_to, 1.0)
+            self._call_on_ui_thread(self._md_content.set_content, result["result"])
+        self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
 
     def clear(self) -> None:
         """Clear the output panel and reset streaming state."""
         self._content.set_content("")
+        self._md_content.set_content("")
         self._template_type = None
         self._first_line_received = False
+        self._raw_text = ""
         self._buffer.clear()
