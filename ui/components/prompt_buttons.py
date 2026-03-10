@@ -158,13 +158,11 @@ class PromptButtons:
     async def _run_mid_meeting(self, cfg: PromptConfig) -> None:
         """Run a mid-meeting or reasoning prompt against bounded audio capture."""
         self._set_buttons_enabled(False)
-        try:
-            self._controller.run_prompt(  # type: ignore[attr-defined]
-                cfg.template,
-                on_template_setup=self._make_template_setup(cfg.template),
-            )
-        finally:
-            self._set_buttons_enabled(True)
+        self._controller.run_prompt(  # type: ignore[attr-defined]
+            cfg.template,
+            on_template_setup=self._make_template_setup(cfg.template),
+        )
+        self._set_buttons_enabled(True)
 
     async def _run_post_meeting(self, cfg: PromptConfig) -> None:
         """Run a post-meeting prompt against the stored transcript."""
@@ -173,18 +171,23 @@ class PromptButtons:
         if self._segment_mode.value == "Time range":
             from_minute = int(self._from_minute.value)
             to_minute = int(self._to_minute.value)
+            if from_minute >= to_minute:
+                ui.notify("'From' must be less than 'To'", type="warning")
+                return
 
         self._set_buttons_enabled(False)
-        try:
-            self._controller.run_post_meeting_prompt(  # type: ignore[attr-defined]
-                cfg,
-                from_minute=from_minute,
-                to_minute=to_minute,
-                on_template_setup=self._make_template_setup(cfg.template),
-                on_complete=lambda prompt_id, _text: self._mark_as_run(prompt_id),
-            )
-        finally:
-            self._set_buttons_enabled(True)
+        self._controller.run_post_meeting_prompt(  # type: ignore[attr-defined]
+            cfg,
+            from_minute=from_minute,
+            to_minute=to_minute,
+            on_template_setup=self._make_template_setup(cfg.template),
+            on_complete=lambda prompt_id, text: self._on_post_meeting_complete(prompt_id, text),
+        )
+
+    def _on_post_meeting_complete(self, prompt_id: str, text: str) -> None:
+        """Re-enable buttons and mark the prompt as run after streaming finishes."""
+        self._set_buttons_enabled(True)
+        self._mark_as_run(prompt_id)
 
     async def _copy_transcript(self) -> None:
         """Copy full meeting transcript to clipboard (json.dumps for JS safety)."""

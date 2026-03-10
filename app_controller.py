@@ -543,6 +543,13 @@ class AppController:
                     length=len(transcript),
                 )
             else:
+                if (from_minute is None) != (to_minute is None):
+                    logger.warning(
+                        "Segment range requires both from_minute and to_minute"
+                        " — falling back to full transcript",
+                        from_minute=from_minute,
+                        to_minute=to_minute,
+                    )
                 transcript = self._meeting_store.get_full_transcript(meeting_id)
                 logger.info(
                     "Post-meeting full transcript retrieved",

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Literal
 
 from .logic_templates import (
     FIRST_PRINCIPLES_PROMPT,
@@ -26,6 +27,9 @@ from .templates import (
 )
 
 
+BucketType = Literal["mid_meeting", "reasoning", "post_meeting"]
+
+
 @dataclass
 class PromptConfig:
     id: str  # Unique identifier
@@ -33,7 +37,7 @@ class PromptConfig:
     template: str  # The actual prompt template string
     output_title: str  # Title displayed in the OutputPanel
     template_type: str  # Identifier used for stream handling / static HTML setup
-    bucket: str = field(default="mid_meeting")  # "mid_meeting" | "reasoning" | "post_meeting"
+    bucket: BucketType = field(default="mid_meeting")
 
 
 # Define all prompts using the configuration structure
@@ -198,7 +202,7 @@ def get_prompt_config_by_id(prompt_id: str) -> PromptConfig | None:
 
 
 # Helper to filter by bucket (DAR2-27)
-def get_prompts_by_bucket(bucket: str) -> list[PromptConfig]:
+def get_prompts_by_bucket(bucket: BucketType) -> list[PromptConfig]:
     """Return all prompts for a given bucket.
 
     Args:
