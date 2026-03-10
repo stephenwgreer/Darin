@@ -233,6 +233,58 @@ Transcript:
 ## Extra prompts
 ##############################
 
+# Analyze Statement prompt (DAR2-27 — Bucket 1: Mid-Meeting)
+ANALYZE_STATEMENT_PROMPT = """
+Analyze the key claim or statement in the following transcript.
+
+Return ONLY the analysis as HTML list items, formatted exactly as:
+- For the main claim: <li class="statement-claim">[The core claim or statement being analyzed]</li>
+- For strengths: <li class="statement-strength">[Strength of the claim]</li>
+- For weaknesses: <li class="statement-weakness">[Weakness or vulnerability in the claim]</li>
+- For assumptions: <li class="statement-assumption">[Underlying assumption being made]</li>
+- For what is unsaid: <li class="statement-unsaid">[What is being omitted or left unstated]</li>
+
+Generate 1 claim item, 2-3 strength items, 2-3 weakness items, 2-3 assumption items, and 1-2 unsaid items.
+
+Do not include headings, wrappers, or any other text outside the <li> tags.
+
+Transcript:
+{transcript}
+"""
+
+# Action Items prompt (DAR2-27 — Bucket 3: Post-Meeting)
+ACTION_ITEMS_PROMPT = """
+Extract all action items, commitments, and next steps from the following meeting transcript.
+
+Return ONLY the action items as HTML list items, formatted exactly as:
+- For each action item: <li class="action-item"><strong>[Owner if stated, otherwise "Unassigned"]:</strong> [Task description] [Due date/timeframe if mentioned, otherwise omit]</li>
+
+If no clear action items are present, return:
+<li class="action-item">No explicit action items identified in this transcript.</li>
+
+Do not include any other text, wrappers, headers, or formatting.
+
+Meeting transcript:
+{transcript}
+"""
+
+# Key Decisions prompt (DAR2-27 — Bucket 3: Post-Meeting)
+KEY_DECISIONS_PROMPT = """
+Extract all decisions from the following meeting transcript — decisions that were made, and decisions that still need to be made.
+
+Return ONLY the decisions as HTML list items, formatted exactly as:
+- For a decision that was made: <li class="decision-made"><strong>Decided:</strong> [Decision summary] — [Brief context for why this decision was reached]</li>
+- For a decision still needed: <li class="decision-needed"><strong>Open:</strong> [What needs to be decided] — [Key open questions or blockers]</li>
+
+If no decisions are found, return:
+<li class="decision-made">No explicit decisions identified in this transcript.</li>
+
+Do not include any other text, wrappers, headers, or formatting.
+
+Meeting transcript:
+{transcript}
+"""
+
 # Topic summary prompt
 TOPIC_SUMMARY_PROMPT = """
 Analyze the following transcript from a work call and identify the three main topics discussed.
