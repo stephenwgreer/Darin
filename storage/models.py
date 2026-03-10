@@ -1,4 +1,4 @@
-"""Data models for meeting transcript storage (DAR2-25)."""
+"""Data models for meeting transcript storage (DAR2-25, DAR2-27)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,17 @@ class TranscriptSegment:
     text: str
     is_final: bool = True
     meeting_id: int | None = None
+    id: int | None = None
+
+
+@dataclass
+class MeetingAnalysis:
+    """A saved post-meeting analysis result (DAR2-27)."""
+
+    meeting_id: int
+    prompt_id: str
+    output_text: str
+    created_at: datetime
     id: int | None = None
 
 

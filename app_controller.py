@@ -459,6 +459,223 @@ class AppController:
             if self._on_transcription_complete:
                 self._on_transcription_complete(f"Transcription error: {e!s}")
 
+    def get_saved_analyses(self) -> dict[str, str]:
+        """Return {prompt_id: output_text} for the current/last meeting.
+
+        Returns an empty dict if no meeting store is set or no meeting ID is
+        available.
+        """
+        meeting_id = self._last_meeting_id or self._active_meeting_id
+        if self._meeting_store is None or meeting_id is None:
+            return {}
+        return self._meeting_store.list_analyses_for_meeting(meeting_id)
+
+    def run_post_meeting_prompt(
+        self,
+        prompt_config: object,
+        *,
+        from_minute: int | None = None,
+        to_minute: int | None = None,
+        on_template_setup: Callable[[str], str | None] | None = None,
+        on_complete: Callable[[str, str], None] | None = None,
+    ) -> None:
+        """Run a post-meeting prompt against the stored meeting transcript.
+
+        Retrieves the full (or segment-filtered) transcript from SQLite, sends
+        it to Claude for streaming analysis, saves the result to
+        ``meeting_analyses``, and invokes ``on_complete`` when done.
+
+        Args:
+            prompt_config: A ``PromptConfig`` from ``PROMPT_REGISTRY``.
+            from_minute: Start of transcript window in minutes (None = start).
+            to_minute: End of transcript window in minutes (None = end).
+            on_template_setup: UI callback to configure the output panel
+                template. Receives the prompt template string; returns the
+                template_type string or None.
+            on_complete: Called with ``(prompt_id, output_text)`` after the
+                result is saved to SQLite.
+        """
+        # Atomic check-and-set for processing state
+        with self._processing_lock:
+            if self._is_processing:
+                logger.warning("Post-meeting prompt rejected: already processing")
+                return
+            self._is_processing = True
+
+        if self._on_progress:
+            self._on_progress("Retrieving transcript...")
+
+        threading.Thread(
+            target=self._run_post_meeting_thread,
+            args=(prompt_config, from_minute, to_minute, on_template_setup, on_complete),
+            daemon=True,
+        ).start()
+
+    def _run_post_meeting_thread(
+        self,
+        prompt_config: object,
+        from_minute: int | None,
+        to_minute: int | None,
+        on_template_setup: Callable[[str], str | None] | None,
+        on_complete: Callable[[str, str], None] | None,
+    ) -> None:
+        """Background thread: retrieve transcript and run post-meeting prompt."""
+        start_time = time.perf_counter()
+
+        try:
+            meeting_id = self._last_meeting_id or self._active_meeting_id
+            if self._meeting_store is None or meeting_id is None:
+                logger.error("Post-meeting prompt: no meeting available")
+                if self._on_processing_complete:
+                    self._on_processing_complete({"error": "No meeting available"})
+                return
+
+            # Retrieve transcript (full or segment range)
+            if from_minute is not None and to_minute is not None:
+                transcript = self._meeting_store.get_transcript_segment_range(
+                    meeting_id, from_minute, to_minute
+                )
+                logger.info(
+                    "Post-meeting transcript segment retrieved",
+                    meeting_id=meeting_id,
+                    from_minute=from_minute,
+                    to_minute=to_minute,
+                    length=len(transcript),
+                )
+            else:
+                transcript = self._meeting_store.get_full_transcript(meeting_id)
+                logger.info(
+                    "Post-meeting full transcript retrieved",
+                    meeting_id=meeting_id,
+                    length=len(transcript),
+                )
+
+            if not transcript.strip():
+                logger.warning("Post-meeting prompt: transcript is empty")
+                if self._on_processing_complete:
+                    self._on_processing_complete({"error": "No transcript available"})
+                return
+
+            # Context window handling: rough word-to-token estimate
+            token_estimate = len(transcript.split()) * 1.3
+            _TOKEN_LIMIT = 150_000
+
+            if token_estimate > _TOKEN_LIMIT:
+                logger.info(
+                    "Transcript exceeds context window — applying map-reduce",
+                    token_estimate=int(token_estimate),
+                )
+                if self._on_progress:
+                    self._on_progress(
+                        "Transcript exceeds context window — summarizing in sections first..."
+                    )
+                transcript = self._map_reduce_transcript(transcript)
+
+            if self._on_progress:
+                self._on_progress("Processing with Claude...")
+
+            # Set up output panel template
+            template_type = None
+            if on_template_setup:
+                template_type = on_template_setup(prompt_config.template)  # type: ignore[attr-defined]
+
+            self._template_type = template_type
+
+            # Collect full output for persistence
+            output_chunks: list[str] = []
+
+            def handle_stream(text: str) -> None:
+                output_chunks.append(text)
+                if self._on_stream_chunk:
+                    self._on_stream_chunk(text)
+
+            result = self.api_client.process_with_anthropic(
+                transcript,
+                prompt_config.template,  # type: ignore[attr-defined]
+                stream=True,
+                callback=handle_stream,
+            )
+
+            output_text = "".join(output_chunks) or str(result)
+
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "Post-meeting LLM processing complete",
+                prompt_id=prompt_config.id,  # type: ignore[attr-defined]
+                duration_ms=f"{duration_ms:.2f}",
+                output_length=len(output_text),
+            )
+
+            # Persist result to SQLite
+            self._meeting_store.save_analysis(
+                meeting_id,
+                prompt_config.id,  # type: ignore[attr-defined]
+                output_text,
+            )
+
+            if self._on_processing_complete:
+                self._on_processing_complete({"result": result})
+
+            if on_complete:
+                on_complete(prompt_config.id, output_text)  # type: ignore[attr-defined]
+
+        except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "Post-meeting prompt failed",
+                error=str(e),
+                duration_ms=f"{duration_ms:.2f}",
+                exc_info=True,
+            )
+            if self._on_processing_complete:
+                self._on_processing_complete({"error": str(e)})
+        finally:
+            self.is_processing = False
+
+    def _map_reduce_transcript(self, transcript: str) -> str:
+        """Summarize a very long transcript in chunks before final analysis.
+
+        Splits the transcript into overlapping 30,000-token chunks, summarizes
+        each chunk with a lightweight prompt, then returns the concatenated
+        summaries for use as the analysis input.
+
+        This path is only triggered for transcripts estimated to exceed 150,000
+        tokens (roughly 11+ hours of continuous speech).
+        """
+        _CHUNK_WORDS = 23_000   # ~30k tokens at 1.3 tokens/word
+        _OVERLAP_WORDS = 1_500  # ~2k tokens overlap between chunks
+
+        summarize_prompt = (
+            "Summarize the key points, decisions, and action items from this "
+            "transcript segment in concise bullet points:\n\n{transcript}"
+        )
+
+        words = transcript.split()
+        chunks: list[str] = []
+        start = 0
+
+        while start < len(words):
+            end = min(start + _CHUNK_WORDS, len(words))
+            chunks.append(" ".join(words[start:end]))
+            if end >= len(words):
+                break
+            start = end - _OVERLAP_WORDS
+
+        logger.info("Map-reduce: summarizing chunks", chunk_count=len(chunks))
+
+        summaries: list[str] = []
+        for i, chunk in enumerate(chunks):
+            logger.debug(f"Summarizing chunk {i + 1}/{len(chunks)}")
+            summary = self.api_client.process_with_anthropic(
+                chunk,
+                summarize_prompt,
+                stream=False,
+                callback=None,
+            )
+            summaries.append(str(summary))
+
+        return "\n\n".join(summaries)
+
     # ------------------------------------------------------------------
     # Prompt execution
     # ------------------------------------------------------------------

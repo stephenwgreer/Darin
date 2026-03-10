@@ -1,7 +1,7 @@
-"""SQLite storage for meeting transcripts (DAR2-25).
+"""SQLite storage for meeting transcripts (DAR2-25, DAR2-27).
 
-Thread-safe, WAL-mode SQLite database for persisting meeting sessions
-and their transcript segments in real time.
+Thread-safe, WAL-mode SQLite database for persisting meeting sessions,
+their transcript segments in real time, and post-meeting analysis results.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from storage.models import MeetingRecord, TranscriptSegment
+from storage.models import MeetingAnalysis, MeetingRecord, TranscriptSegment
 
 
 _DEFAULT_DB_PATH = Path.home() / ".darin-audio-assistant" / "meetings.db"
@@ -36,6 +36,18 @@ CREATE TABLE IF NOT EXISTS transcript_segments (
 
 CREATE INDEX IF NOT EXISTS idx_segments_meeting_ts
     ON transcript_segments(meeting_id, timestamp);
+
+CREATE TABLE IF NOT EXISTS meeting_analyses (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id  INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    prompt_id   TEXT NOT NULL,
+    output_text TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    UNIQUE(meeting_id, prompt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_meeting_analyses_meeting_id
+    ON meeting_analyses(meeting_id);
 """
 
 
@@ -180,6 +192,118 @@ class MeetingStore:
             )
             for r in rows
         ]
+
+    def get_transcript_segment_range(
+        self,
+        meeting_id: int,
+        from_minute: int,
+        to_minute: int,
+    ) -> str:
+        """Return transcript text for a time window relative to meeting start.
+
+        Retrieves segments whose timestamps fall between ``from_minute`` and
+        ``to_minute`` (inclusive) relative to the meeting's ``start_time``.
+        If no segments fall in the range, returns an empty string.
+
+        Args:
+            meeting_id: The meeting to retrieve transcript from.
+            from_minute: Start of window in minutes (0-based from meeting start).
+            to_minute: End of window in minutes (inclusive).
+
+        Returns:
+            Space-joined transcript text for the selected window.
+        """
+        row = self._conn.execute(
+            "SELECT start_time FROM meetings WHERE id = ?",
+            (meeting_id,),
+        ).fetchone()
+
+        if row is None:
+            return ""
+
+        start_time = datetime.fromisoformat(row[0])
+        from_seconds = from_minute * 60
+        to_seconds = to_minute * 60
+
+        rows = self._conn.execute(
+            """
+            SELECT text FROM transcript_segments
+            WHERE meeting_id = ?
+              AND CAST((julianday(timestamp) - julianday(?)) * 86400 AS INTEGER) >= ?
+              AND CAST((julianday(timestamp) - julianday(?)) * 86400 AS INTEGER) <= ?
+            ORDER BY timestamp, id
+            """,
+            (
+                meeting_id,
+                start_time.isoformat(),
+                from_seconds,
+                start_time.isoformat(),
+                to_seconds,
+            ),
+        ).fetchall()
+
+        return " ".join(r[0] for r in rows)
+
+    # ------------------------------------------------------------------
+    # Analysis persistence (DAR2-27)
+    # ------------------------------------------------------------------
+
+    def save_analysis(
+        self,
+        meeting_id: int,
+        prompt_id: str,
+        output_text: str,
+    ) -> None:
+        """Save (or overwrite) a post-meeting analysis result.
+
+        Uses INSERT OR REPLACE keyed on (meeting_id, prompt_id).
+        A re-run of the same prompt overwrites the previous result.
+
+        Args:
+            meeting_id: The meeting this analysis belongs to.
+            prompt_id: Registry ID of the prompt that produced this result.
+            output_text: The full analysis text returned by Claude.
+        """
+        now = datetime.now(tz=UTC).isoformat()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO meeting_analyses (meeting_id, prompt_id, output_text, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(meeting_id, prompt_id) DO UPDATE SET
+                    output_text = excluded.output_text,
+                    created_at  = excluded.created_at
+                """,
+                (meeting_id, prompt_id, output_text, now),
+            )
+            self._conn.commit()
+        logger.debug("Analysis saved", meeting_id=meeting_id, prompt_id=prompt_id)
+
+    def get_analysis(
+        self,
+        meeting_id: int,
+        prompt_id: str,
+    ) -> str | None:
+        """Return saved analysis text for a (meeting_id, prompt_id) pair.
+
+        Returns None if no analysis has been saved for this combination.
+        """
+        row = self._conn.execute(
+            "SELECT output_text FROM meeting_analyses WHERE meeting_id = ? AND prompt_id = ?",
+            (meeting_id, prompt_id),
+        ).fetchone()
+        return row[0] if row is not None else None
+
+    def list_analyses_for_meeting(
+        self,
+        meeting_id: int,
+    ) -> dict[str, str]:
+        """Return all saved analyses for a meeting as {prompt_id: output_text}."""
+        rows = self._conn.execute(
+            "SELECT prompt_id, output_text FROM meeting_analyses WHERE meeting_id = ?",
+            (meeting_id,),
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
 
     # ------------------------------------------------------------------
     # Deletion
