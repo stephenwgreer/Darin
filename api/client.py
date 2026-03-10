@@ -3,6 +3,7 @@
 Provides high-level interface for transcription and AI processing.
 """
 
+import time
 from collections.abc import Callable
 
 from anthropic import Anthropic, APIConnectionError, APIError, RateLimitError
@@ -10,6 +11,11 @@ from loguru import logger
 
 import config
 from api.deepgram_utils import transcribe_with_deepgram
+
+# Retry configuration for transient API errors
+_MAX_RETRIES = 3
+_INITIAL_BACKOFF_S = 1.0
+_BACKOFF_MULTIPLIER = 2.0
 
 
 class ApiClient:
@@ -87,7 +93,6 @@ class ApiClient:
 
         client = self.anthropic_client
 
-        # Prepare the message content
         if prompt_template:
             content = prompt_template.format(transcript=text)
         else:
@@ -96,53 +101,77 @@ class ApiClient:
         logger.info("Sending prompt to Claude API")
         logger.debug(f"Content length: {len(content)} characters")
 
-        try:
-            if stream:
-                # Stream the response using list comprehension for efficiency
-                response_chunks: list[str] = []
-                with client.messages.stream(
-                    model=config.CLAUDE_MODEL,
-                    max_tokens=config.MAX_TOKENS,
-                    messages=[{"role": "user", "content": content}],
-                ) as stream_context:
-                    for chunk_text in stream_context.text_stream:
-                        logger.debug(f"Received chunk: {len(chunk_text)} chars")
-                        response_chunks.append(chunk_text)
-                        if callback:
-                            callback(chunk_text)
+        attempt = 0
+        backoff = _INITIAL_BACKOFF_S
+        last_error: Exception | None = None
 
-                response_text = "".join(response_chunks)
-                logger.info(f"Completed streaming response: {len(response_text)} chars")
-                return response_text
-            else:
-                # Get complete response
-                response = client.messages.create(
-                    model=config.CLAUDE_MODEL,
-                    max_tokens=config.MAX_TOKENS,
-                    messages=[{"role": "user", "content": content}],
-                )
-                # Extract text from first content block
-                first_block = response.content[0]
-                if hasattr(first_block, "text"):
-                    response_text = first_block.text
-                    logger.info(f"Received complete response: {len(response_text)} chars")
+        while attempt <= _MAX_RETRIES:
+            try:
+                if stream:
+                    response_chunks: list[str] = []
+                    with client.messages.stream(
+                        model=config.CLAUDE_MODEL,
+                        max_tokens=config.MAX_TOKENS,
+                        messages=[{"role": "user", "content": content}],
+                    ) as stream_context:
+                        for chunk_text in stream_context.text_stream:
+                            logger.debug(f"Received chunk: {len(chunk_text)} chars")
+                            response_chunks.append(chunk_text)
+                            if callback:
+                                callback(chunk_text)
+
+                    response_text = "".join(response_chunks)
+                    logger.info(f"Completed streaming response: {len(response_text)} chars")
                     return response_text
                 else:
-                    error_msg = f"Unexpected content block type: {type(first_block)}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
+                    response = client.messages.create(
+                        model=config.CLAUDE_MODEL,
+                        max_tokens=config.MAX_TOKENS,
+                        messages=[{"role": "user", "content": content}],
+                    )
+                    first_block = response.content[0]
+                    if hasattr(first_block, "text"):
+                        response_text = first_block.text
+                        logger.info(f"Received complete response: {len(response_text)} chars")
+                        return response_text
+                    else:
+                        error_msg = f"Unexpected content block type: {type(first_block)}"
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg)
 
-        except RateLimitError as e:
-            logger.error(f"Rate limit exceeded: {e}")
-            raise RuntimeError("Claude API rate limit exceeded. Please try again later.") from e
-        except APIConnectionError as e:
-            logger.error(f"API connection failed: {e}")
-            raise RuntimeError(
-                "Failed to connect to Claude API. Check your network connection."
-            ) from e
-        except APIError as e:
-            logger.error(f"Claude API error: {e}")
-            raise RuntimeError(f"Error processing with Claude: {e}") from e
+            except RateLimitError as e:
+                last_error = e
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        f"Rate limit hit, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                    )
+                    time.sleep(backoff)
+                    backoff *= _BACKOFF_MULTIPLIER
+                else:
+                    logger.error(f"Rate limit exceeded after {_MAX_RETRIES} retries: {e}")
+                    raise RuntimeError(
+                        "Claude API rate limit exceeded. Please try again later."
+                    ) from e
+            except APIConnectionError as e:
+                last_error = e
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        f"Connection error, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                    )
+                    time.sleep(backoff)
+                    backoff *= _BACKOFF_MULTIPLIER
+                else:
+                    logger.error(f"API connection failed after {_MAX_RETRIES} retries: {e}")
+                    raise RuntimeError(
+                        "Failed to connect to Claude API. Check your network connection."
+                    ) from e
+            except APIError as e:
+                logger.error(f"Claude API error: {e}")
+                raise RuntimeError(f"Error processing with Claude: {e}") from e
+
+            attempt += 1
+
+        raise RuntimeError(f"Claude API failed after {_MAX_RETRIES} retries: {last_error}")
 
     def transcribe_with_deepgram(self, audio_data: bytes, sample_rate: int) -> str:
         """

@@ -1,10 +1,16 @@
 """Deepgram API utilities for audio transcription."""
 
 import json
+import time
 from typing import Any
 
 import requests  # type: ignore[import-untyped]
 import soundfile as sf  # type: ignore[import-untyped]
+
+_MAX_RETRIES = 3
+_INITIAL_BACKOFF_S = 1.0
+_BACKOFF_MULTIPLIER = 2.0
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def transcribe_with_deepgram(api_key: str, audio_data: Any, sample_rate: int) -> str:
@@ -26,38 +32,56 @@ def transcribe_with_deepgram(api_key: str, audio_data: Any, sample_rate: int) ->
 
     print("Transcribing audio...")
 
-    # Deepgram API endpoint
     url = "https://api.deepgram.com/v1/listen"
-
-    # Request headers
     headers = {"Authorization": f"Token {api_key}"}
-
-    # Parameters for the transcription
     params = {"punctuate": "true", "model": "general", "language": "en-US"}
 
-    with open(temp_file, "rb") as audio:
-        # Send the request to Deepgram
-        response = requests.post(url, headers=headers, params=params, data=audio)
+    attempt = 0
+    backoff = _INITIAL_BACKOFF_S
 
-    if response.status_code == 200:
-        response_json = response.json()
+    while attempt <= _MAX_RETRIES:
+        with open(temp_file, "rb") as audio:
+            try:
+                response = requests.post(url, headers=headers, params=params, data=audio)
+            except requests.ConnectionError as e:
+                if attempt < _MAX_RETRIES:
+                    print(
+                        f"Connection error, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                    )
+                    time.sleep(backoff)
+                    backoff *= _BACKOFF_MULTIPLIER
+                    attempt += 1
+                    continue
+                return f"Error: connection failed after {_MAX_RETRIES} retries: {e}"
 
-        # Debug logging
-        print("Full response structure:")
-        print(json.dumps(response_json, indent=2))
+        if response.status_code == 200:
+            response_json = response.json()
 
-        # Extract transcript from response
-        try:
-            transcript: str = response_json["results"]["channels"][0]["alternatives"][0][
-                "transcript"
-            ]
-            print(f"Found transcript: {transcript}")
-            return transcript
-        except KeyError:
-            print("Standard path not found, examining response structure...")
-            error_msg = "Error: Could not locate transcript in response. Check console output for structure."
-            return error_msg
-    else:
-        print(f"Error: {response.status_code}")
-        print(response.text)
-        return f"Error: {response.status_code} - {response.text}"
+            # Debug logging
+            print("Full response structure:")
+            print(json.dumps(response_json, indent=2))
+
+            try:
+                transcript: str = response_json["results"]["channels"][0]["alternatives"][0][
+                    "transcript"
+                ]
+                print(f"Found transcript: {transcript}")
+                return transcript
+            except KeyError:
+                print("Standard path not found, examining response structure...")
+                return "Error: Could not locate transcript in response. Check console output for structure."
+
+        elif response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
+            print(
+                f"Deepgram returned {response.status_code}, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+            )
+            time.sleep(backoff)
+            backoff *= _BACKOFF_MULTIPLIER
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            return f"Error: {response.status_code} - {response.text}"
+
+        attempt += 1
+
+    return f"Error: Deepgram transcription failed after {_MAX_RETRIES} retries"
