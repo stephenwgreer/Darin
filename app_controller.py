@@ -565,9 +565,9 @@ class AppController:
 
             # Context window handling: rough word-to-token estimate
             token_estimate = len(transcript.split()) * 1.3
-            _TOKEN_LIMIT = 150_000
+            token_limit = 150_000
 
-            if token_estimate > _TOKEN_LIMIT:
+            if token_estimate > token_limit:
                 logger.info(
                     "Transcript exceeds context window — applying map-reduce",
                     token_estimate=int(token_estimate),
@@ -649,8 +649,8 @@ class AppController:
         This path is only triggered for transcripts estimated to exceed 150,000
         tokens (roughly 11+ hours of continuous speech).
         """
-        _CHUNK_WORDS = 23_000   # ~30k tokens at 1.3 tokens/word
-        _OVERLAP_WORDS = 1_500  # ~2k tokens overlap between chunks
+        chunk_words = 23_000   # ~30k tokens at 1.3 tokens/word
+        overlap_words = 1_500  # ~2k tokens overlap between chunks
 
         summarize_prompt = (
             "Summarize the key points, decisions, and action items from this "
@@ -662,11 +662,11 @@ class AppController:
         start = 0
 
         while start < len(words):
-            end = min(start + _CHUNK_WORDS, len(words))
+            end = min(start + chunk_words, len(words))
             chunks.append(" ".join(words[start:end]))
             if end >= len(words):
                 break
-            start = end - _OVERLAP_WORDS
+            start = end - overlap_words
 
         logger.info("Map-reduce: summarizing chunks", chunk_count=len(chunks))
 

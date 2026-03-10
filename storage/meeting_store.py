@@ -13,7 +13,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from storage.models import MeetingAnalysis, MeetingRecord, TranscriptSegment
+from storage.models import MeetingRecord, TranscriptSegment
 
 
 _DEFAULT_DB_PATH = Path.home() / ".darin-audio-assistant" / "meetings.db"

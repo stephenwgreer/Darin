@@ -20,10 +20,8 @@ from collections.abc import Callable
 
 from nicegui import ui
 
-from prompts.registry import PromptConfig, get_prompts_by_bucket
+from prompts.registry import PROMPT_REGISTRY, PromptConfig, get_prompts_by_bucket
 
-# Build template → template_type lookup from all buckets at import time
-from prompts.registry import PROMPT_REGISTRY
 
 _TEMPLATE_TO_TYPE: dict[str, str] = {cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY}
 
