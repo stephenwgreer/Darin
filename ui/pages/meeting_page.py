@@ -9,7 +9,7 @@ Output panel shows only Claude analysis results.
 
 from __future__ import annotations
 
-from nicegui import ui
+from nicegui import Client, ui
 
 from app_controller import AppController
 from ui.components.capture_buttons import CaptureButtons
@@ -22,7 +22,7 @@ def create_meeting_page(controller: AppController) -> None:
     """Register the NiceGUI meeting page. Called once at app startup."""
 
     @ui.page("/")
-    async def meeting_page() -> None:
+    async def meeting_page(client: Client) -> None:
         # All state lives in AppController — page reads it, never owns it.
 
         with ui.column().classes("w-full max-w-4xl mx-auto gap-4 p-4"):
@@ -37,7 +37,7 @@ def create_meeting_page(controller: AppController) -> None:
 
             # Claude analysis output panel (created before PromptButtons so the
             # reference can be passed in for on_template_setup wiring)
-            output = OutputPanel(controller)
+            output = OutputPanel(controller, client=client)
 
             # Context-aware prompt buttons
             prompts = PromptButtons(controller, output_panel=output)

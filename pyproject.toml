@@ -23,10 +23,6 @@ dependencies = [
     "websockets>=11.0,<14.0",
     "python-dotenv==1.0.0",
     "anthropic>=0.40.0",
-    "PyQt6==6.6.1",
-    "PyQt6-Qt6>=6.6.0,<6.7",
-    "PyQt6-WebEngine==6.6.0",
-    "PyQt6-WebEngine-Qt6>=6.6.0,<6.7",
     "markdown2==2.5.3",
     "scipy",
     "pytest>=9.0.2",
@@ -92,7 +88,6 @@ module = [
     "deepgram.*",
     "markdown2.*",
     "scipy.*",
-    "PyQt6.*",
     "nicegui.*",
 ]
 ignore_missing_imports = true

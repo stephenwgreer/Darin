@@ -12,6 +12,7 @@ from loguru import logger
 import config
 from api.deepgram_utils import transcribe_with_deepgram
 
+
 # Retry configuration for transient API errors
 _MAX_RETRIES = 3
 _INITIAL_BACKOFF_S = 1.0

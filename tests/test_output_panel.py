@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestOutputPanelSetup:
@@ -56,51 +57,66 @@ class TestOutputPanelStreaming:
     """Test chunk processing — buffer + extract + route."""
 
     def test_complete_item_appended_via_js(self) -> None:
-        with patch("ui.components.output_panel.ui") as mock_ui:
+        with patch("ui.components.output_panel.ui"):
             from ui.components.output_panel import OutputPanel
 
             controller = MagicMock()
-            panel = OutputPanel(controller)
+            # Provide a mock Client so _run_javascript dispatches to it
+            mock_client = MagicMock()
+            mock_client.run_javascript = AsyncMock()
+            panel = OutputPanel(controller, client=mock_client)
             panel._content = MagicMock()
             panel._scroll = MagicMock()
+            # Use a synchronous (non-running) loop so run_coroutine_threadsafe
+            # is called — we capture the JS via the coroutine's args instead.
+            panel._loop = asyncio.new_event_loop()
 
             panel.setup_template("meeting-summary")
             panel.handle_stream_chunk('<li class="insight-item">Point A</li>')
 
-            # Should have called run_javascript for incremental append
-            mock_ui.run_javascript.assert_called()
-            js_call = mock_ui.run_javascript.call_args[0][0]
+            # run_javascript should have been called with JS containing insertAdjacentHTML
+            mock_client.run_javascript.assert_called()
+            js_call = mock_client.run_javascript.call_args[0][0]
             assert "insertAdjacentHTML" in js_call
             assert "dynamic-content" in js_call
 
+            panel._loop.close()
+
     def test_partial_item_not_appended(self) -> None:
-        with patch("ui.components.output_panel.ui") as mock_ui:
+        with patch("ui.components.output_panel.ui"):
             from ui.components.output_panel import OutputPanel
 
             controller = MagicMock()
-            panel = OutputPanel(controller)
+            mock_client = MagicMock()
+            mock_client.run_javascript = AsyncMock()
+            panel = OutputPanel(controller, client=mock_client)
             panel._content = MagicMock()
             panel._scroll = MagicMock()
 
             panel.setup_template("meeting-summary")
             panel.handle_stream_chunk('<li class="insight-item">partial...')
 
-            mock_ui.run_javascript.assert_not_called()
+            mock_client.run_javascript.assert_not_called()
 
     def test_multi_list_routing(self) -> None:
-        with patch("ui.components.output_panel.ui") as mock_ui:
+        with patch("ui.components.output_panel.ui"):
             from ui.components.output_panel import OutputPanel
 
             controller = MagicMock()
-            panel = OutputPanel(controller)
+            mock_client = MagicMock()
+            mock_client.run_javascript = AsyncMock()
+            panel = OutputPanel(controller, client=mock_client)
             panel._content = MagicMock()
             panel._scroll = MagicMock()
+            panel._loop = asyncio.new_event_loop()
 
             panel.setup_template("fill-gaps")
             panel.handle_stream_chunk('<li class="gap-item">Missing data</li>')
 
-            js_call = mock_ui.run_javascript.call_args[0][0]
+            js_call = mock_client.run_javascript.call_args[0][0]
             assert "gaps-list" in js_call
+
+            panel._loop.close()
 
 
 class TestOutputPanelFinalize:

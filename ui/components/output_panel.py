@@ -16,12 +16,11 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import inspect
 import json
 import re
 from collections.abc import Callable
 
-from nicegui import ui
+from nicegui import Client, ui
 
 from ui.stream_buffer import StreamBuffer
 from ui.stream_handlers import (
@@ -38,7 +37,7 @@ _SECTION_HEADER_RE = re.compile(r"^[A-Z][A-Z\s]+$")
 class OutputPanel:
     """Claude analysis results display with streaming support."""
 
-    def __init__(self, controller: object) -> None:
+    def __init__(self, controller: object, client: Client | None = None) -> None:
         with ui.card().classes("w-full"):
             self._title_label = ui.label("Analysis Output").classes(
                 "text-sm font-semibold text-gray-500 uppercase tracking-wide"
@@ -53,6 +52,11 @@ class OutputPanel:
         self._first_line_received: bool = False
         self._raw_text: str = ""  # accumulates text for non-template (markdown) responses
 
+        # Store the NiceGUI Client for context-free run_javascript calls.
+        # Client.run_javascript() holds its own WebSocket reference and does
+        # NOT require a contextvars context — safe to call from any thread.
+        self._client = client
+
         # Capture the event loop for thread-safe UI marshalling.
         # handle_stream_chunk() and _finalize() are called from a background
         # thread; all NiceGUI UI operations must be scheduled on this loop.
@@ -63,7 +67,7 @@ class OutputPanel:
         controller.on_processing_complete = lambda result: self._finalize(result)  # type: ignore[attr-defined]
 
     def _call_on_ui_thread(self, fn: Callable[..., object], *args: object) -> None:
-        """Schedule a UI callback on the event loop (thread-safe).
+        """Schedule a synchronous UI callback on the event loop (thread-safe).
 
         When called from a background thread (streaming callbacks), pushes the
         call onto the running NiceGUI event loop via call_soon_threadsafe so
@@ -71,17 +75,29 @@ class OutputPanel:
 
         When no loop is running (unit tests, synchronous call sites), the
         function is invoked directly — this keeps test assertions working.
+
+        For run_javascript calls use _run_javascript() instead — NiceGUI's
+        Client.run_javascript() is a coroutine and must NOT be passed here.
         """
         try:
             if self._loop.is_running():
-                if inspect.iscoroutinefunction(fn):
-                    asyncio.run_coroutine_threadsafe(fn(*args), self._loop)
-                else:
-                    self._loop.call_soon_threadsafe(functools.partial(fn, *args))
+                self._loop.call_soon_threadsafe(functools.partial(fn, *args))
             else:
                 fn(*args)
         except RuntimeError:
             fn(*args)
+
+    def _run_javascript(self, js_code: str) -> None:
+        """Schedule a run_javascript call using the stored Client reference.
+
+        Client.run_javascript() holds its own WebSocket reference and is safe
+        to call from background threads without a NiceGUI context variable.
+        Falls back silently when no client is available (e.g. unit tests).
+        """
+        if self._client is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._client.run_javascript(js_code), self._loop
+            )
 
     def setup_template(self, template_type: str, output_title: str | None = None) -> None:
         """Install scaffold HTML and configure buffer for a template type.
@@ -149,7 +165,7 @@ class OutputPanel:
                     js_code = (
                         f'document.getElementById("overall-sentiment-value").innerText = {escaped}'
                     )
-                    self._call_on_ui_thread(ui.run_javascript, js_code)
+                    self._run_javascript(js_code)
                 if not text.strip():
                     return
 
@@ -185,7 +201,7 @@ class OutputPanel:
         js_code = (
             f'document.getElementById("{safe_id}").insertAdjacentHTML("beforeend", `{escaped}`)'
         )
-        self._call_on_ui_thread(ui.run_javascript, js_code)
+        self._run_javascript(js_code)
 
     def _detect_and_apply_section_header(self, chunk: str) -> None:
         """Scan completed lines in chunk for ALL-CAPS section headers.

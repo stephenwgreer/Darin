@@ -7,6 +7,7 @@ from typing import Any
 import requests  # type: ignore[import-untyped]
 import soundfile as sf  # type: ignore[import-untyped]
 
+
 _MAX_RETRIES = 3
 _INITIAL_BACKOFF_S = 1.0
 _BACKOFF_MULTIPLIER = 2.0
