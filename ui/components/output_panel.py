@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import json
 from collections.abc import Callable
 
@@ -65,7 +66,10 @@ class OutputPanel:
         """
         try:
             if self._loop.is_running():
-                self._loop.call_soon_threadsafe(functools.partial(fn, *args))
+                if inspect.iscoroutinefunction(fn):
+                    asyncio.run_coroutine_threadsafe(fn(*args), self._loop)
+                else:
+                    self._loop.call_soon_threadsafe(functools.partial(fn, *args))
             else:
                 fn(*args)
         except RuntimeError:
