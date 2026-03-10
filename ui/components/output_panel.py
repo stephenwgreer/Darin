@@ -6,6 +6,10 @@ Displays Claude analysis output with bullet-by-bullet streaming:
    routes them via TEMPLATE_REGISTRY, and appends to DOM via JavaScript
 3. _finalize() handles completion — skips content replace for registered
    templates (scaffold + streamed items are already correct)
+
+Section-header detection: when a line in the markdown stream matches
+^[A-Z][A-Z\\s]+$ (all-caps, possibly with spaces) the card title label
+is updated to that value via _call_on_ui_thread.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import asyncio
 import functools
 import inspect
 import json
+import re
 from collections.abc import Callable
 
 from nicegui import ui
@@ -27,12 +32,15 @@ from ui.stream_handlers import (
 )
 
 
+_SECTION_HEADER_RE = re.compile(r"^[A-Z][A-Z\s]+$")
+
+
 class OutputPanel:
     """Claude analysis results display with streaming support."""
 
     def __init__(self, controller: object) -> None:
         with ui.card().classes("w-full"):
-            ui.label("Analysis Output").classes(
+            self._title_label = ui.label("Analysis Output").classes(
                 "text-sm font-semibold text-gray-500 uppercase tracking-wide"
             )
             with ui.scroll_area().classes("w-full h-96 border rounded") as self._scroll:
@@ -75,17 +83,22 @@ class OutputPanel:
         except RuntimeError:
             fn(*args)
 
-    def setup_template(self, template_type: str) -> None:
+    def setup_template(self, template_type: str, output_title: str | None = None) -> None:
         """Install scaffold HTML and configure buffer for a template type.
 
         Called before streaming begins (from on_template_setup callback, which
         runs on a background thread). The set_content call is marshalled to the
         event loop via _call_on_ui_thread.
+
+        If output_title is provided it is applied to the card title label
+        immediately; otherwise the label is left unchanged.
         """
         self._template_type = template_type
         self._first_line_received = False
         self._raw_text = ""
         self._call_on_ui_thread(self._md_content.set_content, "")
+        if output_title is not None:
+            self._call_on_ui_thread(self._title_label.set_text, output_title)
 
         # Get pattern from registry (or default)
         config = TEMPLATE_REGISTRY.get(template_type)
@@ -110,6 +123,7 @@ class OutputPanel:
             self._raw_text += chunk
             self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
             self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
+            self._detect_and_apply_section_header(chunk)
             return
 
         config = TEMPLATE_REGISTRY.get(self._template_type)
@@ -118,6 +132,7 @@ class OutputPanel:
             self._raw_text += chunk
             self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
             self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
+            self._detect_and_apply_section_header(chunk)
             return
 
         text = chunk
@@ -172,6 +187,20 @@ class OutputPanel:
         )
         self._call_on_ui_thread(ui.run_javascript, js_code)
 
+    def _detect_and_apply_section_header(self, chunk: str) -> None:
+        """Scan completed lines in chunk for ALL-CAPS section headers.
+
+        If a line matches ^[A-Z][A-Z\\s]+$ it is treated as a section header
+        and the card title label is updated to that value on the UI thread.
+        Only complete lines (terminated by newline) are checked so that a
+        partial line arriving across two chunks is not misclassified.
+        """
+        for line in chunk.splitlines():
+            stripped = line.strip()
+            if stripped and _SECTION_HEADER_RE.match(stripped):
+                self._call_on_ui_thread(self._title_label.set_text, stripped)
+                return  # Use the first header found in this chunk
+
     def _finalize(self, result: dict[str, object]) -> None:
         """Called when streaming is complete.
 
@@ -195,6 +224,7 @@ class OutputPanel:
         """Clear the output panel and reset streaming state."""
         self._content.set_content("")
         self._md_content.set_content("")
+        self._title_label.set_text("Analysis Output")
         self._template_type = None
         self._first_line_received = False
         self._raw_text = ""

@@ -129,12 +129,13 @@ class TestOutputPanelFinalize:
             controller = MagicMock()
             panel = OutputPanel(controller)
             panel._content = MagicMock()
+            panel._md_content = MagicMock()
             panel._scroll = MagicMock()
 
             # No setup_template called — _template_type is None
             panel._finalize({"result": "Final analysis"})
 
-            panel._content.set_content.assert_called_with("Final analysis")
+            panel._md_content.set_content.assert_called_with("Final analysis")
 
 
 class TestOutputPanelCallbackWiring:

@@ -24,6 +24,7 @@ from prompts.registry import PROMPT_REGISTRY, PromptConfig, get_prompts_by_bucke
 
 
 _TEMPLATE_TO_TYPE: dict[str, str] = {cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY}
+_TEMPLATE_TO_OUTPUT_TITLE: dict[str, str] = {cfg.template: cfg.output_title for cfg in PROMPT_REGISTRY}
 
 
 class PromptButtons:
@@ -47,7 +48,7 @@ class PromptButtons:
                         on_click=lambda c=cfg: self._run_mid_meeting(c),
                     ).classes("bg-blue-600 text-white")
                     self._prompt_buttons.append(btn)
-        self._mid_meeting_card.set_visibility(False)
+        self._mid_meeting_card.set_visibility(True)
 
         # --- Bucket 2: Reasoning Frameworks card (amber, MEETING_ACTIVE only) ---
         with ui.card().classes("w-full") as self._reasoning_card:
@@ -61,7 +62,7 @@ class PromptButtons:
                         on_click=lambda c=cfg: self._run_mid_meeting(c),
                     ).classes("bg-amber-600 text-white")
                     self._prompt_buttons.append(btn)
-        self._reasoning_card.set_visibility(False)
+        self._reasoning_card.set_visibility(True)
 
         # --- Bucket 3: Post-Meeting Analysis card (purple, POST_MEETING only) ---
         with ui.card().classes("w-full") as self._post_meeting_card:
@@ -116,8 +117,11 @@ class PromptButtons:
 
         def on_template_setup(pt: str) -> str | None:
             template_type = _TEMPLATE_TO_TYPE.get(pt)
+            output_title = _TEMPLATE_TO_OUTPUT_TITLE.get(pt)
             if template_type and self._output_panel is not None:
-                self._output_panel.setup_template(template_type)  # type: ignore[attr-defined]
+                self._output_panel.setup_template(  # type: ignore[attr-defined]
+                    template_type, output_title=output_title
+                )
             return template_type
 
         return on_template_setup
