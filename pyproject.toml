@@ -44,6 +44,12 @@ dev = [
     "types-requests>=2.32.4.20260107",
 ]
 
+[tool.uv]
+# WSL CONVENTION: Do NOT set `venv` here — this file is shared between Windows and WSL.
+# Windows developers use the default `.venv` (managed via PowerShell).
+# WSL agents and CI must set UV_PROJECT_ENVIRONMENT=.venv-linux before calling `uv sync`.
+# Use scripts/setup-wsl-dev.sh for a one-liner that handles this automatically.
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

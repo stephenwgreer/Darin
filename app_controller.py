@@ -787,6 +787,12 @@ class AppController:
             if self._on_transcription_complete:
                 self._on_transcription_complete(text)
 
+            if not text.strip():
+                logger.warning("Transcription returned empty text — skipping prompt execution")
+                if self._on_processing_complete:
+                    self._on_processing_complete({"error": "Transcription returned empty text"})
+                return
+
             self._run_prompt_thread(text, prompt_template, on_template_setup)
 
             total_duration_ms = (time.perf_counter() - start_time) * 1000
@@ -804,6 +810,8 @@ class AppController:
             )
             if self._on_processing_complete:
                 self._on_processing_complete({"error": str(e)})
+        finally:
+            self.is_processing = False
 
     def _run_prompt_thread(
         self,
@@ -858,3 +866,5 @@ class AppController:
             )
             if self._on_processing_complete:
                 self._on_processing_complete({"error": str(e)})
+        finally:
+            self.is_processing = False

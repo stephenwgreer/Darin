@@ -129,6 +129,7 @@ celerybeat.pid
 .env.production
 .venv
 .venv-wsl/
+.venv-linux/
 env/
 venv/
 ENV/
