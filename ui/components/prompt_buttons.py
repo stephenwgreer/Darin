@@ -1,15 +1,16 @@
-"""Context-aware prompt buttons (DAR2-26).
+"""Context-aware prompt buttons — three-bucket layout (DAR2-27).
 
-Mid-meeting prompts (MEETING_ACTIVE only):
-- Problem-solving, evaluate, analyze, first principles, hypothesis
+Bucket 1 — Meeting Analysis (blue, MEETING_ACTIVE only):
+    9 mid-meeting prompts driven from registry bucket="mid_meeting"
 
-Post-meeting prompts (POST_MEETING only):
-- Meeting summary, extract topics, action items, key decisions
+Bucket 2 — Reasoning Frameworks (amber, MEETING_ACTIVE only):
+    5 prompts driven from registry bucket="reasoning"
 
-Copy Transcript button (POST_MEETING only):
-- Copies full meeting transcript to clipboard via navigator.clipboard API
+Bucket 3 — Post-Meeting Analysis (purple, POST_MEETING only):
+    4 prompts driven from registry bucket="post_meeting"
+    Includes segment selector, checkmark badges, and Copy Transcript.
 
-Processing guard: all prompt buttons disabled while a prompt is executing.
+Processing guard: all prompt buttons disabled while any prompt is executing.
 """
 
 from __future__ import annotations
@@ -19,54 +20,96 @@ from collections.abc import Callable
 
 from nicegui import ui
 
-from prompts.registry import PROMPT_REGISTRY
+from prompts.registry import PromptConfig, get_prompts_by_bucket
 
+# Build template → template_type lookup from all buckets at import time
+from prompts.registry import PROMPT_REGISTRY
 
 _TEMPLATE_TO_TYPE: dict[str, str] = {cfg.template: cfg.template_type for cfg in PROMPT_REGISTRY}
 
 
 class PromptButtons:
-    """Context-aware prompt buttons with processing guard."""
+    """Context-aware prompt buttons with three-bucket layout and processing guard."""
 
     def __init__(self, controller: object, output_panel: object | None = None) -> None:
         self._controller = controller
         self._output_panel = output_panel
         self._prompt_buttons: list[ui.button] = []
+        self._post_meeting_badges: dict[str, ui.badge] = {}
 
-        # Mid-meeting prompts (hidden by default)
+        # --- Bucket 1: Meeting Analysis card (blue, MEETING_ACTIVE only) ---
         with ui.card().classes("w-full") as self._mid_meeting_card:
             ui.label("Meeting Analysis").classes(
                 "text-sm font-semibold text-gray-500 uppercase tracking-wide"
             )
             with ui.row().classes("gap-2 flex-wrap"):
-                for name, template in self._mid_meeting_prompts():
+                for cfg in get_prompts_by_bucket("mid_meeting"):
                     btn = ui.button(
-                        name,
-                        on_click=lambda t=template: self._run_prompt(t),
+                        cfg.button_text,
+                        on_click=lambda c=cfg: self._run_mid_meeting(c),
                     ).classes("bg-blue-600 text-white")
                     self._prompt_buttons.append(btn)
         self._mid_meeting_card.set_visibility(False)
 
-        # Post-meeting prompts (hidden by default)
+        # --- Bucket 2: Reasoning Frameworks card (amber, MEETING_ACTIVE only) ---
+        with ui.card().classes("w-full") as self._reasoning_card:
+            ui.label("Reasoning Frameworks").classes(
+                "text-sm font-semibold text-gray-500 uppercase tracking-wide"
+            )
+            with ui.row().classes("gap-2 flex-wrap"):
+                for cfg in get_prompts_by_bucket("reasoning"):
+                    btn = ui.button(
+                        cfg.button_text,
+                        on_click=lambda c=cfg: self._run_mid_meeting(c),
+                    ).classes("bg-amber-600 text-white")
+                    self._prompt_buttons.append(btn)
+        self._reasoning_card.set_visibility(False)
+
+        # --- Bucket 3: Post-Meeting Analysis card (purple, POST_MEETING only) ---
         with ui.card().classes("w-full") as self._post_meeting_card:
             ui.label("Post-Meeting Analysis").classes(
                 "text-sm font-semibold text-gray-500 uppercase tracking-wide"
             )
-            with ui.row().classes("gap-2 flex-wrap"):
-                for name, template in self._post_meeting_prompts():
-                    btn = ui.button(
-                        name,
-                        on_click=lambda t=template: self._run_prompt(t),
-                    ).classes("bg-purple-600 text-white")
-                    self._prompt_buttons.append(btn)
 
-                # Copy Transcript button
+            # Segment selector row
+            with ui.row().classes("gap-2 items-center"):
+                ui.label("Analyze:").classes("text-sm")
+                self._segment_mode = ui.select(
+                    ["Full transcript", "Time range"],
+                    value="Full transcript",
+                    on_change=self._on_segment_mode_change,
+                ).classes("text-sm")
+
+            with ui.row().classes("gap-2 items-center") as self._range_row:
+                ui.label("From min").classes("text-sm")
+                self._from_minute = ui.number(min=0, value=0).classes("w-16")
+                ui.label("to min").classes("text-sm")
+                self._to_minute = ui.number(min=1, value=60).classes("w-16")
+            self._range_row.set_visibility(False)
+
+            # Post-meeting prompt buttons with checkmark badges
+            with ui.row().classes("gap-2 flex-wrap"):
+                for cfg in get_prompts_by_bucket("post_meeting"):
+                    with ui.element("div").classes("relative") as _container:
+                        btn = ui.button(
+                            cfg.button_text,
+                            on_click=lambda c=cfg: self._run_post_meeting(c),
+                        ).classes("bg-purple-600 text-white")
+                        badge = ui.badge("✓").classes("absolute -top-1 -right-1 hidden")
+                    self._prompt_buttons.append(btn)
+                    self._post_meeting_badges[cfg.id] = badge
+
+                # Copy Transcript utility button
                 self._copy_btn = ui.button(
                     "Copy Transcript",
                     on_click=self._copy_transcript,
                     icon="content_copy",
                 ).classes("bg-gray-600 text-white")
         self._post_meeting_card.set_visibility(False)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _make_template_setup(self, prompt_template: str) -> Callable[[str], str | None] | None:
         """Create the on_template_setup callback for a prompt template."""
@@ -81,21 +124,67 @@ class PromptButtons:
 
         return on_template_setup
 
-    async def _run_prompt(self, template: str) -> None:
-        """Run prompt with processing guard — disables all prompt buttons."""
+    def _set_buttons_enabled(self, enabled: bool) -> None:
+        """Enable or disable all prompt buttons (processing guard)."""
+        for btn in self._prompt_buttons:
+            btn.set_enabled(enabled)
+
+    def _mark_as_run(self, prompt_id: str) -> None:
+        """Show the checkmark badge on a post-meeting button."""
+        badge = self._post_meeting_badges.get(prompt_id)
+        if badge is not None:
+            badge.set_visibility(True)
+            badge.classes(remove="hidden")
+
+    def _refresh_saved_state(self) -> None:
+        """Update badge visibility based on which analyses have saved results."""
+        analyses = self._controller.get_saved_analyses()  # type: ignore[attr-defined]
+        for prompt_id, badge in self._post_meeting_badges.items():
+            is_saved = prompt_id in analyses
+            badge.set_visibility(is_saved)
+            if is_saved:
+                badge.classes(remove="hidden")
+            else:
+                badge.classes(add="hidden")
+
+    def _on_segment_mode_change(self, event: object) -> None:
+        """Show/hide minute range inputs based on segment mode selection."""
+        self._range_row.set_visibility(self._segment_mode.value == "Time range")
+
+    # ------------------------------------------------------------------
+    # Prompt execution
+    # ------------------------------------------------------------------
+
+    async def _run_mid_meeting(self, cfg: PromptConfig) -> None:
+        """Run a mid-meeting or reasoning prompt against bounded audio capture."""
         self._set_buttons_enabled(False)
         try:
             self._controller.run_prompt(  # type: ignore[attr-defined]
-                template,
-                on_template_setup=self._make_template_setup(template),
+                cfg.template,
+                on_template_setup=self._make_template_setup(cfg.template),
             )
         finally:
             self._set_buttons_enabled(True)
 
-    def _set_buttons_enabled(self, enabled: bool) -> None:
-        """Enable or disable all prompt buttons."""
-        for btn in self._prompt_buttons:
-            btn.set_enabled(enabled)
+    async def _run_post_meeting(self, cfg: PromptConfig) -> None:
+        """Run a post-meeting prompt against the stored transcript."""
+        from_minute = None
+        to_minute = None
+        if self._segment_mode.value == "Time range":
+            from_minute = int(self._from_minute.value)
+            to_minute = int(self._to_minute.value)
+
+        self._set_buttons_enabled(False)
+        try:
+            self._controller.run_post_meeting_prompt(  # type: ignore[attr-defined]
+                cfg,
+                from_minute=from_minute,
+                to_minute=to_minute,
+                on_template_setup=self._make_template_setup(cfg.template),
+                on_complete=lambda prompt_id, _text: self._mark_as_run(prompt_id),
+            )
+        finally:
+            self._set_buttons_enabled(True)
 
     async def _copy_transcript(self) -> None:
         """Copy full meeting transcript to clipboard (json.dumps for JS safety)."""
@@ -106,27 +195,18 @@ class PromptButtons:
         else:
             ui.notify("No transcript available", type="warning")
 
+    # ------------------------------------------------------------------
+    # State management
+    # ------------------------------------------------------------------
+
     def set_state(self, state: str) -> None:
         """Show/hide prompt cards based on meeting state."""
-        self._mid_meeting_card.set_visibility(state == "active")
-        self._post_meeting_card.set_visibility(state == "post_meeting")
+        is_active = state == "active"
+        is_post = state == "post_meeting"
 
-    @staticmethod
-    def _mid_meeting_prompts() -> list[tuple[str, str]]:
-        """Prompts available during active meeting."""
-        return [
-            ("Evaluate Problem", "evaluate_problem"),
-            ("Analyze Statement", "analyze_statement"),
-            ("First Principles", "first_principles"),
-            ("Hypothesis", "hypothesis"),
-        ]
+        self._mid_meeting_card.set_visibility(is_active)
+        self._reasoning_card.set_visibility(is_active)
+        self._post_meeting_card.set_visibility(is_post)
 
-    @staticmethod
-    def _post_meeting_prompts() -> list[tuple[str, str]]:
-        """Prompts available after meeting ends."""
-        return [
-            ("Meeting Summary", "meeting_summary"),
-            ("Extract Topics", "extract_topics"),
-            ("Action Items", "action_items"),
-            ("Key Decisions", "key_decisions"),
-        ]
+        if is_post:
+            self._refresh_saved_state()
