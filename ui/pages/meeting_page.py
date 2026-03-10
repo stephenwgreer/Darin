@@ -16,6 +16,7 @@ from ui.components.capture_buttons import CaptureButtons
 from ui.components.meeting_controls import MeetingControls
 from ui.components.output_panel import OutputPanel
 from ui.components.prompt_buttons import PromptButtons
+from ui.components.whisper_panel import WhisperPanel
 
 
 def create_meeting_page(controller: AppController) -> None:
@@ -31,6 +32,10 @@ def create_meeting_page(controller: AppController) -> None:
 
             # Meeting controls (start/stop + pulsing indicator + timer)
             controls = MeetingControls(controller)
+
+            # Live whisper transcript panel — shown when whisper mode is active (DAR2-15)
+            if controller.is_whisper_active:
+                WhisperPanel(controller)
 
             # Bounded capture (Last 30s / Last 1m — always available)
             CaptureButtons(controller)

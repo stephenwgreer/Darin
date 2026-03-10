@@ -58,8 +58,16 @@ def main() -> None:
     controller = AppController()
     controller.meeting_store = MeetingStore()
 
-    # Start continuous recording (circular buffer always running)
-    controller.start_recording()
+    # Start whisper mode — always-on background transcription (DAR2-15)
+    # This starts the recorder and a persistent Deepgram WebSocket so the
+    # transcript accumulates continuously without any manual trigger.
+    if not controller.start_whisper_mode():
+        # Non-fatal: fall back to batch REST transcription on prompt
+        import logging
+
+        logging.warning("Whisper mode failed to start; batch transcription will be used")
+        # Still need the recorder running for the circular buffer
+        controller.start_recording()
 
     # Register NiceGUI pages
     create_meeting_page(controller)

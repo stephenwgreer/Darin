@@ -47,6 +47,8 @@ class AppController:
         on_interim_transcript: Callable[[str], None] | None = None,
         on_final_transcript: Callable[[str], None] | None = None,
         on_utterance_end: Callable[[str], None] | None = None,
+        # Whisper mode callback (DAR2-15)
+        on_whisper_transcript: Callable[[str], None] | None = None,
     ) -> None:
         # Callbacks (UI layer provides these)
         self._on_recording_started = on_recording_started
@@ -60,6 +62,9 @@ class AppController:
         self._on_interim_transcript = on_interim_transcript
         self._on_final_transcript = on_final_transcript
         self._on_utterance_end = on_utterance_end
+
+        # Whisper mode callback (DAR2-15)
+        self._on_whisper_transcript = on_whisper_transcript
 
         # Backend components
         self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
@@ -76,6 +81,10 @@ class AppController:
 
         # HTML streaming state (needed by _setup_static_template flow)
         self._template_type: str | None = None
+
+        # Whisper mode — always-on background transcription (DAR2-15)
+        self._whisper_client: DeepgramStreamingClient | None = None
+        self._whisper_active: bool = False
 
         # Meeting storage (DAR2-25)
         self._meeting_store: MeetingStore | None = None
@@ -271,8 +280,9 @@ class AppController:
         # Update current transcript with the accumulated result
         self.current_transcript = transcript
 
-        # Unhook the chunk consumer
-        self.recorder.remove_chunk_consumer(self._on_recorder_chunk)
+        # Only unhook the chunk consumer if whisper mode is also inactive
+        if not self._whisper_active:
+            self.recorder.remove_chunk_consumer(self._on_recorder_chunk)
         self._streaming_client = None
         self._active_meeting_id = None
 
@@ -288,9 +298,105 @@ class AppController:
         return self._streaming_client is not None and self._streaming_client.is_connected
 
     def _on_recorder_chunk(self, audio_chunk: np.ndarray) -> None:
-        """Forward audio chunks from the recorder to the streaming client."""
+        """Forward audio chunks from the recorder and whisper client."""
         if self._streaming_client is not None:
             self._streaming_client.send_audio(audio_chunk)
+        if self._whisper_client is not None and self._whisper_active:
+            self._whisper_client.send_audio(audio_chunk)
+
+    # ------------------------------------------------------------------
+    # Whisper mode — always-on background transcription (DAR2-15)
+    # ------------------------------------------------------------------
+
+    @property
+    def is_whisper_active(self) -> bool:
+        """Whether whisper mode (always-on background transcription) is running."""
+        return self._whisper_active and self._whisper_client is not None
+
+    @property
+    def on_whisper_transcript(self) -> Callable[[str], None] | None:
+        """Callback for whisper transcript updates."""
+        return self._on_whisper_transcript
+
+    @on_whisper_transcript.setter
+    def on_whisper_transcript(self, callback: Callable[[str], None] | None) -> None:
+        self._on_whisper_transcript = callback
+
+    def start_whisper_mode(self) -> bool:
+        """Start always-on background transcription.
+
+        Creates a dedicated DeepgramStreamingClient that receives audio chunks
+        continuously. Accumulated transcript is used by run_prompt() instead of
+        triggering a REST batch transcription call.
+
+        Returns True on success.
+        """
+        if self._whisper_active:
+            logger.info("Whisper mode already active")
+            return True
+
+        logger.info("Starting whisper mode")
+
+        self._whisper_client = DeepgramStreamingClient(
+            api_key=self.api_client.deepgram_api_key,
+            sample_rate=self.recorder.sample_rate,
+            on_interim_transcript=None,
+            on_final_transcript=self._handle_whisper_final,
+            on_utterance_end=None,
+            on_error=lambda err: logger.warning(f"Whisper error: {err}"),
+        )
+        self._whisper_client.connect()
+
+        if not self._whisper_client.is_connected:
+            logger.error("Whisper mode: failed to connect to Deepgram")
+            self._whisper_client = None
+            return False
+
+        self._whisper_active = True
+
+        # Start the recorder so audio chunks flow — it may already be running
+        if not self.recorder.is_recording:
+            self.recorder.start_recording()
+
+        # Register our chunk consumer (shared with meeting streaming if active)
+        self.recorder.add_chunk_consumer(self._on_recorder_chunk)
+
+        logger.info("Whisper mode active")
+        return True
+
+    def stop_whisper_mode(self) -> None:
+        """Stop background transcription and release resources."""
+        if not self._whisper_active:
+            return
+
+        logger.info("Stopping whisper mode")
+        self._whisper_active = False
+
+        if self._whisper_client is not None:
+            self._whisper_client.disconnect()
+            self._whisper_client = None
+
+        # Only remove the chunk consumer if meeting streaming is also inactive
+        if self._streaming_client is None:
+            self.recorder.remove_chunk_consumer(self._on_recorder_chunk)
+
+        logger.info("Whisper mode stopped")
+
+    def _handle_whisper_final(self, text: str) -> None:
+        """Handle a finalized whisper transcript segment."""
+        if not text.strip():
+            return
+
+        with self._transcript_lock:
+            if self._current_transcript:
+                self._current_transcript = self._current_transcript + " " + text
+            else:
+                self._current_transcript = text
+
+        logger.debug(f"Whisper segment received: {len(text)} chars")
+
+        if self._on_whisper_transcript:
+            self._on_whisper_transcript(text)
 
     def _handle_utterance_end(self, full_transcript: str) -> None:
         """Handle utterance end — update current transcript."""
@@ -489,10 +595,18 @@ class AppController:
         if self._on_progress:
             self._on_progress("Capturing audio and transcribing...")
 
-        # Check for existing transcript
+        # Check for existing transcript (includes whisper-accumulated text)
         with self._transcript_lock:
             has_transcript = bool(self._current_transcript)
             transcript_copy = self._current_transcript if has_transcript else None
+
+        # If whisper mode is active and we have accumulated text, use it directly
+        # (skips the slow REST batch transcription path entirely)
+        if self._whisper_active and has_transcript:
+            logger.info(
+                "Using whisper transcript",
+                transcript_length=len(transcript_copy or ""),
+            )
 
         if has_transcript:
             threading.Thread(
