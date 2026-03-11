@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from ui.stream_handlers import STATIC_TEMPLATES, TEMPLATE_REGISTRY
+from web.stream_handlers import STATIC_TEMPLATES, TEMPLATE_REGISTRY
 
 
 class TestStaticTemplatesRegistry:

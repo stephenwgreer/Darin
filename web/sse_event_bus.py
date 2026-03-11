@@ -14,8 +14,8 @@ import re
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
-from ui.stream_buffer import StreamBuffer
-from ui.stream_handlers import (
+from web.stream_buffer import StreamBuffer
+from web.stream_handlers import (
     STATIC_TEMPLATES,
     TEMPLATE_REGISTRY,
     parse_first_line_value,

@@ -119,7 +119,7 @@ def test_section_header_detected_for_all_caps_line() -> None:
     # Simulate a template being active so we go through the buffer path
     bus._template_type = "generic"
     bus._template_config = {}
-    from ui.stream_buffer import StreamBuffer
+    from web.stream_buffer import StreamBuffer
     bus._stream_buffer = StreamBuffer()
 
     bus.handle_stream_chunk("CORE THINKING\nSome detail here")
@@ -138,7 +138,7 @@ def test_section_header_not_fired_for_html_line() -> None:
     bus = SSEEventBus()
     bus._template_type = "generic"
     bus._template_config = {}
-    from ui.stream_buffer import StreamBuffer
+    from web.stream_buffer import StreamBuffer
     bus._stream_buffer = StreamBuffer()
 
     bus.handle_stream_chunk("<LI>ITEM</LI>")
@@ -156,7 +156,7 @@ def test_section_header_not_fired_for_single_uppercase_letter() -> None:
     bus = SSEEventBus()
     bus._template_type = "generic"
     bus._template_config = {}
-    from ui.stream_buffer import StreamBuffer
+    from web.stream_buffer import StreamBuffer
     bus._stream_buffer = StreamBuffer()
 
     bus.handle_stream_chunk("A\nOK\nI")

@@ -79,7 +79,7 @@ class AppController:
 
         # Meeting storage (DAR2-25)
         self._meeting_store: MeetingStore | None = None
-        self._active_meeting_id: int | None = None
+        self._active_meeting_id: str | None = None
 
         # Meeting state machine (DAR2-26)
         self._meeting_state: str = "idle"  # idle | active | post_meeting

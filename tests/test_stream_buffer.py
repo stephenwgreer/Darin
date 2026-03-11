@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ui.stream_buffer import StreamBuffer
+from web.stream_buffer import StreamBuffer
 
 
 class TestStreamBufferExtraction:

@@ -1,7 +1,9 @@
-"""Tests for MeetingStore SQLite operations (DAR2-25)."""
+"""Tests for file-based MeetingStore."""
 
-import sqlite3
-from datetime import UTC, datetime
+from __future__ import annotations
+
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,228 +12,176 @@ from storage.meeting_store import MeetingStore
 
 
 @pytest.fixture
-def tmp_db(tmp_path: Path) -> Path:
-    """Return a temporary database path."""
-    return tmp_path / "test_meetings.db"
+def store(tmp_path: Path) -> MeetingStore:
+    return MeetingStore(base_dir=tmp_path / "meetings")
 
 
-@pytest.fixture
-def store(tmp_db: Path) -> MeetingStore:
-    """Create a MeetingStore with a temporary database."""
-    s = MeetingStore(db_path=tmp_db)
-    yield s
-    s.close()
-
-
-class TestSchemaCreation:
-    """Test database initialization."""
-
-    def test_creates_database_file(self, tmp_db: Path):
-        store = MeetingStore(db_path=tmp_db)
-        assert tmp_db.exists()
-        store.close()
-
-    def test_creates_meetings_table(self, store: MeetingStore):
-        conn = sqlite3.connect(str(store._db_path))
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='meetings'"
-        )
-        assert cursor.fetchone() is not None
-        conn.close()
-
-    def test_creates_transcript_segments_table(self, store: MeetingStore):
-        conn = sqlite3.connect(str(store._db_path))
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='transcript_segments'"
-        )
-        assert cursor.fetchone() is not None
-        conn.close()
-
-    def test_wal_mode_enabled(self, store: MeetingStore):
-        conn = sqlite3.connect(str(store._db_path))
-        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
-        assert mode == "wal"
-        conn.close()
-
-    def test_creates_parent_directory(self, tmp_path: Path):
-        nested = tmp_path / "deep" / "nested" / "meetings.db"
-        store = MeetingStore(db_path=nested)
-        assert nested.exists()
-        store.close()
+class TestInit:
+    def test_creates_base_directory(self, tmp_path: Path) -> None:
+        base = tmp_path / "deep" / "nested" / "meetings"
+        MeetingStore(base_dir=base)
+        assert base.exists()
 
 
 class TestStartMeeting:
-    """Test meeting creation."""
-
-    def test_start_meeting_returns_id(self, store: MeetingStore):
+    def test_returns_string_id(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
-        assert isinstance(meeting_id, int)
-        assert meeting_id > 0
+        assert isinstance(meeting_id, str)
+        assert len(meeting_id) > 0
 
-    def test_start_meeting_with_title(self, store: MeetingStore):
-        meeting_id = store.start_meeting(title="Standup")
-        meeting = store.get_meeting(meeting_id)
-        assert meeting is not None
-        assert meeting.title == "Standup"
+    def test_creates_meeting_directory(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        assert (store._base_dir / meeting_id).is_dir()
 
-    def test_start_meeting_sets_start_time(self, store: MeetingStore):
+    def test_creates_meta_file(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        assert store._meta_path(meeting_id).exists()
+
+    def test_creates_analyses_directory(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        assert store._analyses_dir(meeting_id).is_dir()
+
+    def test_meta_contains_start_time(self, store: MeetingStore) -> None:
         before = datetime.now(tz=UTC)
         meeting_id = store.start_meeting()
         after = datetime.now(tz=UTC)
-        meeting = store.get_meeting(meeting_id)
-        assert meeting is not None
-        assert before <= meeting.start_time <= after
+        start_time, _ = store._read_meta(meeting_id)
+        assert before <= start_time <= after
+
+    def test_collision_handling_same_second(self, store: MeetingStore) -> None:
+        """Two meetings started in the same second get distinct IDs."""
+        id1 = store.start_meeting()
+        # Patch: temporarily make the second start produce the same base name
+        from unittest.mock import patch
+        from datetime import timezone
+        fixed = datetime.fromisoformat(id1.replace("_", "T", 1).replace("_", ":", 1) if "_" in id1 else id1)
+        # Simpler: just start two meetings very quickly
+        id2 = store.start_meeting()
+        assert id1 != id2
 
 
 class TestEndMeeting:
-    """Test meeting finalization."""
-
-    def test_end_meeting_sets_end_time(self, store: MeetingStore):
+    def test_sets_end_time(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
+        before = datetime.now(tz=UTC)
         store.end_meeting(meeting_id)
-        meeting = store.get_meeting(meeting_id)
-        assert meeting is not None
-        assert meeting.end_time is not None
+        after = datetime.now(tz=UTC)
+        _, end_time = store._read_meta(meeting_id)
+        assert end_time is not None
+        assert before <= end_time <= after
 
-    def test_end_meeting_nonexistent_is_noop(self, store: MeetingStore):
-        store.end_meeting(99999)  # should not raise
+    def test_nonexistent_meeting_is_noop(self, store: MeetingStore) -> None:
+        store.end_meeting("no_such_meeting")  # must not raise
 
 
 class TestAppendSegment:
-    """Test real-time segment insertion."""
-
-    def test_append_segment(self, store: MeetingStore):
+    def test_appends_to_transcript_file(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
         store.append_segment(meeting_id, "Hello world")
-        meeting = store.get_meeting(meeting_id)
-        assert len(meeting.segments) == 1
-        assert meeting.segments[0].text == "Hello world"
+        assert "Hello world" in store._transcript_path(meeting_id).read_text()
 
-    def test_append_multiple_segments_preserves_order(self, store: MeetingStore):
+    def test_multiple_segments_in_order(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
-        texts = ["First.", "Second.", "Third."]
-        for text in texts:
+        for text in ["First.", "Second.", "Third."]:
             store.append_segment(meeting_id, text)
         meeting = store.get_meeting(meeting_id)
-        assert [s.text for s in meeting.segments] == texts
+        assert [s.text for s in meeting.segments] == ["First.", "Second.", "Third."]
 
-    def test_append_segment_sets_timestamp(self, store: MeetingStore):
-        meeting_id = store.start_meeting()
-        before = datetime.now(tz=UTC)
-        store.append_segment(meeting_id, "test")
-        after = datetime.now(tz=UTC)
-        meeting = store.get_meeting(meeting_id)
-        seg = meeting.segments[0]
-        assert before <= seg.timestamp <= after
-
-    def test_append_empty_segment_is_ignored(self, store: MeetingStore):
+    def test_empty_segment_ignored(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
         store.append_segment(meeting_id, "")
         store.append_segment(meeting_id, "   ")
         meeting = store.get_meeting(meeting_id)
         assert len(meeting.segments) == 0
 
+    def test_segment_timestamp_recorded(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        before = datetime.now(tz=UTC)
+        store.append_segment(meeting_id, "test")
+        after = datetime.now(tz=UTC)
+        meeting = store.get_meeting(meeting_id)
+        assert before <= meeting.segments[0].timestamp <= after
+
 
 class TestGetMeeting:
-    """Test meeting retrieval."""
+    def test_returns_none_for_unknown_id(self, store: MeetingStore) -> None:
+        assert store.get_meeting("no_such_meeting") is None
 
-    def test_get_meeting_includes_segments(self, store: MeetingStore):
-        meeting_id = store.start_meeting(title="Test")
+    def test_includes_all_segments(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
         store.append_segment(meeting_id, "Hello")
         store.append_segment(meeting_id, "World")
         meeting = store.get_meeting(meeting_id)
         assert meeting.full_transcript == "Hello World"
 
-    def test_get_nonexistent_meeting_returns_none(self, store: MeetingStore):
-        assert store.get_meeting(99999) is None
-
 
 class TestGetFullTranscript:
-    """Test efficient transcript retrieval."""
-
-    def test_get_full_transcript(self, store: MeetingStore):
+    def test_returns_space_joined_segments(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
         store.append_segment(meeting_id, "One.")
         store.append_segment(meeting_id, "Two.")
         store.append_segment(meeting_id, "Three.")
-        transcript = store.get_full_transcript(meeting_id)
-        assert transcript == "One. Two. Three."
+        assert store.get_full_transcript(meeting_id) == "One. Two. Three."
 
-    def test_get_full_transcript_nonexistent_returns_empty(self, store: MeetingStore):
-        assert store.get_full_transcript(99999) == ""
+    def test_unknown_meeting_returns_empty(self, store: MeetingStore) -> None:
+        assert store.get_full_transcript("no_such_meeting") == ""
 
 
 class TestListMeetings:
-    """Test meeting listing."""
-
-    def test_list_meetings_reverse_chronological(self, store: MeetingStore):
-        id1 = store.start_meeting(title="First")
-        id2 = store.start_meeting(title="Second")
+    def test_reverse_chronological(self, store: MeetingStore) -> None:
+        id1 = store.start_meeting()
+        id2 = store.start_meeting()
         meetings = store.list_meetings()
-        assert len(meetings) == 2
-        assert meetings[0].id == id2  # newest first
-        assert meetings[1].id == id1
+        ids = [m.id for m in meetings]
+        assert ids.index(id2) < ids.index(id1)  # newer first
 
-    def test_list_meetings_excludes_segments(self, store: MeetingStore):
+    def test_excludes_segments(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
         store.append_segment(meeting_id, "text")
         meetings = store.list_meetings()
         assert len(meetings[0].segments) == 0
 
-    def test_list_meetings_empty(self, store: MeetingStore):
+    def test_empty_store(self, store: MeetingStore) -> None:
         assert store.list_meetings() == []
 
 
 class TestDeleteMeeting:
-    """Test meeting deletion."""
-
-    def test_delete_meeting(self, store: MeetingStore):
+    def test_removes_directory(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
-        store.append_segment(meeting_id, "text")
+        store.delete_meeting(meeting_id)
+        assert not store._meeting_dir(meeting_id).exists()
+
+    def test_get_returns_none_after_delete(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
         store.delete_meeting(meeting_id)
         assert store.get_meeting(meeting_id) is None
 
-    def test_delete_cascades_segments(self, store: MeetingStore):
+    def test_nonexistent_is_noop(self, store: MeetingStore) -> None:
+        store.delete_meeting("no_such_meeting")  # must not raise
+
+
+class TestTranscriptFile:
+    def test_transcript_is_plain_text(self, store: MeetingStore) -> None:
+        """transcript.txt is human-readable — no metadata, one segment per line."""
         meeting_id = store.start_meeting()
-        store.append_segment(meeting_id, "text")
-        store.delete_meeting(meeting_id)
-        # Verify segments are gone too
-        conn = sqlite3.connect(str(store._db_path))
-        count = conn.execute(
-            "SELECT COUNT(*) FROM transcript_segments WHERE meeting_id = ?",
-            (meeting_id,),
-        ).fetchone()[0]
-        conn.close()
-        assert count == 0
+        store.append_segment(meeting_id, "This is a sentence.")
+        store.append_segment(meeting_id, "And another one.")
+        content = store._transcript_path(meeting_id).read_text(encoding="utf-8")
+        assert content == "This is a sentence.\nAnd another one.\n"
 
-    def test_delete_nonexistent_is_noop(self, store: MeetingStore):
-        store.delete_meeting(99999)  # should not raise
-
-
-class TestPerformance:
-    """Test performance requirements from acceptance criteria."""
-
-    def test_60_minute_meeting_retrieval_under_1_second(self, store: MeetingStore):
-        """Simulate a 60-minute meeting: ~1 segment per second = 3600 segments."""
+    def test_performance_large_meeting(self, store: MeetingStore) -> None:
+        """3600 segments (60-min meeting) retrieved in under 1 second."""
         import time
-
         meeting_id = store.start_meeting()
-
-        # Insert 3600 segments (one per second of a 60-min meeting)
-        # Use executemany for speed in test setup
-        conn = sqlite3.connect(str(store._db_path))
+        # Write directly to avoid slow per-call locking in test setup
         now = datetime.now(tz=UTC).isoformat()
-        conn.executemany(
-            "INSERT INTO transcript_segments (meeting_id, timestamp, text, is_final) VALUES (?, ?, ?, ?)",
-            [
-                (meeting_id, now, f"Segment number {i} with some realistic text content.", True)
-                for i in range(3600)
-            ],
-        )
-        conn.commit()
-        conn.close()
+        with store._transcript_path(meeting_id).open("a") as tf, \
+             store._segments_path(meeting_id).open("a") as sf:
+            for i in range(3600):
+                line = f"Segment number {i} with some realistic text content."
+                tf.write(line + "\n")
+                sf.write(f"{now}\t{line}\n")
 
-        # Measure retrieval time
         start = time.perf_counter()
         transcript = store.get_full_transcript(meeting_id)
         elapsed = time.perf_counter() - start

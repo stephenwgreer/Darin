@@ -15,15 +15,8 @@ from storage.meeting_store import MeetingStore
 
 
 @pytest.fixture
-def tmp_db(tmp_path: Path) -> Path:
-    return tmp_path / "test_controller.db"
-
-
-@pytest.fixture
-def store(tmp_db: Path) -> MeetingStore:
-    s = MeetingStore(db_path=tmp_db)
-    yield s
-    s.close()
+def store(tmp_path: Path) -> MeetingStore:
+    return MeetingStore(base_dir=tmp_path / "meetings")
 
 
 @pytest.fixture
@@ -154,7 +147,7 @@ class TestRunPostMeetingPrompt:
         assert "Full transcript content here." in call_args[0][0]
 
     def test_retrieves_segment_range_when_specified(
-        self, controller: AppController, store: MeetingStore, tmp_db: Path
+        self, controller: AppController, store: MeetingStore
     ) -> None:
         """When from_minute/to_minute are provided, store.get_transcript_segment_range is used."""
         meeting_id = store.start_meeting()

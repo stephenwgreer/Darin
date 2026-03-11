@@ -1,4 +1,4 @@
-"""Data models for meeting transcript storage (DAR2-25, DAR2-27)."""
+"""Data models for meeting transcript storage."""
 
 from __future__ import annotations
 
@@ -13,15 +13,15 @@ class TranscriptSegment:
     timestamp: datetime
     text: str
     is_final: bool = True
-    meeting_id: int | None = None
+    meeting_id: str | None = None
     id: int | None = None
 
 
 @dataclass
 class MeetingAnalysis:
-    """A saved post-meeting analysis result (DAR2-27)."""
+    """A saved post-meeting analysis result."""
 
-    meeting_id: int
+    meeting_id: str
     prompt_id: str
     output_text: str
     created_at: datetime
@@ -33,10 +33,10 @@ class MeetingRecord:
     """A meeting session with metadata and transcript segments."""
 
     start_time: datetime
+    id: str | None = None
     title: str | None = None
     end_time: datetime | None = None
     segments: list[TranscriptSegment] = field(default_factory=list)
-    id: int | None = None
 
     @property
     def duration_seconds(self) -> int | None:

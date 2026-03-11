@@ -11,10 +11,8 @@ from storage.meeting_store import MeetingStore
 
 @pytest.fixture
 def tmp_store(tmp_path: Path) -> MeetingStore:
-    """Create a MeetingStore with a temporary database."""
-    s = MeetingStore(db_path=tmp_path / "test.db")
-    yield s
-    s.close()
+    """Create a MeetingStore with a temporary directory."""
+    return MeetingStore(base_dir=tmp_path / "meetings")
 
 
 @pytest.fixture

@@ -1,8 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-dist/
-build/
-*.spec
-spike_results.txt
-uv.lock
