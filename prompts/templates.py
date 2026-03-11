@@ -305,7 +305,7 @@ Text to analyze:
 """
 
 # Freeform Q&A prompt — question pre-formatted before passing to API
-ASK_QUESTION_PROMPT = """You are analyzing a meeting transcript. Answer the following question based solely on what is discussed in the transcript. Be concise and direct. If the information isn't in the transcript, say so clearly.
+ASK_QUESTION_PROMPT = """You are analyzing a meeting transcript. Answer the following question using the transcript as your primary source. Ground your answer in what was actually discussed first. If the transcript alone is sufficient, stay within it. If broader context, domain expertise, or additional insights would meaningfully improve your answer, you may draw on your training knowledge — but clearly distinguish what comes from the transcript versus what you are adding from general knowledge.
 
 Question: {question}
 
