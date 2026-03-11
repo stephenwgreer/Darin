@@ -397,3 +397,20 @@ main {
   background: rgba(59, 130, 246, 0.1);
   border-color: var(--accent-blue);
 }
+
+/* ── Follow-up question two-line cards ──────────────────────────────────── */
+.q-topic {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  margin-bottom: 0.15rem;
+}
+.q-text {
+  display: block;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 0.825rem;
+}

@@ -53,7 +53,7 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "type": "single-list",
         "pattern": r"<li[^>]*>.*?</li>",
         "target": "dynamic-content",
-        "style": "bold",
+        "style": "default",
     },
     "meeting-summary": {
         "type": "single-list",
@@ -249,6 +249,8 @@ def parse_first_line_value(text: str, config: dict) -> tuple[str | None, str]:
 
 def _apply_single_list_style(item: str, style: str) -> str:
     """Apply inline styling to a single-list item (matching original behavior)."""
+    if style == "default":
+        return item
     inline = _STYLE_BOLD if style == "bold" else _STYLE_NORMAL
     if "class=" not in item:
         return item.replace(

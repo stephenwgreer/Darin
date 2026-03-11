@@ -155,20 +155,15 @@ Text to analyze:
 
 # Follow-up questions prompt
 FOLLOW_UP_QUESTIONS_PROMPT = """
-Based on the following transcript, generate 5 insightful follow-up questions that would
-help clarify or expand on the topics discussed.
+Based on the following transcript, generate exactly 5 insightful follow-up questions.
 
-The format for the response should be exactly as shown below. ONLY include the list items
-with the proper HTML tags. DO NOT include any outer divs, headers, or wrappers:
+For each question return a single HTML list item formatted EXACTLY as shown:
+<li class="insight-item"><span class="q-topic">Budget Timeline</span><span class="q-text">Has the budget been formally approved, or is this still in the evaluation stage?</span></li>
 
-<li class="insight-item">Question 1 about a specific topic from the transcript</li>
-<li class="insight-item">Question 2 about another topic from the transcript</li>
-<li class="insight-item">Question 3 about an important detail that needs clarification</li>
-<li class="insight-item">Question 4 about implications or next steps</li>
-<li class="insight-item">Question 5 about relevant context or background information</li>
-
-Each question should be specific, thoughtful, and directly related to the content of the transcript.
-Generate the questions one at a time, and make sure each one addresses a different aspect of the conversation.
+Rules:
+- <span class="q-topic"> — 2–4 word topic label, Title Case, captures the subject at a glance
+- <span class="q-text"> — the full question as secondary text
+- Exactly 5 items. No wrappers, headers, or other text.
 
 Transcript:
 {transcript}
