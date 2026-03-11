@@ -1,4 +1,4 @@
-"""Token authentication middleware for localhost NiceGUI server (DAR2-34)."""
+"""Token authentication middleware for localhost FastAPI server (DAR2-34)."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp
 
 
-# NiceGUI internal paths that must never be blocked.
-# These serve static assets, socket.io, and framework internals.
-_EXEMPT_PREFIXES = ("/_nicegui/",)
+# Static assets are token-exempt: JS/CSS must load before the token
+# is available to client-side code.
+_EXEMPT_PREFIXES = ("/static/",)
 
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -32,7 +32,7 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
-        # Exempt NiceGUI internals
+        # Exempt static assets
         if any(path.startswith(prefix) for prefix in _EXEMPT_PREFIXES):
             return await call_next(request)
 

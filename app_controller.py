@@ -350,6 +350,13 @@ class AppController:
         """Current meeting state: 'idle', 'active', or 'post_meeting'."""
         return self._meeting_state
 
+    @property
+    def elapsed_seconds(self) -> int:
+        """Elapsed meeting time in seconds (0 if not active)."""
+        if self._meeting_start_time is None:
+            return 0
+        return int(time.monotonic() - self._meeting_start_time)
+
     async def start_meeting(self) -> None:
         """Begin a meeting session."""
         self.start_streaming()

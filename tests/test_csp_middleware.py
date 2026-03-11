@@ -39,11 +39,12 @@ def test_csp_blocks_frame_embedding() -> None:
     assert "frame-ancestors 'none'" in csp
 
 
-def test_csp_allows_websocket_connect() -> None:
+def test_csp_allows_self_connect() -> None:
+    """connect-src 'self' covers SSE (HTTP); ws:/wss: removed (no WebSocket used)."""
     client = TestClient(_make_app(), raise_server_exceptions=True)
     csp = client.get("/").headers["content-security-policy"]
     assert "connect-src" in csp
-    assert "ws:" in csp
+    assert "'self'" in csp
 
 
 def test_csp_applied_to_all_responses() -> None:

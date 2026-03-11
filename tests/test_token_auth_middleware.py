@@ -48,17 +48,17 @@ def test_wrong_token_rejected() -> None:
     assert resp.status_code == 403
 
 
-def test_nicegui_internal_paths_exempt() -> None:
-    """/_nicegui/ paths must never be blocked — they serve assets/socket."""
+def test_static_paths_exempt() -> None:
+    """/static/ paths must be token-exempt — JS/CSS load before token is available."""
     app = Starlette()
     app.add_middleware(TokenAuthMiddleware, token=TOKEN)
 
-    @app.route("/_nicegui/assets/test.js")
+    @app.route("/static/app.js")
     async def asset(request: Request) -> PlainTextResponse:
         return PlainTextResponse("js content")
 
     client = TestClient(app, raise_server_exceptions=True)
-    resp = client.get("/_nicegui/assets/test.js")  # No token
+    resp = client.get("/static/app.js")  # No token
     assert resp.status_code == 200
 
 
