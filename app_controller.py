@@ -89,6 +89,11 @@ class AppController:
         self._meeting_start_time: float | None = None
         self._last_meeting_id: int | None = None
 
+        # Test mode: if TEST_AUDIO_TRANSCRIPT is set, use it as a fixed transcript
+        # for all mid-meeting prompts (bypasses live audio transcription).
+        # Set via: controller.test_transcript = "some text"
+        self._test_transcript: str | None = None
+
         logger.info("AppController initialized", buffer_minutes=config.BUFFER_MINUTES)
 
     # ------------------------------------------------------------------
@@ -174,6 +179,29 @@ class AppController:
     @on_progress.setter
     def on_progress(self, callback: Callable[[str], None] | None) -> None:
         self._on_progress = callback
+
+    @property
+    def test_transcript(self) -> str | None:
+        """When set, all mid-meeting run_prompt() calls use this transcript
+        instead of transcribing from the audio buffer. Useful for UI testing."""
+        return self._test_transcript
+
+    @test_transcript.setter
+    def test_transcript(self, value: str | None) -> None:
+        self._test_transcript = value
+        if value:
+            # Also set as the current transcript so post-meeting features work
+            with self._transcript_lock:
+                self._current_transcript = value
+
+    @property
+    def on_transcription_complete(self) -> Callable[[str], None] | None:
+        """Callback invoked when bounded transcription completes."""
+        return self._on_transcription_complete
+
+    @on_transcription_complete.setter
+    def on_transcription_complete(self, callback: Callable[[str], None] | None) -> None:
+        self._on_transcription_complete = callback
 
     # ------------------------------------------------------------------
     # Recording lifecycle
@@ -693,6 +721,7 @@ class AppController:
         title: str | None = None,
         *,
         on_template_setup: Callable[[str], str | None] | None = None,
+        on_complete: Callable[[], None] | None = None,
     ) -> None:
         """Run a prompt against the current transcript (or auto-transcribe first).
 
@@ -713,6 +742,15 @@ class AppController:
         if self._on_progress:
             self._on_progress("Capturing audio and transcribing...")
 
+        # Test mode: bypass audio capture and use fixed transcript
+        if self._test_transcript:
+            threading.Thread(
+                target=self._run_prompt_thread,
+                args=(self._test_transcript, prompt_template, on_template_setup, on_complete),
+                daemon=True,
+            ).start()
+            return
+
         # Check for existing transcript
         with self._transcript_lock:
             has_transcript = bool(self._current_transcript)
@@ -721,7 +759,7 @@ class AppController:
         if has_transcript:
             threading.Thread(
                 target=self._run_prompt_thread,
-                args=(transcript_copy, prompt_template, on_template_setup),
+                args=(transcript_copy, prompt_template, on_template_setup, on_complete),
                 daemon=True,
             ).start()
             return
@@ -753,7 +791,7 @@ class AppController:
 
         threading.Thread(
             target=self._transcribe_and_process_thread,
-            args=(audio_data, self.recorder.sample_rate, prompt_template, on_template_setup),
+            args=(audio_data, self.recorder.sample_rate, prompt_template, on_template_setup, on_complete),
             daemon=True,
         ).start()
 
@@ -763,6 +801,7 @@ class AppController:
         sample_rate: int,
         prompt_template: str,
         on_template_setup: Callable[[str], str | None] | None,
+        on_complete: Callable[[], None] | None = None,
     ) -> None:
         """Background thread: transcribe then process."""
         start_time = time.perf_counter()
@@ -793,7 +832,7 @@ class AppController:
                     self._on_processing_complete({"error": "Transcription returned empty text"})
                 return
 
-            self._run_prompt_thread(text, prompt_template, on_template_setup)
+            self._run_prompt_thread(text, prompt_template, on_template_setup, on_complete)
 
             total_duration_ms = (time.perf_counter() - start_time) * 1000
             logger.info(
@@ -818,6 +857,7 @@ class AppController:
         transcript: str,
         prompt_template: str,
         on_template_setup: Callable[[str], str | None] | None,
+        on_complete: Callable[[], None] | None = None,
     ) -> None:
         """Background thread: process transcript with Claude API."""
         start_time = time.perf_counter()
@@ -855,6 +895,8 @@ class AppController:
 
             if self._on_processing_complete:
                 self._on_processing_complete({"result": result})
+            if on_complete:
+                on_complete()
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.error(

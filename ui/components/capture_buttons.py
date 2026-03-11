@@ -33,15 +33,22 @@ class CaptureButtons:
 
                 self._status = ui.label("").classes("text-sm text-gray-500 self-center")
 
+        # Register for transcription completion to re-enable buttons
+        # (transcribe_last_n_seconds is non-blocking — we must wait for callback)
+        if hasattr(controller, "on_transcription_complete"):
+            controller.on_transcription_complete = self._on_transcription_done  # type: ignore[attr-defined]
+
     async def _capture(self, seconds: int) -> None:
         """Disable buttons, show status, trigger capture."""
         self._set_loading(True, seconds)
-        try:
-            self._controller.transcribe_last_n_seconds(seconds)  # type: ignore[attr-defined]
-        finally:
-            self._set_loading(False, seconds)
+        self._controller.transcribe_last_n_seconds(seconds)  # type: ignore[attr-defined]
+        # Buttons re-enabled by _on_transcription_done callback when transcription finishes
 
-    def _set_loading(self, loading: bool, seconds: int) -> None:
+    def _on_transcription_done(self, text: str) -> None:
+        """Re-enable buttons when transcription completes (called from background thread)."""
+        self._set_loading(False)
+
+    def _set_loading(self, loading: bool, seconds: int = 0) -> None:
         """Toggle button enabled state and status label."""
         self._btn_30.set_enabled(not loading)
         self._btn_60.set_enabled(not loading)

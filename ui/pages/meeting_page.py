@@ -9,6 +9,7 @@ Output panel shows only Claude analysis results.
 
 from __future__ import annotations
 
+from loguru import logger
 from nicegui import Client, ui
 
 from app_controller import AppController
@@ -55,5 +56,11 @@ def _handle_state_change(
     prompts: PromptButtons,
 ) -> None:
     """Dispatch state changes to component methods."""
-    controls.set_state(state)
-    prompts.set_state(state)
+    try:
+        controls.set_state(state)
+    except Exception:
+        logger.exception("controls.set_state failed for state=%r", state)
+    try:
+        prompts.set_state(state)
+    except Exception:
+        logger.exception("prompts.set_state failed for state=%r", state)

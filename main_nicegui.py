@@ -58,6 +58,28 @@ def main() -> None:
     controller = AppController()
     controller.meeting_store = MeetingStore()
 
+    # Test mode: load transcript from WAV file if TEST_AUDIO_WAV env var is set.
+    # Usage: TEST_AUDIO_WAV=test_audio/test.wav uv run python main_nicegui.py
+    # Bypasses live audio transcription — all mid-meeting prompts use this transcript.
+    import os
+
+    from loguru import logger as _startup_logger
+
+    test_wav_path = os.environ.get("TEST_AUDIO_WAV")
+    if test_wav_path and os.path.exists(test_wav_path):
+        _startup_logger.info("Test mode: loading transcript from {}", test_wav_path)
+        try:
+            import scipy.io.wavfile as wavfile
+
+            sample_rate, audio_data = wavfile.read(test_wav_path)
+            transcript = controller.api_client.transcribe_with_deepgram(
+                audio_data.tobytes(), sample_rate
+            )
+            controller.test_transcript = transcript
+            _startup_logger.info("Test transcript loaded: {} chars", len(transcript))
+        except Exception as e:
+            _startup_logger.warning("Failed to load test WAV: {}", e)
+
     # Start continuous recording (circular buffer always running)
     controller.start_recording()
 

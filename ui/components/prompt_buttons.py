@@ -163,7 +163,12 @@ class PromptButtons:
         self._controller.run_prompt(  # type: ignore[attr-defined]
             cfg.template,
             on_template_setup=self._make_template_setup(cfg.template),
+            on_complete=self._on_mid_meeting_complete,
         )
+        # Buttons re-enabled by _on_mid_meeting_complete callback when streaming finishes
+
+    def _on_mid_meeting_complete(self) -> None:
+        """Re-enable buttons after mid-meeting streaming completes."""
         self._set_buttons_enabled(True)
 
     async def _run_post_meeting(self, cfg: PromptConfig) -> None:

@@ -197,6 +197,32 @@ TEMPLATE_REGISTRY: dict[str, dict] = {
         "pattern": r'<li class=["\']reframing-(?:statement|point)["\']>.*?</li>',
         "list_suffix": "-list",
     },
+    # --- New post-meeting + analyze-statement templates (DAR2-27) ---
+    "analyze-statement": {
+        "type": "multi-list",
+        "pattern": r'<li class=["\']statement-(?:claim|strength|weakness|assumption|unsaid)["\']>.*?</li>',
+        "class_to_list": {
+            "statement-claim": "statement-claim-list",
+            "statement-strength": "statement-strength-list",
+            "statement-weakness": "statement-weakness-list",
+            "statement-assumption": "statement-assumption-list",
+            "statement-unsaid": "statement-unsaid-list",
+        },
+    },
+    "action-items": {
+        "type": "single-list",
+        "pattern": r'<li class=["\']action-item["\']>.*?</li>',
+        "target": "action-list",
+        "style": "normal",
+    },
+    "key-decisions": {
+        "type": "multi-list",
+        "pattern": r'<li class=["\']decision-(?:made|needed)["\']>.*?</li>',
+        "class_to_list": {
+            "decision-made": "decision-made-list",
+            "decision-needed": "decision-needed-list",
+        },
+    },
 }
 
 
@@ -460,6 +486,41 @@ STATIC_TEMPLATES: dict[str, str] = {
     </ul>
     <h3 style="font-weight: bold; margin-top: 20px;">SUPPORTING POINTS</h3>
     <ul id="reframing-point-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+</div>
+""",
+    "analyze-statement": """
+<div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+    <h3 style="font-weight: bold;">CORE CLAIM</h3>
+    <ul id="statement-claim-list" style="list-style-type: none; margin-top: 0; padding-left: 0;">
+    </ul>
+    <h3 style="font-weight: bold; margin-top: 20px;">STRENGTHS</h3>
+    <ul id="statement-strength-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+    <h3 style="font-weight: bold; margin-top: 20px;">WEAKNESSES</h3>
+    <ul id="statement-weakness-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+    <h3 style="font-weight: bold; margin-top: 20px;">ASSUMPTIONS</h3>
+    <ul id="statement-assumption-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+    <h3 style="font-weight: bold; margin-top: 20px;">WHAT IS UNSAID</h3>
+    <ul id="statement-unsaid-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+</div>
+""",
+    "action-items": """
+<div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+    <ul class="insight-list" id="action-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+</div>
+""",
+    "key-decisions": """
+<div class="insight-block" style="margin-top: 0; padding-top: 10px;">
+    <h3 style="font-weight: bold;">DECISIONS MADE</h3>
+    <ul id="decision-made-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
+    </ul>
+    <h3 style="font-weight: bold; margin-top: 20px;">DECISIONS NEEDED</h3>
+    <ul id="decision-needed-list" style="list-style-type: disc; margin-top: 0; padding-left: 25px;">
     </ul>
 </div>
 """,

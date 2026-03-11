@@ -44,7 +44,7 @@ class OutputPanel:
             )
             with ui.scroll_area().classes("w-full h-96 border rounded") as self._scroll:
                 self._content = ui.html("").classes("prose max-w-none p-3")
-                self._md_content = ui.markdown("").classes("prose max-w-none p-3")
+                self._md_content = ui.markdown("").classes("prose max-w-none p-3 output-panel-md")
 
         # Streaming state
         self._buffer = StreamBuffer()
@@ -56,6 +56,15 @@ class OutputPanel:
         # Client.run_javascript() holds its own WebSocket reference and does
         # NOT require a contextvars context — safe to call from any thread.
         self._client = client
+
+        # Scope heading sizes within the prose markdown area so H1/H2/H3
+        # don't render at full typographic scale in the output box
+        ui.add_css(
+            ".output-panel-md h1, .output-panel-md h2 { "
+            "font-size: 1rem !important; font-weight: 600; margin: 0.4rem 0; }"
+            ".output-panel-md h3 { "
+            "font-size: 0.9rem !important; font-weight: 600; margin: 0.3rem 0; }"
+        )
 
         # Capture the event loop for thread-safe UI marshalling.
         # handle_stream_chunk() and _finalize() are called from a background
@@ -136,7 +145,13 @@ class OutputPanel:
         """
         if not self._template_type:
             # No template set up — accumulate markdown for final render
-            self._raw_text += chunk
+            # Filter out ALL-CAPS section headers — they update the card title via
+            # _detect_and_apply_section_header, so we don't need to render them in content
+            filtered_lines = [
+                line for line in chunk.splitlines(keepends=True)
+                if not (line.strip() and _SECTION_HEADER_RE.match(line.strip()))
+            ]
+            self._raw_text += "".join(filtered_lines)
             self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
             self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
             self._detect_and_apply_section_header(chunk)
@@ -145,7 +160,13 @@ class OutputPanel:
         config = TEMPLATE_REGISTRY.get(self._template_type)
         if not config:
             # Unregistered template type — accumulate markdown for final render
-            self._raw_text += chunk
+            # Filter out ALL-CAPS section headers — they update the card title via
+            # _detect_and_apply_section_header, so we don't need to render them in content
+            filtered_lines = [
+                line for line in chunk.splitlines(keepends=True)
+                if not (line.strip() and _SECTION_HEADER_RE.match(line.strip()))
+            ]
+            self._raw_text += "".join(filtered_lines)
             self._call_on_ui_thread(self._md_content.set_content, self._raw_text)
             self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
             self._detect_and_apply_section_header(chunk)
@@ -237,11 +258,13 @@ class OutputPanel:
         self._call_on_ui_thread(lambda: self._scroll.scroll_to(percent=1.0))
 
     def clear(self) -> None:
-        """Clear the output panel and reset streaming state."""
-        self._content.set_content("")
-        self._md_content.set_content("")
-        self._title_label.set_text("Analysis Output")
+        """Clear the output panel and reset streaming state (thread-safe)."""
+        # Reset Python state first so any in-flight chunk sees _template_type=None
         self._template_type = None
         self._first_line_received = False
         self._raw_text = ""
         self._buffer.clear()
+        # Marshal UI operations to event loop (safe from background threads)
+        self._call_on_ui_thread(self._content.set_content, "")
+        self._call_on_ui_thread(self._md_content.set_content, "")
+        self._call_on_ui_thread(self._title_label.set_text, "Analysis Output")
