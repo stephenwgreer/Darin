@@ -57,8 +57,10 @@ const el = {
   outputTitle:       $('output-title'),
   outputPanel:       $('output-panel'),
   outputMarkdown:    $('output-markdown'),
+  salesPrompts:      $('sales-prompts'),
   midPrompts:        $('mid-meeting-prompts'),
   postPrompts:       $('post-meeting-prompts'),
+  bucketSales:       $('bucket-sales'),
   bucketAnalysis:    $('bucket-analysis'),
   bucketReasoning:   $('bucket-reasoning'),
   bucketPostMeeting: $('bucket-post-meeting'),
@@ -67,6 +69,8 @@ const el = {
   fromMinute:        $('from-minute'),
   toMinute:          $('to-minute'),
   btnCopyTranscript: $('btn-copy-transcript'),
+  qaInput:           $('qa-input'),
+  btnAsk:            $('btn-ask'),
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -98,8 +102,18 @@ function applyState(state) {
   el.timerRow.hidden = state !== 'active';
   if (state !== 'active') el.timerLabel.textContent = '00:00:00';
 
-  el.midPrompts.hidden  = state !== 'active';
-  el.postPrompts.hidden = state !== 'post_meeting';
+  // Prompt sections: always visible, disabled when unavailable
+  const midActive  = state === 'active';
+  const postActive = state === 'post_meeting';
+
+  el.salesPrompts.classList.toggle('section-disabled', !midActive);
+  el.midPrompts.classList.toggle('section-disabled',   !midActive);
+  el.postPrompts.classList.toggle('section-disabled',  !postActive);
+
+  // Q&A available whenever there is a transcript (active or post-meeting)
+  const hasTranscript = state === 'active' || state === 'post_meeting';
+  el.qaInput.disabled = !hasTranscript;
+  el.btnAsk.disabled  = !hasTranscript;
 
   if (state !== 'active') setProcessing(false);
 }
@@ -164,6 +178,9 @@ async function loadPrompts() {
   const data = await apiGet('/api/prompts');
   if (!data) return;
 
+  (data.sales || []).forEach(cfg => {
+    el.bucketSales.appendChild(buildPromptButton(cfg, false));
+  });
   (data.mid_meeting || []).forEach(cfg => {
     el.bucketAnalysis.appendChild(buildPromptButton(cfg, false));
   });
@@ -311,6 +328,28 @@ document.querySelectorAll('input[name="segment-mode"]').forEach(radio => {
     el.rangeInputs.hidden = radio.value !== 'range';
   });
 });
+
+// ── Q&A ────────────────────────────────────────────────────────────────
+
+async function submitQuestion() {
+  const question = el.qaInput.value.trim();
+  if (!question || isProcessing) return;
+  setProcessing(true);
+  el.outputTitle.textContent = 'Answer';
+  el.outputPanel.textContent = '';
+  el.outputMarkdown.textContent = '';
+  el.outputMarkdown.hidden = false;
+  try {
+    const resp = await apiPost('/api/ask', { question });
+    if (!resp.ok) setProcessing(false);
+  } catch (e) {
+    console.error('Ask failed:', e);
+    setProcessing(false);
+  }
+}
+
+el.btnAsk.addEventListener('click', submitQuestion);
+el.qaInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitQuestion(); });
 
 // ── Copy transcript ────────────────────────────────────────────────────────
 

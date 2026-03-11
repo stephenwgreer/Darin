@@ -15,19 +15,22 @@ from .templates import (
     ANALYZE_STATEMENT_PROMPT,
     ANSWER_QUESTION_PROMPT,
     BRAINSTORM_PROMPT,
+    BUYING_SIGNALS_PROMPT,
     COMPANY_FIT_PROMPT,
+    DEAL_RISK_PROMPT,
     FACT_CHECKING_PROMPT,
     FILL_IN_GAPS_PROMPT,
     FOLLOW_UP_QUESTIONS_PROMPT,
     KEY_DECISIONS_PROMPT,
     MEETING_SUMMARY_PROMPT,
+    OBJECTION_HANDLING_PROMPT,
     PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
     SENTIMENT_ANALYSIS_PROMPT,
     TOPIC_SUMMARY_PROMPT,
 )
 
 
-BucketType = Literal["mid_meeting", "reasoning", "post_meeting"]
+BucketType = Literal["mid_meeting", "reasoning", "post_meeting", "sales"]
 
 
 @dataclass
@@ -43,15 +46,40 @@ class PromptConfig:
 # Define all prompts using the configuration structure
 # This becomes the single source of truth for prompts
 PROMPT_REGISTRY = [
-    # --- Bucket 1: Mid-Meeting Analysis (9 prompts) ---
+    # --- Bucket 0: Sales (4 prompts) ---
     PromptConfig(
         id="sentiment_analysis",
         button_text="Sentiment Analysis",
         template=SENTIMENT_ANALYSIS_PROMPT,
         output_title="Sentiment Analysis",
         template_type="sentiment-analysis",
-        bucket="mid_meeting",
+        bucket="sales",
     ),
+    PromptConfig(
+        id="buying_signals",
+        button_text="Buying Signals",
+        template=BUYING_SIGNALS_PROMPT,
+        output_title="Buying Signals",
+        template_type="buying-signals",
+        bucket="sales",
+    ),
+    PromptConfig(
+        id="objection_handling",
+        button_text="Objections",
+        template=OBJECTION_HANDLING_PROMPT,
+        output_title="Objection Analysis",
+        template_type="objection-handling",
+        bucket="sales",
+    ),
+    PromptConfig(
+        id="deal_risk",
+        button_text="Deal Risk",
+        template=DEAL_RISK_PROMPT,
+        output_title="Deal Risk Assessment",
+        template_type="deal-risk",
+        bucket="sales",
+    ),
+    # --- Bucket 1: Mid-Meeting Analysis (8 prompts) ---
     PromptConfig(
         id="practitioner_insights",
         button_text="Practitioner Insights",
@@ -90,7 +118,7 @@ PROMPT_REGISTRY = [
         template=COMPANY_FIT_PROMPT,
         output_title="SAS Viya Alignment",
         template_type="company-fit",
-        bucket="mid_meeting",
+        bucket="sales",
     ),
     PromptConfig(
         id="fact_check",

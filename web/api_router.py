@@ -37,6 +37,10 @@ class TranscribeLastNBody(BaseModel):
     seconds: int  # 30 or 60
 
 
+class AskQuestionBody(BaseModel):
+    question: str
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -113,6 +117,16 @@ def create_router(bus: SSEEventBus, controller: AppController) -> APIRouter:
             on_template_setup=on_template_setup,
             on_complete=on_complete,
         )
+        return {"status": "ok"}
+
+    # ---- Q&A --------------------------------------------------------------
+
+    @router.post("/ask")
+    async def ask(body: AskQuestionBody) -> dict[str, str]:
+        if not body.question or not body.question.strip():
+            raise HTTPException(status_code=400, detail="Question cannot be empty")
+        bus.reset()
+        controller.ask_question(body.question)
         return {"status": "ok"}
 
     # ---- Capture ----------------------------------------------------------

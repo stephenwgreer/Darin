@@ -218,13 +218,14 @@ class TestPromptRegistryIntegrity:
                 "mid_meeting",
                 "reasoning",
                 "post_meeting",
+                "sales",
             ), f"Prompt {cfg.id!r} has unexpected bucket {cfg.bucket!r}"
 
     def test_get_prompts_by_bucket_mid_meeting_count(self) -> None:
         from prompts.registry import get_prompts_by_bucket
 
         prompts = get_prompts_by_bucket("mid_meeting")
-        assert len(prompts) == 9, f"Expected 9 mid-meeting prompts, got {len(prompts)}"
+        assert len(prompts) == 7, f"Expected 7 mid-meeting prompts, got {len(prompts)}"
 
     def test_get_prompts_by_bucket_reasoning_count(self) -> None:
         from prompts.registry import get_prompts_by_bucket
@@ -261,7 +262,7 @@ class TestPromptRegistryIntegrity:
     def test_total_prompt_count(self) -> None:
         from prompts.registry import PROMPT_REGISTRY
 
-        assert len(PROMPT_REGISTRY) == 18, (
-            f"Expected 18 total prompts (9 mid + 5 reasoning + 4 post), "
+        assert len(PROMPT_REGISTRY) == 21, (
+            f"Expected 21 total prompts (5 sales + 7 mid + 5 reasoning + 4 post), "
             f"got {len(PROMPT_REGISTRY)}"
         )

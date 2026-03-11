@@ -14,6 +14,7 @@
   --accent-red:    #ef4444;
   --accent-amber:  #f59e0b;
   --accent-purple: #a855f7;
+  --accent-teal:   #14b8a6;
   --accent-grey:   #6b7280;
   --radius:    0.5rem;
   --radius-sm: 0.35rem;
@@ -63,7 +64,7 @@ main {
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem 1.5rem 2rem;
-  max-width: 900px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
 }
@@ -117,6 +118,9 @@ main {
 
 .bucket-purple .btn-prompt { background: rgba(168,85,247,.12); color: var(--accent-purple); border: 1px solid rgba(168,85,247,.3); }
 .bucket-purple .btn-prompt:hover:not(:disabled) { background: rgba(168,85,247,.25); }
+
+.bucket-green  .btn-prompt { background: rgba(20,184,166,.12); color: var(--accent-teal); border: 1px solid rgba(20,184,166,.3); }
+.bucket-green  .btn-prompt:hover:not(:disabled) { background: rgba(20,184,166,.25); }
 
 .btn-prompt {
   position: relative;
@@ -193,7 +197,7 @@ main {
 .status-text { font-size: 0.8rem; color: var(--text-muted); }
 
 /* ── Output section ──────────────────────────────────────────────────── */
-#output-section { min-height: 120px; }
+#output-section { min-height: 360px; }
 
 .output-title {
   font-size: 0.9rem;
@@ -238,6 +242,40 @@ main {
   color: var(--text);
 }
 
+/* ── Two-column content grid ─────────────────────────────────────────── */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.col-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.col-output {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+
+/* ── Prompt sections ─────────────────────────────────────────────────── */
+.prompt-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.prompt-section.section-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* ── Buckets ─────────────────────────────────────────────────────────── */
 .bucket-header {
   font-size: 0.7rem;
@@ -247,6 +285,9 @@ main {
   color: var(--text-muted);
   margin: 0.75rem 0 0.4rem;
 }
+.bucket-header:first-child { margin-top: 0; }
+
+.bucket-header-sales { color: var(--accent-teal); }
 
 .bucket {
   display: flex;
@@ -305,3 +346,54 @@ main {
 
 /* ── Sentiment value ─────────────────────────────────────────────────── */
 #overall-sentiment-value { font-weight: 700; font-size: 1rem; margin-top: 0.25rem; }
+
+/* ── Q&A ─────────────────────────────────────────────────────────────── */
+#qa-section {
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.qa-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+}
+
+.qa-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.qa-input {
+  flex: 1;
+  padding: 0.6rem 0.9rem;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.9rem;
+  transition: border-color 0.15s;
+  min-height: 2.5rem;
+}
+.qa-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+.qa-input::placeholder { color: var(--text-muted); }
+.qa-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
+#btn-ask {
+  padding: 0.6rem 1.25rem;
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--accent-blue);
+  font-weight: 600;
+  min-height: 2.5rem;
+}
+#btn-ask:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent-blue);
+}

@@ -303,3 +303,48 @@ Do not include any other text, wrappers, headers, or formatting.
 Text to analyze:
 {transcript}
 """
+
+# Freeform Q&A prompt — question pre-formatted before passing to API
+ASK_QUESTION_PROMPT = """You are analyzing a meeting transcript. Answer the following question based solely on what is discussed in the transcript. Be concise and direct. If the information isn't in the transcript, say so clearly.
+
+Question: {question}
+
+Transcript:
+{transcript}"""
+
+# Sales-specific prompts
+
+BUYING_SIGNALS_PROMPT = """Analyze the following sales call transcript and identify buying signals — moments where the prospect showed genuine interest, asked forward-looking questions, discussed budget/timeline, or otherwise indicated purchase intent.
+
+Return ONLY the buying signals as HTML list items, each formatted exactly as:
+<li class="insight-item">[Buying signal description]</li>
+
+If no clear buying signals are present, return:
+<li class="insight-item">No clear buying signals detected in this segment.</li>
+
+Transcript:
+{transcript}"""
+
+OBJECTION_HANDLING_PROMPT = """Analyze the following sales call transcript and identify:
+1. Objections raised by the prospect
+2. How each objection was (or wasn't) addressed
+3. Remaining objections that need follow-up
+
+Return ONLY the findings as HTML list items, each formatted exactly as:
+- For objections: <li class="gap-item">[Objection description]</li>
+- For how addressed: <li class="insight-item">[How it was handled]</li>
+- For unresolved: <li class="recommendation-item">[Unresolved objection needing follow-up]</li>
+
+Transcript:
+{transcript}"""
+
+DEAL_RISK_PROMPT = """Analyze this sales call transcript and assess deal risk. Look for: lack of urgency, unclear decision-making authority, competitor mentions, budget concerns, internal blockers, or lukewarm engagement.
+
+Return ONLY the risk factors as HTML list items, each formatted exactly as:
+<li class="insight-item">[Risk factor and brief explanation]</li>
+
+If no significant risks are detected, return:
+<li class="insight-item">No significant deal risks detected in this segment.</li>
+
+Transcript:
+{transcript}"""

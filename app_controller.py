@@ -722,6 +722,39 @@ class AppController:
     # Prompt execution
     # ------------------------------------------------------------------
 
+    def ask_question(
+        self,
+        question: str,
+        *,
+        on_template_setup: Callable[[str], str | None] | None = None,
+        on_complete: Callable[[], None] | None = None,
+    ) -> None:
+        """Run a freeform question against the current/last meeting transcript.
+
+        Skips audio capture — uses the stored transcript directly.
+        """
+        from prompts.templates import ASK_QUESTION_PROMPT
+
+        with self._processing_lock:
+            if self._is_processing:
+                logger.warning("Ask request rejected: already processing")
+                return
+            self._is_processing = True
+
+        transcript = self.get_meeting_transcript()
+        if not transcript or not transcript.strip():
+            if self._on_processing_complete:
+                self._on_processing_complete({"error": "No transcript available to ask about"})
+            self._is_processing = False
+            return
+
+        filled_template = ASK_QUESTION_PROMPT.replace("{question}", question.replace("{", "{{").replace("}", "}}"))
+        threading.Thread(
+            target=self._run_prompt_thread,
+            args=(transcript, filled_template, on_template_setup, on_complete),
+            daemon=True,
+        ).start()
+
     def run_prompt(
         self,
         prompt_template: str,
