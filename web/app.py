@@ -114,7 +114,7 @@ def create_app(token: str) -> FastAPI:
     # Index route — served via explicit route so TokenAuthMiddleware applies
     @fastapi_app.get("/")
     async def index() -> HTMLResponse:
-        html = (_STATIC_DIR / "index.html").read_text()
+        html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
         return HTMLResponse(html)
 
     # API routes
