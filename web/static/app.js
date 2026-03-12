@@ -72,6 +72,12 @@ const el = {
   btnCopyTranscript: $('btn-copy-transcript'),
   qaInput:           $('qa-input'),
   btnAsk:            $('btn-ask'),
+  btnHistory:        $('btn-history'),
+  btnSettings:       $('btn-settings'),
+  btnOpenPromptEditor: $('btn-open-prompt-editor'),
+  btnAddPrompt:      $('btn-add-prompt'),
+  bucketCustom:      $('bucket-custom'),
+  customPrompts:     $('custom-prompts'),
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -112,6 +118,9 @@ function applyState(state) {
   el.salesPrompts.classList.toggle('section-disabled', !midActive);
   el.midPrompts.classList.toggle('section-disabled',   !midActive);
   el.postPrompts.classList.toggle('section-disabled',  !postActive);
+  if (el.customPrompts) {
+    el.customPrompts.classList.toggle('section-disabled', !midActive);
+  }
 
   // Q&A available whenever there is a transcript (active or post-meeting)
   const hasTranscript = state === 'active' || state === 'post_meeting';
@@ -377,10 +386,366 @@ el.btnCopyTranscript.addEventListener('click', async () => {
   }
 });
 
+// ── Modal helpers ──────────────────────────────────────────────────────────
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Wire all [data-close] buttons
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', () => closeModal(btn.dataset.close));
+});
+
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+
+// ── Settings dialog ────────────────────────────────────────────────────────
+
+async function openSettings() {
+  const data = await apiGet('/api/settings');
+  if (data) {
+    document.getElementById('settings-path-input').value = data.storage_path || '';
+  }
+  openModal('modal-settings');
+}
+
+document.getElementById('btn-settings').addEventListener('click', openSettings);
+
+document.getElementById('btn-browse-folder').addEventListener('click', async () => {
+  const resp = await apiPost('/api/pick_folder', {});
+  if (resp && resp.ok) {
+    const data = await resp.json();
+    if (data && data.path) {
+      document.getElementById('settings-path-input').value = data.path;
+    }
+  }
+});
+
+document.getElementById('btn-save-settings').addEventListener('click', async () => {
+  const path = document.getElementById('settings-path-input').value.trim();
+  if (!path) return;
+  await apiPost('/api/settings', { storage_path: path });
+  closeModal('modal-settings');
+});
+
+// ── History dialog ─────────────────────────────────────────────────────────
+
+let historyCurrentMeetingId = null;
+
+function formatMeetingDate(isoString) {
+  const d = new Date(isoString);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const m = Math.floor(seconds / 60);
+  return m + ' min';
+}
+
+async function openHistory() {
+  document.getElementById('history-list-view').style.display = '';
+  document.getElementById('history-transcript-view').style.display = 'none';
+  openModal('modal-history');
+  await refreshMeetingList();
+}
+
+async function refreshMeetingList() {
+  const data = await apiGet('/api/meetings');
+  const container = document.getElementById('meeting-list');
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  if (!data || !data.meetings || data.meetings.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'meeting-empty';
+    empty.textContent = 'No meetings recorded yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  data.meetings.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'meeting-row';
+
+    const info = document.createElement('div');
+    info.className = 'meeting-info';
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'meeting-date';
+    dateEl.textContent = formatMeetingDate(m.start_time);
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'meeting-title';
+    titleEl.textContent = m.title
+      ? formatMeetingDate(m.start_time) + ' — ' + m.title
+      : formatMeetingDate(m.start_time);
+
+    info.appendChild(dateEl);
+    info.appendChild(titleEl);
+
+    const dur = document.createElement('div');
+    dur.className = 'meeting-duration';
+    dur.textContent = formatDuration(m.duration_seconds);
+
+    const arrow = document.createElement('span');
+    arrow.textContent = '›';
+    arrow.style.color = 'var(--text-muted)';
+
+    row.appendChild(info);
+    row.appendChild(dur);
+    row.appendChild(arrow);
+
+    row.addEventListener('click', () => openMeetingTranscript(m.id));
+    container.appendChild(row);
+  });
+}
+
+async function openMeetingTranscript(meetingId) {
+  historyCurrentMeetingId = meetingId;
+  const data = await apiGet('/api/meetings/' + meetingId + '/transcript');
+  if (!data) return;
+
+  document.getElementById('history-list-view').style.display = 'none';
+  document.getElementById('history-transcript-view').style.display = '';
+
+  document.getElementById('tx-title').textContent = data.title
+    ? formatMeetingDate(data.start_time) + ' — ' + data.title
+    : formatMeetingDate(data.start_time);
+
+  const dur = data.end_time
+    ? formatDuration(Math.floor((new Date(data.end_time) - new Date(data.start_time)) / 1000))
+    : '';
+  document.getElementById('tx-meta').textContent = dur;
+
+  const body = document.getElementById('tx-body');
+  while (body.firstChild) body.removeChild(body.firstChild);
+
+  if (!data.segments || data.segments.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tx-empty';
+    empty.textContent = 'No transcript available.';
+    body.appendChild(empty);
+    return;
+  }
+
+  const startTime = new Date(data.start_time);
+  data.segments.forEach(seg => {
+    const row = document.createElement('div');
+    const ts = document.createElement('span');
+    ts.className = 'tx-timestamp';
+    const offsetSec = Math.floor((new Date(seg.timestamp) - startTime) / 1000);
+    const mm = Math.floor(offsetSec / 60).toString().padStart(2, '0');
+    const ss = (offsetSec % 60).toString().padStart(2, '0');
+    ts.textContent = '[' + mm + ':' + ss + ']';
+    const txt = document.createTextNode(seg.text);
+    row.appendChild(ts);
+    row.appendChild(txt);
+    body.appendChild(row);
+  });
+}
+
+document.getElementById('tx-back-btn').addEventListener('click', () => {
+  historyCurrentMeetingId = null;
+  document.getElementById('history-list-view').style.display = '';
+  document.getElementById('history-transcript-view').style.display = 'none';
+});
+
+document.getElementById('btn-history').addEventListener('click', openHistory);
+
+// Historical Q&A
+async function submitHistoricalQuestion() {
+  const question = document.getElementById('tx-ask-input').value.trim();
+  if (!question || !historyCurrentMeetingId) return;
+  document.getElementById('tx-ask-input').value = '';
+  closeModal('modal-history');
+  try {
+    await apiPost('/api/meetings/' + historyCurrentMeetingId + '/ask', { question });
+  } catch (e) {
+    console.error('Historical ask failed:', e);
+  }
+}
+
+document.getElementById('tx-ask-btn').addEventListener('click', submitHistoricalQuestion);
+document.getElementById('tx-ask-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitHistoricalQuestion();
+});
+
+// ── Prompt editor ──────────────────────────────────────────────────────────
+
+const BUCKET_LABELS = {
+  sales: 'Sales',
+  mid_meeting: 'Meeting Analysis',
+  reasoning: 'Reasoning',
+  post_meeting: 'Post-Meeting',
+  custom: 'Custom',
+};
+const BUCKET_ORDER = ['sales', 'mid_meeting', 'reasoning', 'post_meeting', 'custom'];
+
+let allPromptsCache = [];
+let promptEditorCurrentTab = 'sales';
+let promptEditorEditingId = null;
+
+async function openPromptEditor(defaultTab) {
+  promptEditorCurrentTab = defaultTab || 'sales';
+  promptEditorEditingId = null;
+  await refreshPromptEditor();
+  document.getElementById('prompt-list-view').style.display = '';
+  document.getElementById('prompt-edit-form').classList.remove('open');
+  openModal('modal-prompts');
+}
+
+async function refreshPromptEditor() {
+  const data = await apiGet('/api/custom_prompts');
+  if (!data) return;
+  allPromptsCache = data.prompts || [];
+  renderPromptTabs();
+  renderPromptList(promptEditorCurrentTab);
+}
+
+function renderPromptTabs() {
+  const tabs = document.getElementById('ptabs');
+  while (tabs.firstChild) tabs.removeChild(tabs.firstChild);
+  const bucketsInUse = new Set(allPromptsCache.map(p => p.bucket));
+  BUCKET_ORDER.forEach(bucket => {
+    if (!bucketsInUse.has(bucket) && bucket !== 'custom') return;
+    const btn = document.createElement('button');
+    btn.className = 'ptab' + (bucket === promptEditorCurrentTab ? ' active' : '');
+    btn.textContent = BUCKET_LABELS[bucket] || bucket;
+    btn.addEventListener('click', () => {
+      promptEditorCurrentTab = bucket;
+      document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      renderPromptList(bucket);
+    });
+    tabs.appendChild(btn);
+  });
+}
+
+function renderPromptList(bucket) {
+  const container = document.getElementById('prompt-list-items');
+  while (container.firstChild) container.removeChild(container.firstChild);
+  const prompts = allPromptsCache.filter(p => p.bucket === bucket);
+  prompts.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'prompt-editor-row';
+    const name = document.createElement('span');
+    name.className = 'prompt-editor-row-name';
+    name.textContent = p.button_text;
+    const actions = document.createElement('div');
+    const editBtn = document.createElement('button');
+    editBtn.className = 'pact-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => openPromptEditForm(p));
+    const delBtn = document.createElement('button');
+    delBtn.className = 'pact-btn pact-btn-delete';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', () => deletePromptById(p.id));
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    row.appendChild(name);
+    row.appendChild(actions);
+    container.appendChild(row);
+  });
+}
+
+function openPromptEditForm(prompt) {
+  promptEditorEditingId = prompt ? prompt.id : null;
+  document.getElementById('form-btn-label').value = prompt ? prompt.button_text : '';
+  document.getElementById('form-out-title').value = prompt ? prompt.output_title : '';
+  document.getElementById('form-template').value = prompt ? prompt.template : '';
+  document.getElementById('btn-delete-prompt').style.display = prompt ? 'inline-flex' : 'none';
+  document.getElementById('prompt-list-view').style.display = 'none';
+  document.getElementById('prompt-edit-form').classList.add('open');
+}
+
+function backToPromptList() {
+  document.getElementById('prompt-list-view').style.display = '';
+  document.getElementById('prompt-edit-form').classList.remove('open');
+}
+
+async function savePrompt() {
+  const buttonText = document.getElementById('form-btn-label').value.trim();
+  const outputTitle = document.getElementById('form-out-title').value.trim() || buttonText;
+  const template = document.getElementById('form-template').value.trim();
+  if (!buttonText || !template) return;
+
+  if (promptEditorEditingId) {
+    await fetch(apiUrl('/api/custom_prompts/' + promptEditorEditingId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ button_text: buttonText, output_title: outputTitle, template }),
+    });
+  } else {
+    await apiPost('/api/custom_prompts', {
+      button_text: buttonText, output_title: outputTitle, template
+    });
+  }
+
+  backToPromptList();
+  await refreshPromptEditor();
+  await reloadCustomBucket();
+}
+
+async function deletePromptById(promptId) {
+  await fetch(apiUrl('/api/custom_prompts/' + promptId), { method: 'DELETE' });
+  await refreshPromptEditor();
+  await reloadCustomBucket();
+}
+
+document.getElementById('btn-open-prompt-editor').addEventListener('click', () => openPromptEditor('custom'));
+document.getElementById('btn-add-prompt').addEventListener('click', () => {
+  openPromptEditor('custom');
+  openPromptEditForm(null);
+});
+document.getElementById('btn-new-prompt').addEventListener('click', () => openPromptEditForm(null));
+document.getElementById('prompt-form-back').addEventListener('click', backToPromptList);
+document.getElementById('prompt-form-cancel').addEventListener('click', backToPromptList);
+document.getElementById('btn-save-prompt').addEventListener('click', savePrompt);
+document.getElementById('btn-delete-prompt').addEventListener('click', () => {
+  if (promptEditorEditingId) deletePromptById(promptEditorEditingId);
+  backToPromptList();
+});
+
+// Wire bucket header edit icons (if any have data-bucket attribute)
+document.querySelectorAll('.bucket-edit-icon').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const bucket = btn.dataset.bucket || 'custom';
+    openPromptEditor(bucket);
+  });
+});
+
+// ── Custom bucket prompt buttons ───────────────────────────────────────────
+
+async function reloadCustomBucket() {
+  const data = await apiGet('/api/prompts');
+  if (!data) return;
+
+  const bucket = document.getElementById('bucket-custom');
+  const addBtn = document.getElementById('btn-add-prompt');
+  while (bucket.firstChild) bucket.removeChild(bucket.firstChild);
+
+  (data.custom || []).forEach(cfg => {
+    bucket.appendChild(buildPromptButton(cfg, false));
+  });
+
+  bucket.appendChild(addBtn);
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 
 async function init() {
   await loadPrompts();
+  await reloadCustomBucket();
   connectSSE();
   const state = await apiGet('/api/state');
   if (state) {
