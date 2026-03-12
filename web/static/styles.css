@@ -414,3 +414,246 @@ main {
   color: var(--text-muted);
   font-size: 0.825rem;
 }
+
+/* ── Modal overlay ───────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  position: relative;
+  max-height: 85vh;
+  overflow-y: auto;
+  width: 520px;
+}
+.modal-wide { width: 640px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 1rem; font-weight: 700; }
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: background 0.15s;
+}
+.modal-close:hover { background: var(--bg-card2); color: var(--text); }
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Settings dialog ─────────────────────────────────────────────────── */
+.settings-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.settings-row { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.25rem; }
+.settings-label { font-size: 0.8rem; font-weight: 600; }
+.settings-hint { font-size: 0.75rem; color: var(--text-muted); }
+.settings-path-row { display: flex; gap: 0.5rem; align-items: center; }
+.settings-path-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+.settings-divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.settings-placeholder { color: var(--text-muted); font-size: 0.8rem; font-style: italic; }
+
+/* ── History dialog ──────────────────────────────────────────────────── */
+.meeting-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.meeting-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.meeting-row:hover { background: var(--bg-card2); border-color: rgba(59,130,246,.4); }
+.meeting-info { flex: 1; min-width: 0; }
+.meeting-date { font-size: 0.75rem; color: var(--text-muted); }
+.meeting-title { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-duration { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.meeting-empty { color: var(--text-muted); font-size: 0.85rem; font-style: italic; padding: 1rem 0; text-align: center; }
+
+.tx-back { display: flex; align-items: center; gap: 0.4rem; color: var(--accent-blue); font-size: 0.8rem; cursor: pointer; background: none; border: none; padding: 0; margin-bottom: 1rem; }
+.tx-back:hover { text-decoration: underline; }
+.tx-meeting-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.2rem; }
+.tx-meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem; }
+.tx-body {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+.tx-timestamp { color: var(--accent-blue); font-size: 0.7rem; margin-right: 0.4rem; }
+.tx-empty { color: var(--text-muted); font-style: italic; }
+
+/* ── Gear / header action buttons ────────────────────────────────────── */
+.btn-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-settings:hover { background: var(--bg-card2); color: var(--text); }
+
+/* ── Prompt editor dialog ────────────────────────────────────────────── */
+.ptabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.ptab {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  transition: background 0.15s;
+}
+.ptab.active { background: var(--bg-card2); color: var(--text); border-color: rgba(59,130,246,.4); }
+.ptab:hover:not(.active) { background: var(--bg-card2); }
+
+.prompt-list-items { display: flex; flex-direction: column; gap: 0.35rem; max-height: 280px; overflow-y: auto; margin-bottom: 1rem; }
+.prompt-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+.prompt-editor-row-name { flex: 1; }
+.pact-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pact-btn:hover { background: var(--bg-card2); color: var(--text); }
+.pact-btn-delete:hover { background: rgba(239,68,68,.15); color: var(--accent-red); border-color: rgba(239,68,68,.3); }
+
+.prompt-edit-form { display: none; flex-direction: column; gap: 0.75rem; }
+.prompt-edit-form.open { display: flex; }
+.form-back { display: flex; align-items: center; gap: 0.4rem; color: var(--accent-blue); font-size: 0.78rem; cursor: pointer; background: none; border: none; padding: 0; }
+.form-back:hover { text-decoration: underline; }
+.form-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-label { font-size: 0.78rem; font-weight: 600; }
+.form-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+.form-textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  resize: vertical;
+  min-height: 120px;
+  font-family: monospace;
+  line-height: 1.5;
+}
+.form-hint { font-size: 0.72rem; color: var(--text-muted); }
+.btn-save { background: var(--accent-blue); color: #fff; border: none; }
+.btn-save:hover { background: #2563eb; }
+.btn-delete-prompt { background: rgba(239,68,68,.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,.3); }
+.btn-delete-prompt:hover { background: rgba(239,68,68,.25); }
+
+/* ── Custom bucket ───────────────────────────────────────────────────── */
+.bucket-custom .btn-prompt { background: rgba(59,130,246,.1); color: #93c5fd; border: 1px solid rgba(59,130,246,.25); }
+.bucket-custom .btn-prompt:hover:not(:disabled) { background: rgba(59,130,246,.22); }
+.btn-add-prompt {
+  width: 100%;
+  padding: 0.35rem;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(59,130,246,.35);
+  background: transparent;
+  color: #93c5fd;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s;
+  margin-top: 0.25rem;
+}
+.btn-add-prompt:hover { background: rgba(59,130,246,.08); }
+
+/* ── Bucket header edit icon ─────────────────────────────────────────── */
+.bucket-edit-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0 2px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  margin-left: auto;
+}
+.bucket-edit-icon:hover { opacity: 1; color: var(--text); }
