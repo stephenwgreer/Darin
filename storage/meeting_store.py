@@ -63,6 +63,12 @@ class MeetingStore:
         end_time = datetime.fromisoformat(lines[1]) if len(lines) > 1 and lines[1] else None
         return start_time, end_time
 
+    def _read_title(self, meeting_id: str) -> str | None:
+        path = self._meeting_dir(meeting_id) / "title.txt"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8").strip() or None
+
     # ------------------------------------------------------------------
     # Meeting lifecycle
     # ------------------------------------------------------------------
@@ -98,6 +104,13 @@ class MeetingStore:
             start_line = meta_path.read_text(encoding="utf-8").splitlines()[0]
             meta_path.write_text(f"{start_line}\n{now.isoformat()}\n", encoding="utf-8")
         logger.info("Meeting ended", meeting_id=meeting_id)
+
+    def save_title(self, meeting_id: str, title: str) -> None:
+        """Save a generated title for a meeting (title.txt alongside meta.txt)."""
+        path = self._meeting_dir(meeting_id) / "title.txt"
+        with self._lock:
+            path.write_text(title.strip(), encoding="utf-8")
+        logger.debug("Title saved", meeting_id=meeting_id)
 
     # ------------------------------------------------------------------
     # Segment operations (real-time append)
@@ -146,6 +159,7 @@ class MeetingStore:
             start_time=start_time,
             end_time=end_time,
             segments=segments,
+            title=self._read_title(meeting_id),
         )
 
     def get_full_transcript(self, meeting_id: str) -> str:
@@ -171,6 +185,7 @@ class MeetingStore:
                     id=d.name,
                     start_time=start_time,
                     end_time=end_time,
+                    title=self._read_title(d.name),
                 )
             )
         return meetings

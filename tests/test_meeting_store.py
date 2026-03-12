@@ -160,6 +160,36 @@ class TestDeleteMeeting:
         store.delete_meeting("no_such_meeting")  # must not raise
 
 
+class TestMeetingTitle:
+    @pytest.mark.unit
+    def test_save_and_load_title(self, tmp_path: Path) -> None:
+        store = MeetingStore(base_dir=tmp_path)
+        mid = store.start_meeting()
+        store.end_meeting(mid)
+        store.save_title(mid, "Acme Q2 renewal call")
+        record = store.get_meeting(mid)
+        assert record is not None
+        assert record.title == "Acme Q2 renewal call"
+
+    @pytest.mark.unit
+    def test_list_meetings_includes_title(self, tmp_path: Path) -> None:
+        store = MeetingStore(base_dir=tmp_path)
+        mid = store.start_meeting()
+        store.end_meeting(mid)
+        store.save_title(mid, "My Meeting Title")
+        meetings = store.list_meetings()
+        assert meetings[0].title == "My Meeting Title"
+
+    @pytest.mark.unit
+    def test_meeting_without_title_returns_none(self, tmp_path: Path) -> None:
+        store = MeetingStore(base_dir=tmp_path)
+        mid = store.start_meeting()
+        store.end_meeting(mid)
+        record = store.get_meeting(mid)
+        assert record is not None
+        assert record.title is None
+
+
 class TestTranscriptFile:
     def test_transcript_is_plain_text(self, store: MeetingStore) -> None:
         """transcript.txt is human-readable — no metadata, one segment per line."""
