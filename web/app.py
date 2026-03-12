@@ -58,6 +58,12 @@ def create_app(token: str) -> FastAPI:
     """
     app_config.validate_api_keys()
 
+    from storage.app_config import AppConfigStore
+    from pathlib import Path
+
+    app_cfg_store = AppConfigStore()
+    app_cfg = app_cfg_store.load()
+
     bus = SSEEventBus()
 
     controller = AppController(
@@ -70,7 +76,7 @@ def create_app(token: str) -> FastAPI:
         on_interim_transcript=lambda t: bus.put_event("interim_transcript", {"text": t}),
         on_final_transcript=lambda t: bus.put_event("final_transcript", {"text": t}),
     )
-    controller.meeting_store = MeetingStore()
+    controller.meeting_store = MeetingStore(base_dir=Path(app_cfg.storage_path))
     controller.on_meeting_state_change(lambda s: bus.put_event("state_change", {"state": s}))
     controller.on_timer_tick(lambda e: bus.put_event("timer_tick", {"elapsed": e}))
 
@@ -110,7 +116,7 @@ def create_app(token: str) -> FastAPI:
         return HTMLResponse(html)
 
     # API routes
-    fastapi_app.include_router(create_router(bus, controller))
+    fastapi_app.include_router(create_router(bus, controller, app_cfg_store))
 
     # Security controls 3, 4, 5 (DAR2-34)
     configure_security(fastapi_app, token)

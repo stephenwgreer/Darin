@@ -728,10 +728,12 @@ class AppController:
         *,
         on_template_setup: Callable[[str], str | None] | None = None,
         on_complete: Callable[[], None] | None = None,
+        historical_transcript: str | None = None,
     ) -> None:
         """Run a freeform question against the current/last meeting transcript.
 
         Skips audio capture — uses the stored transcript directly.
+        If historical_transcript is provided, it is used instead of the current meeting transcript.
         """
         from prompts.templates import ASK_QUESTION_PROMPT
 
@@ -741,7 +743,7 @@ class AppController:
                 return
             self._is_processing = True
 
-        transcript = self.get_meeting_transcript()
+        transcript = historical_transcript if historical_transcript is not None else self.get_meeting_transcript()
         if not transcript or not transcript.strip():
             if self._on_processing_complete:
                 self._on_processing_complete({"error": "No transcript available to ask about"})
