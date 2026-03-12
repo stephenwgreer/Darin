@@ -7,6 +7,8 @@ All POST endpoints are fire-and-forget — work runs in AppController threads.
 
 from __future__ import annotations
 
+import re
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -14,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app_controller import AppController
-from prompts.registry import PROMPT_REGISTRY, get_prompt_config_by_id
+from prompts.registry import PROMPT_REGISTRY, get_effective_registry, get_prompt_config_by_id
 from storage.app_config import AppConfigStore, CustomPromptConfig
 from web.sse_event_bus import SSEEventBus
 
@@ -170,7 +172,6 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
 
     @router.get("/prompts")
     async def get_prompts() -> dict[str, Any]:
-        from prompts.registry import get_effective_registry
         cfg = app_cfg_store.load()
         registry = get_effective_registry(cfg)
         result: dict[str, list[dict[str, str]]] = {}
@@ -197,6 +198,11 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
 
     @router.post("/settings")
     async def save_settings(body: SaveSettingsBody) -> dict:
+        from pathlib import Path
+
+        path = Path(body.storage_path)
+        if not path.is_absolute():
+            raise HTTPException(status_code=400, detail="storage_path must be an absolute path")
         cfg = app_cfg_store.load()
         cfg.storage_path = body.storage_path
         app_cfg_store.save(cfg)
@@ -272,7 +278,6 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
     @router.get("/custom_prompts")
     async def get_custom_prompts() -> dict:
         cfg = app_cfg_store.load()
-        from prompts.registry import get_effective_registry
         registry = get_effective_registry(cfg)
         return {
             "prompts": [
@@ -290,8 +295,6 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
 
     @router.post("/custom_prompts")
     async def create_custom_prompt(body: CreateCustomPromptBody) -> dict:
-        import re
-        import time
         cfg = app_cfg_store.load()
         slug = re.sub(r"[^a-z0-9]+", "_", body.button_text.lower()).strip("_")
         prompt_id = f"cp_{slug}_{int(time.time())}"

@@ -743,14 +743,17 @@ class AppController:
                 return
             self._is_processing = True
 
-        transcript = historical_transcript if historical_transcript is not None else self.get_meeting_transcript()
+        transcript = (
+            historical_transcript if historical_transcript is not None else self.get_meeting_transcript()
+        )
         if not transcript or not transcript.strip():
             if self._on_processing_complete:
                 self._on_processing_complete({"error": "No transcript available to ask about"})
             self._is_processing = False
             return
 
-        filled_template = ASK_QUESTION_PROMPT.replace("{question}", question.replace("{", "{{").replace("}", "}}"))
+        safe_question = question.replace("{", "{{").replace("}", "}}")
+        filled_template = ASK_QUESTION_PROMPT.replace("{question}", safe_question)
         threading.Thread(
             target=self._run_prompt_thread,
             args=(transcript, filled_template, on_template_setup, on_complete),
