@@ -15,6 +15,10 @@
   <img src="/static/Darin_Round.png" alt="Darin" class="header-logo" />
   <h1>DARIN</h1>
   <span id="state-badge" class="badge badge-idle">Idle</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:0.6rem">
+    <button id="btn-history" class="btn btn-outline">🕐 History</button>
+    <button id="btn-settings" class="btn-settings" title="Settings">⚙</button>
+  </div>
 </header>
 
 <main>
@@ -83,6 +87,17 @@
         </div>
       </section>
 
+      <!-- Custom Prompts -->
+      <section id="custom-prompts" class="prompt-section">
+        <div class="bucket-header" style="color:#93c5fd;display:flex;align-items:center">
+          Custom
+          <button class="bucket-edit-icon" id="btn-open-prompt-editor" title="Edit prompts">✏</button>
+        </div>
+        <div id="bucket-custom" class="bucket bucket-custom">
+          <button class="btn-add-prompt" id="btn-add-prompt">+ Add Prompt</button>
+        </div>
+      </section>
+
     </div>
 
     <!-- Right column: output + Q&A -->
@@ -110,6 +125,94 @@
 
   <!-- ── Progress Bar ──────────────────────────────────────────── -->
   <div id="progress-bar" class="progress-bar" hidden></div>
+
+  <!-- ── Settings Modal ─────────────────────────────── -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">⚙ Settings</span>
+        <button class="modal-close" data-close="modal-settings">✕</button>
+      </div>
+      <div class="settings-section-title">Storage</div>
+      <div class="settings-row">
+        <label class="settings-label">Meeting Storage Location</label>
+        <span class="settings-hint">Where meeting transcripts and analyses are saved</span>
+        <div class="settings-path-row">
+          <input class="settings-path-input" id="settings-path-input" readonly />
+          <button class="btn btn-outline" id="btn-browse-folder" style="white-space:nowrap">Browse…</button>
+        </div>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Future Settings</div>
+      <p class="settings-placeholder">More settings will appear here as new features are added.</p>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modal-settings">Cancel</button>
+        <button class="btn btn-save" id="btn-save-settings">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History Modal ──────────────────────────────── -->
+  <div class="modal-overlay" id="modal-history">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <span class="modal-title">🕐 Meeting History</span>
+        <button class="modal-close" data-close="modal-history">✕</button>
+      </div>
+      <div id="history-list-view">
+        <div id="meeting-list" class="meeting-list"></div>
+      </div>
+      <div id="history-transcript-view" style="display:none">
+        <button class="tx-back" id="tx-back-btn">← Back to meetings</button>
+        <div class="tx-meeting-title" id="tx-title"></div>
+        <div class="tx-meta" id="tx-meta"></div>
+        <div class="tx-body" id="tx-body"></div>
+        <div class="qa-label">Ask about this meeting</div>
+        <div class="qa-row">
+          <input type="text" id="tx-ask-input" class="qa-input" placeholder="e.g. What were the main concerns?" />
+          <button class="btn btn-outline" id="tx-ask-btn">Ask</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Prompt Editor Modal ────────────────────────── -->
+  <div class="modal-overlay" id="modal-prompts">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <span class="modal-title">✏ Prompt Editor</span>
+        <button class="modal-close" data-close="modal-prompts">✕</button>
+      </div>
+      <div id="prompt-list-view">
+        <div class="ptabs" id="ptabs"></div>
+        <div id="prompt-list-items" class="prompt-list-items"></div>
+        <button class="btn btn-outline" id="btn-new-prompt" style="width:100%;font-size:.82rem">
+          + New Custom Prompt
+        </button>
+      </div>
+      <div id="prompt-edit-form" class="prompt-edit-form">
+        <button class="form-back" id="prompt-form-back">← Back to prompts</button>
+        <div class="form-row">
+          <label class="form-label">Button Label</label>
+          <input class="form-input" id="form-btn-label" placeholder="e.g. Competitor Check"/>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Output Title</label>
+          <input class="form-input" id="form-out-title" placeholder="e.g. Competitor Analysis"/>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Prompt Template</label>
+          <textarea class="form-textarea" id="form-template" placeholder="Write your prompt here. Use {transcript} where the meeting transcript should be inserted."></textarea>
+          <span class="form-hint">Use <code>{transcript}</code> as a placeholder for the meeting transcript.</span>
+        </div>
+        <div class="modal-footer" style="margin-top:0;border-top:none;padding-top:0">
+          <button class="btn btn-outline" id="prompt-form-cancel">Cancel</button>
+          <button class="btn btn-delete-prompt btn" id="btn-delete-prompt" style="display:none">Delete Prompt</button>
+          <button class="btn btn-save btn" id="btn-save-prompt">Save Prompt</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </main>
 
