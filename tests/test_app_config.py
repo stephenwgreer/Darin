@@ -27,7 +27,9 @@ def test_save_and_reload_custom_prompt(tmp_path):
     store = AppConfigStore(config_path=tmp_path / "config.json")
     cfg = store.load()
     cfg.custom_prompts.append(
-        CustomPromptConfig(id="cp_test", button_text="Test", output_title="Test Out", template="Hello {transcript}")
+        CustomPromptConfig(
+            id="cp_test", button_text="Test", output_title="Test Out", template="Hello {transcript}"
+        )
     )
     store.save(cfg)
     reloaded = store.load()
