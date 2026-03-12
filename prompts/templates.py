@@ -283,15 +283,14 @@ Meeting transcript:
 # Topic summary prompt
 TOPIC_SUMMARY_PROMPT = """
 Analyze the following transcript from a work call and identify the three main topics discussed.
-Focus on topics that are most relevant to banking and financial services.
 
 Return ONLY the 3 topics as HTML list items, each formatted exactly as:
 <li class="insight-item">[Topic name]</li>
 
 Example Output:
-<li class="insight-item">[Primary banking/financial topic]</li>
-<li class="insight-item">[Secondary related topic]</li>
-<li class="insight-item">[Third related topic]</li>
+<li class="insight-item">[Primary topic]</li>
+<li class="insight-item">[Secondary topic]</li>
+<li class="insight-item">[Third topic]</li>
 
 Do not include any other text, wrappers, headers, or formatting.
 

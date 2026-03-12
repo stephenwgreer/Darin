@@ -12,7 +12,8 @@
  * user. innerHTML is used exclusively with server-controlled HTML from:
  *   1. STATIC_TEMPLATES — hardcoded Python strings in ui/stream_handlers/
  *   2. Regex-extracted <li> elements from Claude API streaming responses
- * Neither source accepts arbitrary user input, so XSS risk is minimal.
+ *   3. marked.parse() output from Claude API Q&A responses
+ * None of these sources accept arbitrary user input, so XSS risk is minimal.
  */
 
 'use strict';
@@ -77,6 +78,7 @@ const el = {
 
 let currentState = 'idle';
 let isProcessing = false;
+let outputIsMarkdown = false;
 
 // ── Timer display ──────────────────────────────────────────────────────────
 
@@ -204,6 +206,7 @@ const handlers = {
   },
 
   template_setup(data) {
+    outputIsMarkdown = false;
     el.outputTitle.textContent = data.output_title || 'Analysis Output';
     // scaffold_html is server-controlled HTML from STATIC_TEMPLATES (Python constants)
     el.outputPanel.innerHTML = data.scaffold_html || ''; // safe: server-only source
@@ -242,6 +245,11 @@ const handlers = {
   },
 
   processing_complete(data) {
+    if (outputIsMarkdown) {
+      const raw = el.outputMarkdown.textContent;
+      el.outputMarkdown.innerHTML = marked.parse(raw); // safe: Claude API response via marked.parse()
+      outputIsMarkdown = false;
+    }
     setProcessing(false);
     if (data.error) {
       el.progressBar.textContent = `Error: ${data.error}`;
@@ -334,6 +342,8 @@ document.querySelectorAll('input[name="segment-mode"]').forEach(radio => {
 async function submitQuestion() {
   const question = el.qaInput.value.trim();
   if (!question || isProcessing) return;
+  el.qaInput.value = '';
+  outputIsMarkdown = true;
   setProcessing(true);
   el.outputTitle.textContent = 'Answer';
   el.outputPanel.textContent = '';
