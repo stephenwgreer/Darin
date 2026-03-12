@@ -143,8 +143,20 @@
         </div>
       </div>
       <hr class="settings-divider"/>
-      <div class="settings-section-title">Future Settings</div>
-      <p class="settings-placeholder">More settings will appear here as new features are added.</p>
+      <div class="settings-section-title">Appearance</div>
+      <div class="settings-row">
+        <label class="settings-label">Background</label>
+        <div class="bg-option-group">
+          <label class="bg-option">
+            <input type="radio" name="bg-style" value="default" id="bg-default" />
+            <span class="bg-option-label">Default</span>
+          </label>
+          <label class="bg-option">
+            <input type="radio" name="bg-style" value="darin" id="bg-darin" />
+            <span class="bg-option-label">Darin</span>
+          </label>
+        </div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-close="modal-settings">Cancel</button>
         <button class="btn btn-save" id="btn-save-settings">Save Changes</button>

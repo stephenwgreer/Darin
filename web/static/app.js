@@ -410,10 +410,16 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 
 // ── Settings dialog ────────────────────────────────────────────────────────
 
+function applyBackground(style) {
+  document.documentElement.classList.toggle('bg-darin', style === 'darin');
+}
+
 async function openSettings() {
   const data = await apiGet('/api/settings');
   if (data) {
     document.getElementById('settings-path-input').value = data.storage_path || '';
+    const radio = document.querySelector(`input[name="bg-style"][value="${data.background_style || 'default'}"]`);
+    if (radio) radio.checked = true;
   }
   openModal('modal-settings');
 }
@@ -433,7 +439,10 @@ document.getElementById('btn-browse-folder').addEventListener('click', async () 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
   const path = document.getElementById('settings-path-input').value.trim();
   if (!path) return;
-  await apiPost('/api/settings', { storage_path: path });
+  const bgRadio = document.querySelector('input[name="bg-style"]:checked');
+  const bgStyle = bgRadio ? bgRadio.value : 'default';
+  applyBackground(bgStyle);
+  await apiPost('/api/settings', { storage_path: path, background_style: bgStyle });
   closeModal('modal-settings');
 });
 
@@ -744,6 +753,8 @@ async function reloadCustomBucket() {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 async function init() {
+  const savedSettings = await apiGet('/api/settings');
+  if (savedSettings) applyBackground(savedSettings.background_style || 'default');
   await loadPrompts();
   await reloadCustomBucket();
   connectSSE();

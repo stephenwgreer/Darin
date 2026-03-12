@@ -46,6 +46,7 @@ class AskQuestionBody(BaseModel):
 
 class SaveSettingsBody(BaseModel):
     storage_path: str
+    background_style: str = "default"
 
 
 class CreateCustomPromptBody(BaseModel):
@@ -194,7 +195,7 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
     @router.get("/settings")
     async def get_settings() -> dict:
         cfg = app_cfg_store.load()
-        return {"storage_path": cfg.storage_path}
+        return {"storage_path": cfg.storage_path, "background_style": cfg.background_style}
 
     @router.post("/settings")
     async def save_settings(body: SaveSettingsBody) -> dict:
@@ -205,6 +206,8 @@ def create_router(bus: SSEEventBus, controller: AppController, app_cfg_store: Ap
             raise HTTPException(status_code=400, detail="storage_path must be an absolute path")
         cfg = app_cfg_store.load()
         cfg.storage_path = body.storage_path
+        if body.background_style in ("default", "darin"):
+            cfg.background_style = body.background_style
         app_cfg_store.save(cfg)
         return {"status": "ok"}
 

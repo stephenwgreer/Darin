@@ -21,20 +21,21 @@
   font-size: 14px;
 }
 
-html {
+html, body {
   height: 100%;
-  background:
-    linear-gradient(rgba(15, 17, 23, 0.82), rgba(15, 17, 23, 0.82)),
-    url('/static/DARIN_HIGH_RES.png') center / cover fixed no-repeat;
-}
-
-body {
-  height: 100%;
-  background: transparent;
+  background: var(--bg);
   color: var(--text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
 }
+
+/* ── Background themes ───────────────────────────────────────────────── */
+html.bg-darin {
+  background:
+    linear-gradient(rgba(15, 17, 23, 0.82), rgba(15, 17, 23, 0.82)),
+    url('/static/DARIN_HIGH_RES.png') center / cover fixed no-repeat;
+}
+html.bg-darin body { background: transparent; }
 
 /* ── Layout ──────────────────────────────────────────────────────────── */
 body { display: flex; flex-direction: column; }
@@ -44,13 +45,16 @@ header {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.5rem;
-  background: rgba(26, 29, 39, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
+}
+html.bg-darin header {
+  background: rgba(26, 29, 39, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .header-logo {
@@ -506,6 +510,16 @@ main {
 }
 .settings-divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 .settings-placeholder { color: var(--text-muted); font-size: 0.8rem; font-style: italic; }
+.bg-option-group { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.bg-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.bg-option input[type="radio"] { accent-color: var(--accent-blue); cursor: pointer; }
+.bg-option-label { user-select: none; }
 
 /* ── History dialog ──────────────────────────────────────────────────── */
 .meeting-list { display: flex; flex-direction: column; gap: 0.4rem; }

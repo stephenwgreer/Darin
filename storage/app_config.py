@@ -26,6 +26,7 @@ class CustomPromptConfig:
 @dataclass
 class AppConfig:
     storage_path: str = _DEFAULT_STORAGE_PATH
+    background_style: str = "default"  # "default" | "darin"
     custom_prompts: list[CustomPromptConfig] = field(default_factory=list)
     deleted_prompt_ids: list[str] = field(default_factory=list)
     # Overrides for built-in prompts: {prompt_id: {field: new_value}}
@@ -48,6 +49,7 @@ class AppConfigStore:
             ]
             return AppConfig(
                 storage_path=data.get("storage_path", _DEFAULT_STORAGE_PATH),
+                background_style=data.get("background_style", "default"),
                 custom_prompts=custom_prompts,
                 deleted_prompt_ids=data.get("deleted_prompt_ids", []),
                 prompt_overrides=data.get("prompt_overrides", {}),
@@ -60,6 +62,7 @@ class AppConfigStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "storage_path": config.storage_path,
+            "background_style": config.background_style,
             "custom_prompts": [asdict(p) for p in config.custom_prompts],
             "deleted_prompt_ids": config.deleted_prompt_ids,
             "prompt_overrides": config.prompt_overrides,
