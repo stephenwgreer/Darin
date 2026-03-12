@@ -79,6 +79,7 @@ const el = {
 let currentState = 'idle';
 let isProcessing = false;
 let outputIsMarkdown = false;
+let rawMarkdownText = '';
 
 // ── Timer display ──────────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ const handlers = {
   },
 
   template_setup(data) {
+    rawMarkdownText = '';
     outputIsMarkdown = false;
     el.outputTitle.textContent = data.output_title || 'Analysis Output';
     // scaffold_html is server-controlled HTML from STATIC_TEMPLATES (Python constants)
@@ -226,7 +228,12 @@ const handlers = {
 
   stream_text(data) {
     el.outputMarkdown.hidden = false;
-    el.outputMarkdown.textContent += data.chunk;
+    if (outputIsMarkdown) {
+      rawMarkdownText += data.chunk;
+      el.outputMarkdown.innerHTML = marked.parse(rawMarkdownText); // safe: Claude API response via marked.parse()
+    } else {
+      el.outputMarkdown.textContent += data.chunk;
+    }
   },
 
   first_line_value(data) {
@@ -245,11 +252,8 @@ const handlers = {
   },
 
   processing_complete(data) {
-    if (outputIsMarkdown) {
-      const raw = el.outputMarkdown.textContent;
-      el.outputMarkdown.innerHTML = marked.parse(raw); // safe: Claude API response via marked.parse()
-      outputIsMarkdown = false;
-    }
+    outputIsMarkdown = false;
+    rawMarkdownText = '';
     setProcessing(false);
     if (data.error) {
       el.progressBar.textContent = `Error: ${data.error}`;
@@ -343,6 +347,7 @@ async function submitQuestion() {
   const question = el.qaInput.value.trim();
   if (!question || isProcessing) return;
   el.qaInput.value = '';
+  rawMarkdownText = '';
   outputIsMarkdown = true;
   setProcessing(true);
   el.outputTitle.textContent = 'Answer';
