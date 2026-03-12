@@ -1,4 +1,6 @@
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from .logic_templates import (
@@ -30,7 +32,7 @@ from .templates import (
 )
 
 
-BucketType = Literal["mid_meeting", "reasoning", "post_meeting", "sales"]
+BucketType = Literal["mid_meeting", "reasoning", "post_meeting", "sales", "custom"]
 
 
 @dataclass
@@ -227,6 +229,33 @@ def get_prompt_config_by_id(prompt_id: str) -> PromptConfig | None:
         if config.id == prompt_id:
             return config
     return None
+
+
+def get_effective_registry(app_config: "AppConfig") -> list[PromptConfig]:
+    """Return the full prompt list: built-ins with overrides applied + custom prompts appended."""
+    from storage.app_config import CustomPromptConfig  # local import avoids circular dep
+
+    result: list[PromptConfig] = []
+    for cfg in PROMPT_REGISTRY:
+        if cfg.id in app_config.deleted_prompt_ids:
+            continue
+        overrides = app_config.prompt_overrides.get(cfg.id, {})
+        if overrides:
+            cfg = replace(cfg, **{k: v for k, v in overrides.items() if hasattr(cfg, k)})
+        result.append(cfg)
+
+    for cp in app_config.custom_prompts:
+        result.append(
+            PromptConfig(
+                id=cp.id,
+                button_text=cp.button_text,
+                template=cp.template,
+                output_title=cp.output_title,
+                template_type="custom",
+                bucket="custom",
+            )
+        )
+    return result
 
 
 # Helper to filter by bucket (DAR2-27)
