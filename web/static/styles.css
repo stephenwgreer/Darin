@@ -21,9 +21,16 @@
   font-size: 14px;
 }
 
-html, body {
+html {
   height: 100%;
-  background: var(--bg);
+  background:
+    linear-gradient(rgba(15, 17, 23, 0.82), rgba(15, 17, 23, 0.82)),
+    url('/static/DARIN_HIGH_RES.png') center / cover fixed no-repeat;
+}
+
+body {
+  height: 100%;
+  background: transparent;
   color: var(--text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
@@ -37,7 +44,9 @@ header {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.5rem;
-  background: var(--bg-card);
+  background: rgba(26, 29, 39, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
