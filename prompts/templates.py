@@ -342,3 +342,10 @@ If no significant risks are detected, return:
 
 Transcript:
 {transcript}"""
+
+MEETING_TITLE_PROMPT = """\
+You are a meeting assistant. Generate a short, descriptive title (max 10 words) for this meeting \
+based on the transcript below. Return ONLY the title text — no quotes, no labels, no punctuation at the end.
+
+Transcript:
+{transcript}"""

@@ -376,9 +376,39 @@ class AppController:
             self._timer_task = None
 
         self._last_meeting_id = self._active_meeting_id  # preserve for post-meeting
+        completed_id = self._active_meeting_id
         self.stop_streaming()
         self._meeting_state = "post_meeting"
         self._emit_state_change("post_meeting")
+        if completed_id is not None:
+            threading.Thread(
+                target=self._generate_title_thread,
+                args=(completed_id,),
+                daemon=True,
+            ).start()
+
+    def _generate_title_thread(self, meeting_id: str) -> None:
+        """Background: generate a short title for a completed meeting via Claude."""
+        from prompts.templates import MEETING_TITLE_PROMPT
+
+        try:
+            if self._meeting_store is None:
+                return
+            transcript = self._meeting_store.get_full_transcript(meeting_id)
+            if not transcript or len(transcript.split()) < 10:
+                return
+            title = self.api_client.process_with_anthropic(
+                transcript[:8000],  # cap length
+                MEETING_TITLE_PROMPT,
+                stream=False,
+                callback=None,
+            )
+            title = title.strip().strip('"').strip("'")
+            if title:
+                self._meeting_store.save_title(meeting_id, title)
+                logger.info("Meeting title generated", meeting_id=meeting_id, title=title)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Title generation failed: {}", e)
 
     async def reset_to_idle(self) -> None:
         """Return to idle state."""
