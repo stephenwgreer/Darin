@@ -1,7 +1,6 @@
 # tests/test_app_config.py
-import json
 import pytest
-from pathlib import Path
+
 from storage.app_config import AppConfig, AppConfigStore, CustomPromptConfig
 
 

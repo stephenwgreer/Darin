@@ -30,6 +30,7 @@ from storage.meeting_store import MeetingStore
 from web.api_router import create_router
 from web.sse_event_bus import SSEEventBus
 
+
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -58,8 +59,9 @@ def create_app(token: str) -> FastAPI:
     """
     app_config.validate_api_keys()
 
-    from storage.app_config import AppConfigStore
     from pathlib import Path
+
+    from storage.app_config import AppConfigStore
 
     app_cfg_store = AppConfigStore()
     app_cfg = app_cfg_store.load()

@@ -1,7 +1,8 @@
 # tests/test_prompt_registry_effective.py
 import pytest
+
+from prompts.registry import get_effective_registry
 from storage.app_config import AppConfig, CustomPromptConfig
-from prompts.registry import get_effective_registry, PromptConfig
 
 
 @pytest.mark.unit

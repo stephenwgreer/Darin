@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+
+if TYPE_CHECKING:
+    from storage.app_config import AppConfig
 
 from .logic_templates import (
     FIRST_PRINCIPLES_PROMPT,
@@ -231,9 +235,8 @@ def get_prompt_config_by_id(prompt_id: str) -> PromptConfig | None:
     return None
 
 
-def get_effective_registry(app_config: "AppConfig") -> list[PromptConfig]:
+def get_effective_registry(app_config: AppConfig) -> list[PromptConfig]:
     """Return the full prompt list: built-ins with overrides applied + custom prompts appended."""
-    from storage.app_config import CustomPromptConfig  # local import avoids circular dep
 
     result: list[PromptConfig] = []
     for cfg in PROMPT_REGISTRY:

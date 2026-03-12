@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -52,8 +51,6 @@ class TestStartMeeting:
         """Two meetings started in the same second get distinct IDs."""
         id1 = store.start_meeting()
         # Patch: temporarily make the second start produce the same base name
-        from unittest.mock import patch
-        from datetime import timezone
         fixed = datetime.fromisoformat(id1.replace("_", "T", 1).replace("_", ":", 1) if "_" in id1 else id1)
         # Simpler: just start two meetings very quickly
         id2 = store.start_meeting()

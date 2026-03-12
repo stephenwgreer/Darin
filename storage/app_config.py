@@ -5,9 +5,11 @@ Stored at ~/.darin-audio-assistant/config.json.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
 from loguru import logger
+
 
 _DEFAULT_CONFIG_PATH = Path.home() / ".darin-audio-assistant" / "config.json"
 _DEFAULT_STORAGE_PATH = str(Path.home() / ".darin-audio-assistant" / "meetings")

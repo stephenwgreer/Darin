@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 
-
 from middleware.csp import CSPMiddleware
 from middleware.token_auth import TokenAuthMiddleware
 from web.app import configure_security
