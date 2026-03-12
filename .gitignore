@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ruff cache
+.ruff_cache/
+
 # C extensions
 *.so
 
@@ -11,6 +14,9 @@ __pycache__/
 
 #old files
 old_ref/
+
+# Log files
+logs/
 
 # Distribution / packaging
 .Python
