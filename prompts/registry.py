@@ -1,3 +1,16 @@
+"""Prompt registry for the two-lane card copilot.
+
+The 21-button estate is gone. What remains:
+- 5 reactive card prompts (answer_this, fact_check, reframe, where_are_we,
+  next_step) — card output via forced emit_cards tool use, max_tokens 400.
+- ask — freeform question, card output, max_tokens 600 (not a button; exposed
+  as ``ASK_PROMPT_CONFIG``).
+- 3 post-meeting long-form prompts kept as-is (meeting_summary, action_items,
+  key_decisions) plus the background MEETING_TITLE_PROMPT template.
+- Custom user prompts (AppConfig.custom_prompts) still work — they run as
+  reactive-style card prompts.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
@@ -7,191 +20,79 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from storage.app_config import AppConfig
 
-from .logic_templates import (
-    FIRST_PRINCIPLES_PROMPT,
-    HYPOTHESIS_DRIVEN_PROMPT,
-    PROBLEM_SOLVING_PROMPT,
-    REFRAMING_PROMPT,
-    SCQA_PROMPT,
-)
+import config
 
-# Import all prompt templates
 from .templates import (
     ACTION_ITEMS_PROMPT,
-    ANALYZE_STATEMENT_PROMPT,
-    ANSWER_QUESTION_PROMPT,
-    BRAINSTORM_PROMPT,
-    BUYING_SIGNALS_PROMPT,
-    COMPANY_FIT_PROMPT,
-    DEAL_RISK_PROMPT,
-    FACT_CHECKING_PROMPT,
-    FILL_IN_GAPS_PROMPT,
-    FOLLOW_UP_QUESTIONS_PROMPT,
+    ANSWER_THIS_INSTRUCTION,
+    ASK_QUESTION_PROMPT,
+    FACT_CHECK_INSTRUCTION,
     KEY_DECISIONS_PROMPT,
     MEETING_SUMMARY_PROMPT,
-    OBJECTION_HANDLING_PROMPT,
-    PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-    SENTIMENT_ANALYSIS_PROMPT,
-    TOPIC_SUMMARY_PROMPT,
+    NEXT_STEP_INSTRUCTION,
+    REFRAME_INSTRUCTION,
+    WHERE_ARE_WE_INSTRUCTION,
 )
 
 
-BucketType = Literal["mid_meeting", "reasoning", "post_meeting", "sales", "custom"]
+BucketType = Literal["reactive", "post_meeting", "custom"]
 
 
 @dataclass
 class PromptConfig:
     id: str  # Unique identifier
-    button_text: str  # Text for the button in ControlsPanel
-    template: str  # The actual prompt template string
-    output_title: str  # Title displayed in the OutputPanel
-    template_type: str  # Identifier used for stream handling / static HTML setup
-    bucket: BucketType = field(default="mid_meeting")
+    button_text: str  # Text for the button in the action bar
+    template: str  # Reactive: the per-request instruction. Post-meeting: {transcript} template.
+    output_title: str  # Title displayed in the output panel
+    template_type: str  # Stream-handler key (post-meeting) or "card" (reactive)
+    bucket: BucketType = field(default="reactive")
+    model: str = config.REACTIVE_MODEL
+    max_tokens: int = config.REACTIVE_MAX_TOKENS
 
 
-# Define all prompts using the configuration structure
-# This becomes the single source of truth for prompts
 PROMPT_REGISTRY = [
-    # --- Bucket 0: Sales (4 prompts) ---
+    # --- Reactive lane: exactly 5 buttons ---
     PromptConfig(
-        id="sentiment_analysis",
-        button_text="Sentiment Analysis",
-        template=SENTIMENT_ANALYSIS_PROMPT,
-        output_title="Sentiment Analysis",
-        template_type="sentiment-analysis",
-        bucket="sales",
-    ),
-    PromptConfig(
-        id="buying_signals",
-        button_text="Buying Signals",
-        template=BUYING_SIGNALS_PROMPT,
-        output_title="Buying Signals",
-        template_type="buying-signals",
-        bucket="sales",
-    ),
-    PromptConfig(
-        id="objection_handling",
-        button_text="Objections",
-        template=OBJECTION_HANDLING_PROMPT,
-        output_title="Objection Analysis",
-        template_type="objection-handling",
-        bucket="sales",
-    ),
-    PromptConfig(
-        id="deal_risk",
-        button_text="Deal Risk",
-        template=DEAL_RISK_PROMPT,
-        output_title="Deal Risk Assessment",
-        template_type="deal-risk",
-        bucket="sales",
-    ),
-    # --- Bucket 1: Mid-Meeting Analysis (8 prompts) ---
-    PromptConfig(
-        id="practitioner_insights",
-        button_text="Practitioner Insights",
-        template=PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-        output_title="Banking Practitioner Insights",
-        template_type="practitioner-insights",
-        bucket="mid_meeting",
-    ),
-    PromptConfig(
-        id="follow_up_questions",
-        button_text="Follow-up Questions",
-        template=FOLLOW_UP_QUESTIONS_PROMPT,
-        output_title="Follow-up Questions",
-        template_type="follow-up-questions",
-        bucket="mid_meeting",
-    ),
-    PromptConfig(
-        id="gaps_reasoning",
-        button_text="Gaps in Reasoning",
-        template=FILL_IN_GAPS_PROMPT,
-        output_title="Gaps in Reasoning",
-        template_type="fill-gaps",
-        bucket="mid_meeting",
-    ),
-    PromptConfig(
-        id="brainstorming",
-        button_text="Brainstorming",
-        template=BRAINSTORM_PROMPT,
-        output_title="Brainstorm Questions",
-        template_type="brainstorm",
-        bucket="mid_meeting",
-    ),
-    PromptConfig(
-        id="company_fit",
-        button_text="SAS Viya Alignment",
-        template=COMPANY_FIT_PROMPT,
-        output_title="SAS Viya Alignment",
-        template_type="company-fit",
-        bucket="sales",
+        id="answer_this",
+        button_text="Answer this",
+        template=ANSWER_THIS_INSTRUCTION,
+        output_title="Answer",
+        template_type="card",
+        bucket="reactive",
     ),
     PromptConfig(
         id="fact_check",
-        button_text="Fact Check",
-        template=FACT_CHECKING_PROMPT,
-        output_title="Fact Check Analysis",
-        template_type="fact-check",
-        bucket="mid_meeting",
+        button_text="Fact-check",
+        template=FACT_CHECK_INSTRUCTION,
+        output_title="Fact Check",
+        template_type="card",
+        bucket="reactive",
     ),
     PromptConfig(
-        id="answer_question",
-        button_text="Answer Question",
-        template=ANSWER_QUESTION_PROMPT,
-        output_title="Answer Question",
-        template_type="answer-question",
-        bucket="mid_meeting",
+        id="reframe",
+        button_text="Reframe",
+        template=REFRAME_INSTRUCTION,
+        output_title="Reframe",
+        template_type="card",
+        bucket="reactive",
     ),
     PromptConfig(
-        id="analyze_statement",
-        button_text="Analyze Statement",
-        template=ANALYZE_STATEMENT_PROMPT,
-        output_title="Statement Analysis",
-        template_type="analyze-statement",
-        bucket="mid_meeting",
-    ),
-    # --- Bucket 2: Reasoning Frameworks (5 prompts) ---
-    PromptConfig(
-        id="scqa",
-        button_text="SCQA Framework",
-        template=SCQA_PROMPT,
-        output_title="SCQA Framework",
-        template_type="scqa",
-        bucket="reasoning",
+        id="where_are_we",
+        button_text="Where are we?",
+        template=WHERE_ARE_WE_INSTRUCTION,
+        output_title="Where We Are",
+        template_type="card",
+        bucket="reactive",
     ),
     PromptConfig(
-        id="issue_tree",
-        button_text="Issue Tree Logic",
-        template=PROBLEM_SOLVING_PROMPT,
-        output_title="Issue Tree Logic",
-        template_type="problem-solving",
-        bucket="reasoning",
+        id="next_step",
+        button_text="Next step",
+        template=NEXT_STEP_INSTRUCTION,
+        output_title="Suggested Next Step",
+        template_type="card",
+        bucket="reactive",
     ),
-    PromptConfig(
-        id="first_principles",
-        button_text="First Principles",
-        template=FIRST_PRINCIPLES_PROMPT,
-        output_title="First Principles",
-        template_type="first-principles",
-        bucket="reasoning",
-    ),
-    PromptConfig(
-        id="hypothesis_driven",
-        button_text="Hypothesis Thinking",
-        template=HYPOTHESIS_DRIVEN_PROMPT,
-        output_title="Hypothesis Thinking",
-        template_type="hypothesis-driven",
-        bucket="reasoning",
-    ),
-    PromptConfig(
-        id="reframing",
-        button_text="Reframing",
-        template=REFRAMING_PROMPT,
-        output_title="Reframing",
-        template_type="reframing",
-        bucket="reasoning",
-    ),
-    # --- Bucket 3: Post-Meeting Analysis (4 prompts) ---
+    # --- Post-meeting lane: long-form streaming, kept as today ---
     PromptConfig(
         id="meeting_summary",
         button_text="Meeting Summary",
@@ -199,14 +100,8 @@ PROMPT_REGISTRY = [
         output_title="Meeting Summary",
         template_type="meeting-summary",
         bucket="post_meeting",
-    ),
-    PromptConfig(
-        id="topic_summary",
-        button_text="Extract Topics",
-        template=TOPIC_SUMMARY_PROMPT,
-        output_title="Key Topics",
-        template_type="topic-summary",
-        bucket="post_meeting",
+        model=config.POST_MEETING_MODEL,
+        max_tokens=config.POST_MEETING_MAX_TOKENS,
     ),
     PromptConfig(
         id="action_items",
@@ -215,6 +110,8 @@ PROMPT_REGISTRY = [
         output_title="Action Items",
         template_type="action-items",
         bucket="post_meeting",
+        model=config.POST_MEETING_MODEL,
+        max_tokens=config.POST_MEETING_MAX_TOKENS,
     ),
     PromptConfig(
         id="key_decisions",
@@ -223,21 +120,40 @@ PROMPT_REGISTRY = [
         output_title="Key Decisions",
         template_type="key-decisions",
         bucket="post_meeting",
+        model=config.POST_MEETING_MODEL,
+        max_tokens=config.POST_MEETING_MAX_TOKENS,
     ),
 ]
 
 
-# Helper to get config by ID
+# Freeform Ask box — not a registry button, but the same reactive card path.
+ASK_PROMPT_CONFIG = PromptConfig(
+    id="ask",
+    button_text="Ask",
+    template=ASK_QUESTION_PROMPT,
+    output_title="Answer",
+    template_type="card",
+    bucket="reactive",
+    model=config.REACTIVE_MODEL,
+    max_tokens=config.ASK_MAX_TOKENS,
+)
+
+
 def get_prompt_config_by_id(prompt_id: str) -> PromptConfig | None:
-    for config in PROMPT_REGISTRY:
-        if config.id == prompt_id:
-            return config
+    if prompt_id == ASK_PROMPT_CONFIG.id:
+        return ASK_PROMPT_CONFIG
+    for cfg in PROMPT_REGISTRY:
+        if cfg.id == prompt_id:
+            return cfg
     return None
 
 
 def get_effective_registry(app_config: AppConfig) -> list[PromptConfig]:
-    """Return the full prompt list: built-ins with overrides applied + custom prompts appended."""
+    """Return the full prompt list: built-ins with overrides applied + custom prompts appended.
 
+    Custom prompts run as reactive-style card prompts (their template text is
+    the per-request instruction).
+    """
     result: list[PromptConfig] = []
     for cfg in PROMPT_REGISTRY:
         if cfg.id in app_config.deleted_prompt_ids:
@@ -254,21 +170,15 @@ def get_effective_registry(app_config: AppConfig) -> list[PromptConfig]:
                 button_text=cp.button_text,
                 template=cp.template,
                 output_title=cp.output_title,
-                template_type="custom",
+                template_type="card",
                 bucket="custom",
+                model=config.REACTIVE_MODEL,
+                max_tokens=config.ASK_MAX_TOKENS,
             )
         )
     return result
 
 
-# Helper to filter by bucket (DAR2-27)
 def get_prompts_by_bucket(bucket: BucketType) -> list[PromptConfig]:
-    """Return all prompts for a given bucket.
-
-    Args:
-        bucket: One of "mid_meeting", "reasoning", or "post_meeting".
-
-    Returns:
-        List of PromptConfig entries with matching bucket value.
-    """
+    """Return all built-in prompts for a given bucket ("reactive" | "post_meeting")."""
     return [cfg for cfg in PROMPT_REGISTRY if cfg.bucket == bucket]

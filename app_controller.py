@@ -13,16 +13,37 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from loguru import logger
 
 import config
-from api.client import ApiClient
+from api.client import ApiClient, build_system_blocks, build_transcript_messages
 from api.deepgram_streaming import DeepgramStreamingClient
 from audio.recorder import ContinuousRecorder
+from services.cards import Card
+from services.context_pack import ContextPack
+from services.rolling_summary import RollingSummaryService
+from services.watcher import Watcher
 from storage.meeting_store import MeetingStore
+
+
+class MeetingAlreadyActiveError(RuntimeError):
+    """Raised when start_meeting() is called while a meeting is already active."""
+
+
+class MeetingStartError(RuntimeError):
+    """Raised when capture/transcription fails to start — no meeting was begun."""
+
+
+# Interactive-lane key shared by ALL long-form streaming prompts. The streaming
+# pipeline (StreamBuffer + template state on the SSE bus) is a single shared
+# slot, so long-form runs are single-flight: a second long-form prompt while
+# one is streaming is rejected. Card prompts stay keyed per prompt_id.
+LONGFORM_LANE_KEY = "longform"
 
 
 class AppController:
@@ -43,9 +64,10 @@ class AppController:
         on_processing_complete: Callable[[dict], None] | None = None,
         on_progress: Callable[[str], None] | None = None,
         on_stream_chunk: Callable[[str], None] | None = None,
-        # Live streaming callbacks (DAR2-23)
-        on_interim_transcript: Callable[[str], None] | None = None,
-        on_final_transcript: Callable[[str], None] | None = None,
+        # Live streaming callbacks (DAR2-23). Interim/final callbacks receive
+        # (text, speaker) where speaker is "ME", "THEM", or None.
+        on_interim_transcript: Callable[[str, str | None], None] | None = None,
+        on_final_transcript: Callable[[str, str | None], None] | None = None,
         on_utterance_end: Callable[[str], None] | None = None,
     ) -> None:
         # Callbacks (UI layer provides these)
@@ -61,8 +83,15 @@ class AppController:
         self._on_final_transcript = on_final_transcript
         self._on_utterance_end = on_utterance_end
 
+        # Component error callback (wired to the SSE "error" event by the web
+        # layer) — surfaces device death / streaming failures to the UI.
+        self._on_error: Callable[[str], None] | None = None
+
         # Backend components
-        self.recorder = ContinuousRecorder(buffer_minutes=config.BUFFER_MINUTES)
+        self.recorder = ContinuousRecorder(
+            buffer_minutes=config.BUFFER_MINUTES,
+            on_error=self._handle_component_error,
+        )
         self.api_client = ApiClient()
 
         # Live streaming client (DAR2-23)
@@ -70,9 +99,32 @@ class AppController:
 
         # Thread-safe state
         self._transcript_lock = threading.Lock()
-        self._processing_lock = threading.Lock()
         self._current_transcript: str = ""
-        self._is_processing: bool = False
+
+        # Per-lane concurrency (replaces the old global _is_processing gate):
+        # - watcher lane: always allowed (never touches this set)
+        # - interactive lane: one in-flight request PER prompt_id — a second
+        #   click of the SAME button is rejected, different buttons run
+        #   concurrently
+        # - background lane (title, rolling summary, map-reduce): unrestricted
+        self._processing_lock = threading.Lock()
+        self._interactive_inflight: set[str] = set()
+
+        # Copilot services (session-scoped; created on meeting start)
+        self._watcher: Watcher | None = None
+        self._rolling_summary: RollingSummaryService | None = None
+        self.context_pack: ContextPack | None = None
+        self._persona: str = "general"
+
+        # Card plumbing: emitted cards by id (for dismiss), recent transcript
+        # lines with monotonic timestamps (for the reactive "last ~3 min").
+        self._emitted_cards: dict[str, Card] = {}
+        self._recent_lines: deque[tuple[float, str]] = deque(maxlen=2000)
+
+        # Card/watcher callbacks (Wave 3 wires these to SSE)
+        self._on_card: Callable[[dict], None] | None = None
+        self._on_card_dismissed: Callable[[str], None] | None = None
+        self._on_watcher_status: Callable[[str], None] | None = None
 
         # HTML streaming state (needed by _setup_static_template flow)
         self._template_type: str | None = None
@@ -83,6 +135,10 @@ class AppController:
 
         # Meeting state machine (DAR2-26)
         self._meeting_state: str = "idle"  # idle | active | post_meeting
+        # Serializes start_meeting / stop_meeting / reset_to_idle so two
+        # concurrent transitions can never interleave (double Deepgram
+        # connections, leaked timer tasks, mid-meeting transcript wipes).
+        self._transition_lock = asyncio.Lock()
         self._state_change_callbacks: list[Callable[[str], None]] = []
         self._timer_callbacks: list[Callable[[int], None]] = []
         self._timer_task: asyncio.Task | None = None
@@ -112,13 +168,24 @@ class AppController:
 
     @property
     def is_processing(self) -> bool:
+        """True while ANY interactive-lane request is in flight (UI compat)."""
         with self._processing_lock:
-            return self._is_processing
+            return bool(self._interactive_inflight)
 
-    @is_processing.setter
-    def is_processing(self, value: bool) -> None:
+    def _try_acquire_interactive(self, prompt_id: str) -> bool:
+        """Claim an interactive-lane slot for prompt_id. False if already in flight."""
         with self._processing_lock:
-            self._is_processing = value
+            if prompt_id in self._interactive_inflight:
+                logger.warning(
+                    "Interactive request rejected: already in flight", prompt_id=prompt_id
+                )
+                return False
+            self._interactive_inflight.add(prompt_id)
+            return True
+
+    def _release_interactive(self, prompt_id: str) -> None:
+        with self._processing_lock:
+            self._interactive_inflight.discard(prompt_id)
 
     @property
     def is_recording(self) -> bool:
@@ -203,6 +270,62 @@ class AppController:
     def on_transcription_complete(self, callback: Callable[[str], None] | None) -> None:
         self._on_transcription_complete = callback
 
+    @property
+    def on_card(self) -> Callable[[dict], None] | None:
+        """Callback invoked with a card dict whenever any lane emits a card."""
+        return self._on_card
+
+    @on_card.setter
+    def on_card(self, callback: Callable[[dict], None] | None) -> None:
+        self._on_card = callback
+
+    @property
+    def on_card_dismissed(self) -> Callable[[str], None] | None:
+        """Callback invoked with the card id when a card is dismissed."""
+        return self._on_card_dismissed
+
+    @on_card_dismissed.setter
+    def on_card_dismissed(self, callback: Callable[[str], None] | None) -> None:
+        self._on_card_dismissed = callback
+
+    @property
+    def on_watcher_status(self) -> Callable[[str], None] | None:
+        """Callback invoked with the watcher state ("watching"/"thinking"/"stopped")."""
+        return self._on_watcher_status
+
+    @on_watcher_status.setter
+    def on_watcher_status(self, callback: Callable[[str], None] | None) -> None:
+        self._on_watcher_status = callback
+
+    @property
+    def on_error(self) -> Callable[[str], None] | None:
+        """Callback invoked with an error message on component failure."""
+        return self._on_error
+
+    @on_error.setter
+    def on_error(self, callback: Callable[[str], None] | None) -> None:
+        self._on_error = callback
+
+    @property
+    def on_usage(self) -> Callable[[dict], None] | None:
+        """Callback invoked with {"meeting_cost_usd": float} after each LLM call."""
+        return self.api_client.on_usage
+
+    @on_usage.setter
+    def on_usage(self, callback: Callable[[dict], None] | None) -> None:
+        self.api_client.on_usage = callback
+
+    @property
+    def persona(self) -> str:
+        """Copilot persona: "general" | "sales" | "technical"."""
+        return self._persona
+
+    @persona.setter
+    def persona(self, value: str) -> None:
+        from prompts.templates import PERSONAS
+
+        self._persona = value if value in PERSONAS else "general"
+
     # ------------------------------------------------------------------
     # Recording lifecycle
     # ------------------------------------------------------------------
@@ -252,11 +375,13 @@ class AppController:
 
         logger.info("Starting live streaming transcription")
 
-        # Create streaming client
+        # Create streaming client (dual-channel: 0 = ME mic, 1 = THEM loopback)
         self._streaming_client = DeepgramStreamingClient(
             api_key=self.api_client.deepgram_api_key,
-            sample_rate=self.recorder.sample_rate,
-            on_interim_transcript=self._on_interim_transcript,
+            sample_rate=config.DEEPGRAM_SAMPLE_RATE,
+            channels=2,
+            keyterms=config.DEEPGRAM_KEYTERMS,
+            on_interim_transcript=self._handle_interim_transcript,
             on_final_transcript=self._on_final_transcript_with_storage,
             on_utterance_end=self._handle_utterance_end,
             on_error=self._on_streaming_error,
@@ -265,6 +390,17 @@ class AppController:
 
         if not self._streaming_client.is_connected:
             logger.error("Failed to establish Deepgram WebSocket connection")
+            # Release any worker threads started during the failed connect
+            self._streaming_client.disconnect()
+            self._streaming_client = None
+            return False
+
+        # Start recording if not already. A recorder that refuses to start
+        # (no audio devices) is a start FAILURE — never report a live session
+        # that captures nothing.
+        if not self.recorder.is_recording and not self.start_recording():
+            logger.error("Recorder failed to start — aborting streaming start")
+            self._streaming_client.disconnect()
             self._streaming_client = None
             return False
 
@@ -274,10 +410,6 @@ class AppController:
         # Create meeting record if storage is available
         if self._meeting_store is not None:
             self._active_meeting_id = self._meeting_store.start_meeting()
-
-        # Start recording if not already
-        if not self.recorder.is_recording:
-            self.start_recording()
 
         return True
 
@@ -316,30 +448,54 @@ class AppController:
         return self._streaming_client is not None and self._streaming_client.is_connected
 
     def _on_recorder_chunk(self, audio_chunk: np.ndarray) -> None:
-        """Forward audio chunks from the recorder to the streaming client."""
+        """Forward int16 (frames, 2) chunks from the recorder to Deepgram."""
         if self._streaming_client is not None:
             self._streaming_client.send_audio(audio_chunk)
 
     def _handle_utterance_end(self, full_transcript: str) -> None:
-        """Handle utterance end — update current transcript."""
+        """Handle utterance end — update current transcript and tick the watcher."""
         self.current_transcript = full_transcript
+        if self._watcher is not None:
+            self._watcher.on_utterance_end(full_transcript)
         if self._on_utterance_end:
             self._on_utterance_end(full_transcript)
 
     def _on_streaming_error(self, error: str) -> None:
-        """Handle streaming errors."""
-        logger.error(f"Streaming error: {error}")
+        """Handle streaming errors — log AND surface to the UI."""
+        self._handle_component_error(f"Live transcription error: {error}")
+
+    def _handle_component_error(self, message: str) -> None:
+        """Forward a component failure (recorder/streaming) to the UI layer."""
+        logger.error("Component error", message=message)
+        if self._on_error is not None:
+            try:
+                self._on_error(message)
+            except Exception as e:  # noqa: BLE001 — a bad consumer never kills a lane
+                logger.warning("on_error callback failed: {}", e)
 
     def _handle_meeting_segment(self, text: str) -> None:
         """Append a final transcript segment to the active meeting."""
         if self._meeting_store is not None and self._active_meeting_id is not None:
             self._meeting_store.append_segment(self._active_meeting_id, text)
 
-    def _on_final_transcript_with_storage(self, text: str) -> None:
-        """Handle final transcript: store segment AND notify UI."""
-        self._handle_meeting_segment(text)
+    def _handle_interim_transcript(self, text: str, speaker: str | None) -> None:
+        """Forward interim transcripts (with speaker attribution) to the UI."""
+        if self._on_interim_transcript:
+            self._on_interim_transcript(text, speaker)
+
+    def _on_final_transcript_with_storage(self, text: str, speaker: str | None) -> None:
+        """Handle final transcript: store speaker-prefixed segment AND notify UI."""
+        line = f"{speaker}: {text}" if speaker else text
+        self._handle_meeting_segment(line)
+        self._recent_lines.append((time.monotonic(), line))
         if self._on_final_transcript:
-            self._on_final_transcript(text)
+            self._on_final_transcript(text, speaker)
+
+    def _recent_transcript(self, seconds: float = 180.0) -> str:
+        """Verbatim transcript lines from the last N seconds (reactive context)."""
+        cutoff = time.monotonic() - seconds
+        lines = [line for ts, line in list(self._recent_lines) if ts >= cutoff]
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Meeting lifecycle (DAR2-26)
@@ -358,15 +514,118 @@ class AppController:
         return int(time.monotonic() - self._meeting_start_time)
 
     async def start_meeting(self) -> None:
-        """Begin a meeting session."""
-        self.start_streaming()
-        self._meeting_state = "active"
-        self._meeting_start_time = time.monotonic()
-        self._timer_task = asyncio.create_task(self._run_timer())
-        self._emit_state_change("active")
+        """Begin a meeting session.
+
+        Capture is SESSION-SCOPED: the recorder and the Deepgram stream both
+        start here (nothing records at app boot). The stale transcript from a
+        previous meeting is cleared first. Blocking connect work runs in a
+        worker thread so the event loop stays responsive.
+
+        Raises:
+            MeetingAlreadyActiveError: A meeting is already active (the route
+                maps this to HTTP 409). Guards against double-start races.
+            MeetingStartError: Capture/transcription failed to start; the app
+                stays in its previous state and NO false "active" is emitted.
+        """
+        async with self._transition_lock:
+            if self._meeting_state == "active":
+                logger.warning("start_meeting rejected: a meeting is already active")
+                raise MeetingAlreadyActiveError("A meeting is already active")
+
+            self.current_transcript = ""  # never answer about a previous meeting
+            self._recent_lines.clear()
+            self._emitted_cards.clear()
+            self.api_client.reset_meeting_cost()
+
+            started = await asyncio.to_thread(self.start_streaming)
+            if not started:
+                # Tear down anything partially started; stay OUT of "active" so
+                # the UI never shows a live REC indicator over a dead session.
+                await asyncio.to_thread(self._teardown_failed_start)
+                self._handle_component_error(
+                    "Failed to start capture/transcription — meeting not started"
+                )
+                raise MeetingStartError("Failed to start capture/transcription")
+
+            # Context-pack file reads + thread starts are blocking — off-loop.
+            await asyncio.to_thread(self._start_copilot_services)
+
+            if self._timer_task is not None:  # never leak a previous timer task
+                self._timer_task.cancel()
+            self._meeting_state = "active"
+            self._meeting_start_time = time.monotonic()
+            self._timer_task = asyncio.create_task(self._run_timer())
+            self._emit_state_change("active")
+
+    def _teardown_failed_start(self) -> None:
+        """Best-effort cleanup after a failed start_streaming() (blocking)."""
+        # start_streaming() cleans up its own client on failure; only a
+        # dangling recorder can be left behind here.
+        if self._streaming_client is not None and not self._streaming_client.is_connected:
+            self.stop_streaming()
+        if self.recorder.is_recording:
+            self.stop_recording()
+
+    def _start_copilot_services(self) -> None:
+        """Create and start the watcher + rolling summary for this session."""
+        context_text = self.context_pack.as_text() if self.context_pack is not None else ""
+
+        self._watcher = Watcher(
+            self.api_client,
+            persona=self._persona,
+            context_pack_text=context_text,
+            on_card=self._emit_card,
+            on_status=self._emit_watcher_status,
+        )
+        self._watcher.start()
+
+        self._rolling_summary = RollingSummaryService(
+            self.api_client,
+            get_transcript=lambda: self.current_transcript,
+            on_update=self._persist_rolling_summary,
+        )
+        self._rolling_summary.start()
+
+    def _stop_copilot_services(self) -> None:
+        """Stop the watcher + rolling summary (blocking joins, run off-loop)."""
+        if self._watcher is not None:
+            self._watcher.stop()
+            self._watcher = None
+        if self._rolling_summary is not None:
+            self._rolling_summary.stop()
+            self._rolling_summary = None
+
+    def _persist_rolling_summary(self, summary: str) -> None:
+        """Persist the rolling summary per-meeting via the meeting store."""
+        if self._meeting_store is not None and self._active_meeting_id is not None:
+            try:
+                self._meeting_store.save_analysis(
+                    self._active_meeting_id, "rolling_summary", summary
+                )
+            except Exception as e:  # noqa: BLE001 — background lane must never die
+                logger.warning("Failed to persist rolling summary: {}", e)
 
     async def stop_meeting(self) -> None:
-        """End the meeting session."""
+        """End the meeting session: stop streaming AND the recorder."""
+        async with self._transition_lock:
+            await self._cancel_timer_task()
+
+            self._last_meeting_id = self._active_meeting_id  # preserve for post-meeting
+            completed_id = self._active_meeting_id
+            await asyncio.to_thread(self._stop_copilot_services)
+            await asyncio.to_thread(self.stop_streaming)
+            if self.recorder.is_recording:
+                await asyncio.to_thread(self.stop_recording)
+            self._meeting_state = "post_meeting"
+            self._emit_state_change("post_meeting")
+        if completed_id is not None:
+            threading.Thread(
+                target=self._generate_title_thread,
+                args=(completed_id,),
+                daemon=True,
+            ).start()
+
+    async def _cancel_timer_task(self) -> None:
         if self._timer_task is not None:
             self._timer_task.cancel()
             try:
@@ -374,18 +633,6 @@ class AppController:
             except asyncio.CancelledError:
                 pass
             self._timer_task = None
-
-        self._last_meeting_id = self._active_meeting_id  # preserve for post-meeting
-        completed_id = self._active_meeting_id
-        self.stop_streaming()
-        self._meeting_state = "post_meeting"
-        self._emit_state_change("post_meeting")
-        if completed_id is not None:
-            threading.Thread(
-                target=self._generate_title_thread,
-                args=(completed_id,),
-                daemon=True,
-            ).start()
 
     def _generate_title_thread(self, meeting_id: str) -> None:
         """Background: generate a short title for a completed meeting via Claude."""
@@ -402,6 +649,10 @@ class AppController:
                 MEETING_TITLE_PROMPT,
                 stream=False,
                 callback=None,
+                model=config.WATCHER_MODEL,
+                max_tokens=config.TITLE_MAX_TOKENS,
+                lane="background",
+                cache_transcript=False,  # one-shot call — never re-read
             )
             title = title.strip().strip('"').strip("'")
             if title:
@@ -411,11 +662,27 @@ class AppController:
             logger.warning("Title generation failed: {}", e)
 
     async def reset_to_idle(self) -> None:
-        """Return to idle state."""
-        self._meeting_state = "idle"
-        self._meeting_start_time = None
-        self._last_meeting_id = None
-        self._emit_state_change("idle")
+        """Return to idle state (clears the stale meeting transcript).
+
+        Mirrors stop_meeting(): the timer task is cancelled and any live
+        capture is fully stopped, so a /reset during an active meeting can
+        never leave the recorder or the Deepgram socket running behind an
+        "Idle" UI (silent-recording privacy bug).
+        """
+        async with self._transition_lock:
+            await self._cancel_timer_task()
+            await asyncio.to_thread(self._stop_copilot_services)
+            if self._streaming_client is not None:
+                await asyncio.to_thread(self.stop_streaming)
+            if self.recorder.is_recording:
+                await asyncio.to_thread(self.stop_recording)
+            self._meeting_state = "idle"
+            self._meeting_start_time = None
+            self._last_meeting_id = None
+            self.current_transcript = ""  # stale-transcript bug fix
+            self._recent_lines.clear()
+            self._emitted_cards.clear()
+            self._emit_state_change("idle")
 
     def on_meeting_state_change(self, callback: Callable[[str], None]) -> None:
         """Register callback for state transitions."""
@@ -543,12 +810,17 @@ class AppController:
         to_minute: int | None = None,
         on_template_setup: Callable[[str], str | None] | None = None,
         on_complete: Callable[[str, str], None] | None = None,
-    ) -> None:
+    ) -> bool:
         """Run a post-meeting prompt against the stored meeting transcript.
 
         Retrieves the full (or segment-filtered) transcript from SQLite, sends
         it to Claude for streaming analysis, saves the result to
         ``meeting_analyses``, and invokes ``on_complete`` when done.
+
+        Long-form streaming is SINGLE-FLIGHT (shared ``LONGFORM_LANE_KEY``):
+        the SSE StreamBuffer/template state is one shared slot, so a second
+        long-form prompt while one is streaming is rejected (returns False and
+        the route maps it to HTTP 409).
 
         Args:
             prompt_config: A ``PromptConfig`` from ``PROMPT_REGISTRY``.
@@ -559,13 +831,17 @@ class AppController:
                 template_type string or None.
             on_complete: Called with ``(prompt_id, output_text)`` after the
                 result is saved to SQLite.
+
+        Returns:
+            True if the request was accepted.
         """
-        # Atomic check-and-set for processing state
-        with self._processing_lock:
-            if self._is_processing:
-                logger.warning("Post-meeting prompt rejected: already processing")
-                return
-            self._is_processing = True
+        prompt_id = getattr(prompt_config, "id", "post_meeting")
+        if not self._try_acquire_interactive(LONGFORM_LANE_KEY):
+            logger.warning(
+                "Long-form prompt rejected: another analysis is streaming",
+                prompt_id=prompt_id,
+            )
+            return False
 
         if self._on_progress:
             self._on_progress("Retrieving transcript...")
@@ -575,6 +851,7 @@ class AppController:
             args=(prompt_config, from_minute, to_minute, on_template_setup, on_complete),
             daemon=True,
         ).start()
+        return True
 
     def _run_post_meeting_thread(
         self,
@@ -586,13 +863,16 @@ class AppController:
     ) -> None:
         """Background thread: retrieve transcript and run post-meeting prompt."""
         start_time = time.perf_counter()
+        prompt_id = getattr(prompt_config, "id", "post_meeting")
 
         try:
             meeting_id = self._last_meeting_id or self._active_meeting_id
             if self._meeting_store is None or meeting_id is None:
                 logger.error("Post-meeting prompt: no meeting available")
                 if self._on_processing_complete:
-                    self._on_processing_complete({"error": "No meeting available"})
+                    self._on_processing_complete(
+                        {"error": "No meeting available", "prompt_id": prompt_id}
+                    )
                 return
 
             # Retrieve transcript (full or segment range)
@@ -625,7 +905,9 @@ class AppController:
             if not transcript.strip():
                 logger.warning("Post-meeting prompt: transcript is empty")
                 if self._on_processing_complete:
-                    self._on_processing_complete({"error": "No transcript available"})
+                    self._on_processing_complete(
+                        {"error": "No transcript available", "prompt_id": prompt_id}
+                    )
                 return
 
             # Context window handling: rough word-to-token estimate
@@ -666,6 +948,12 @@ class AppController:
                 prompt_config.template,  # type: ignore[attr-defined]
                 stream=True,
                 callback=handle_stream,
+                model=getattr(prompt_config, "model", None),
+                max_tokens=getattr(prompt_config, "max_tokens", None),
+                context_pack_text=(
+                    self.context_pack.as_text() if self.context_pack is not None else None
+                ),
+                lane="interactive",
             )
 
             output_text = "".join(output_chunks) or str(result)
@@ -686,7 +974,7 @@ class AppController:
             )
 
             if self._on_processing_complete:
-                self._on_processing_complete({"result": result})
+                self._on_processing_complete({"result": result, "prompt_id": prompt_id})
 
             if on_complete:
                 on_complete(prompt_config.id, output_text)  # type: ignore[attr-defined]
@@ -700,26 +988,26 @@ class AppController:
                 exc_info=True,
             )
             if self._on_processing_complete:
-                self._on_processing_complete({"error": str(e)})
+                self._on_processing_complete({"error": str(e), "prompt_id": prompt_id})
         finally:
-            self.is_processing = False
+            self._release_interactive(LONGFORM_LANE_KEY)
 
     def _map_reduce_transcript(self, transcript: str) -> str:
         """Summarize a very long transcript in chunks before final analysis.
 
         Splits the transcript into overlapping 30,000-token chunks, summarizes
-        each chunk with a lightweight prompt, then returns the concatenated
-        summaries for use as the analysis input.
+        each chunk CONCURRENTLY on the watcher model (background lane), then
+        returns the concatenated summaries for use as the analysis input.
 
         This path is only triggered for transcripts estimated to exceed 150,000
         tokens (roughly 11+ hours of continuous speech).
         """
-        chunk_words = 23_000   # ~30k tokens at 1.3 tokens/word
+        chunk_words = 23_000  # ~30k tokens at 1.3 tokens/word
         overlap_words = 1_500  # ~2k tokens overlap between chunks
 
         summarize_prompt = (
-            "Summarize the key points, decisions, and action items from this "
-            "transcript segment in concise bullet points:\n\n{transcript}"
+            "Summarize the key points, decisions, and action items from the "
+            "transcript segment in concise bullet points.\n\n{transcript}"
         )
 
         words = transcript.split()
@@ -733,18 +1021,25 @@ class AppController:
                 break
             start = end - overlap_words
 
-        logger.info("Map-reduce: summarizing chunks", chunk_count=len(chunks))
+        logger.info("Map-reduce: summarizing chunks concurrently", chunk_count=len(chunks))
 
-        summaries: list[str] = []
-        for i, chunk in enumerate(chunks):
-            logger.debug(f"Summarizing chunk {i + 1}/{len(chunks)}")
-            summary = self.api_client.process_with_anthropic(
-                chunk,
-                summarize_prompt,
-                stream=False,
-                callback=None,
+        def summarize(chunk: str) -> str:
+            return str(
+                self.api_client.process_with_anthropic(
+                    chunk,
+                    summarize_prompt,
+                    stream=False,
+                    callback=None,
+                    model=config.WATCHER_MODEL,
+                    lane="background",
+                    # Each unique chunk is sent exactly once — a cache write
+                    # here is a pure 1.25x premium with zero possible reads.
+                    cache_transcript=False,
+                )
             )
-            summaries.append(str(summary))
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            summaries = list(pool.map(summarize, chunks))
 
         return "\n\n".join(summaries)
 
@@ -756,75 +1051,236 @@ class AppController:
         self,
         question: str,
         *,
-        on_template_setup: Callable[[str], str | None] | None = None,
+        on_template_setup: Callable[[str], str | None] | None = None,  # noqa: ARG002 — kept for API compat; cards need no scaffold
         on_complete: Callable[[], None] | None = None,
         historical_transcript: str | None = None,
-    ) -> None:
-        """Run a freeform question against the current/last meeting transcript.
+    ) -> bool:
+        """Run a freeform question through the reactive card lane.
 
-        Skips audio capture — uses the stored transcript directly.
-        If historical_transcript is provided, it is used instead of the current meeting transcript.
+        If historical_transcript is provided (meeting-history Q&A), it replaces
+        the live context of [rolling summary + last ~3 minutes verbatim].
+
+        Returns:
+            True if the request was accepted (False when an 'ask' is already
+            in flight — the route maps this to HTTP 409).
         """
-        from prompts.templates import ASK_QUESTION_PROMPT
+        from prompts.registry import ASK_PROMPT_CONFIG
 
-        with self._processing_lock:
-            if self._is_processing:
-                logger.warning("Ask request rejected: already processing")
-                return
-            self._is_processing = True
-
-        transcript = (
-            historical_transcript if historical_transcript is not None else self.get_meeting_transcript()
+        return self.run_reactive_prompt(
+            ASK_PROMPT_CONFIG,
+            question=question,
+            transcript_override=historical_transcript,
+            on_complete=on_complete,
         )
-        if not transcript or not transcript.strip():
-            if self._on_processing_complete:
-                self._on_processing_complete({"error": "No transcript available to ask about"})
-            self._is_processing = False
-            return
 
-        safe_question = question.replace("{", "{{").replace("}", "}}")
-        filled_template = ASK_QUESTION_PROMPT.replace("{question}", safe_question)
+    def run_reactive_prompt(
+        self,
+        prompt_config: object,
+        *,
+        question: str | None = None,
+        transcript_override: str | None = None,
+        on_complete: Callable[[], None] | None = None,
+    ) -> bool:
+        """Run a reactive card prompt (5 buttons / Ask / custom prompts).
+
+        Interactive lane: one in-flight request per prompt_id — a second click
+        of the SAME button is rejected; different buttons run concurrently.
+        Context = [rolling summary (~300 tokens)] + [last ~3 minutes verbatim],
+        never the full transcript. Cards are emitted via the on_card callback.
+
+        Returns True if the request was accepted.
+        """
+        prompt_id = getattr(prompt_config, "id", "reactive")
+        if not self._try_acquire_interactive(prompt_id):
+            return False
+
         threading.Thread(
-            target=self._run_prompt_thread,
-            args=(transcript, filled_template, on_template_setup, on_complete),
+            target=self._run_reactive_thread,
+            args=(prompt_config, question, transcript_override, on_complete),
             daemon=True,
         ).start()
+        return True
+
+    def _run_reactive_thread(
+        self,
+        prompt_config: object,
+        question: str | None,
+        transcript_override: str | None,
+        on_complete: Callable[[], None] | None,
+    ) -> None:
+        """Background thread: build reactive context, force emit_cards, emit."""
+        from prompts.templates import REACTIVE_SYSTEM_PROMPT, persona_line
+
+        prompt_id = getattr(prompt_config, "id", "reactive")
+        start_time = time.perf_counter()
+        try:
+            instruction = prompt_config.template  # type: ignore[attr-defined]
+            if question is not None:
+                instruction = instruction.replace("{question}", question)
+
+            # Context blocks: [rolling summary] + [last ~3 min verbatim]
+            blocks: list[str] = []
+            if transcript_override is not None:
+                blocks.append(f"Meeting transcript:\n{transcript_override}")
+            else:
+                # Snapshot: _stop_copilot_services (another thread) can null
+                # self._rolling_summary between the check and the access.
+                rolling_summary = self._rolling_summary
+                if rolling_summary is not None and rolling_summary.summary:
+                    blocks.append(
+                        "Rolling summary of the meeting so far:\n" + rolling_summary.summary
+                    )
+                recent = self._recent_transcript(180.0) or self.current_transcript[-6000:]
+                if recent.strip():
+                    blocks.append(f"Most recent transcript (last ~3 minutes):\n{recent}")
+
+            if not any(b.strip() for b in blocks):
+                if self._on_processing_complete:
+                    self._on_processing_complete(
+                        {"error": "No transcript available", "prompt_id": prompt_id}
+                    )
+                return
+
+            system_text = f"{REACTIVE_SYSTEM_PROMPT}\n\n{persona_line(self._persona)}"
+            context_text = self.context_pack.as_text() if self.context_pack is not None else None
+            system = build_system_blocks(system_text, context_text)
+            # Reactive context churns every request — don't waste cache writes on it.
+            messages = build_transcript_messages(blocks, instruction, cache_transcript=False)
+
+            cards = self.api_client.create_cards(
+                lane="reactive",
+                model=getattr(prompt_config, "model", config.REACTIVE_MODEL),
+                max_tokens=getattr(prompt_config, "max_tokens", config.REACTIVE_MAX_TOKENS),
+                system=system,
+                messages=messages,
+            )
+
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "Reactive prompt complete",
+                prompt_id=prompt_id,
+                card_count=len(cards),
+                duration_ms=f"{duration_ms:.2f}",
+            )
+
+            for card in cards:
+                self._emit_card(card)
+            if self._on_processing_complete:
+                self._on_processing_complete(
+                    {"cards": [c.to_dict() for c in cards], "prompt_id": prompt_id}
+                )
+            if on_complete:
+                on_complete()
+        except Exception as e:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "Reactive prompt failed",
+                prompt_id=prompt_id,
+                error=str(e),
+                duration_ms=f"{duration_ms:.2f}",
+                exc_info=True,
+            )
+            if self._on_processing_complete:
+                self._on_processing_complete({"error": str(e), "prompt_id": prompt_id})
+        finally:
+            self._release_interactive(prompt_id)
+
+    # ------------------------------------------------------------------
+    # Card plumbing
+    # ------------------------------------------------------------------
+
+    def _emit_card(self, card: Card) -> None:
+        """Register an emitted card (for dismissal) and notify the UI."""
+        self._emitted_cards[card.id] = card
+        if self._on_card:
+            try:
+                self._on_card(card.to_dict())
+            except Exception as e:  # noqa: BLE001 — a bad consumer never kills a lane
+                logger.warning("on_card callback failed: {}", e)
+
+    def _emit_watcher_status(self, state: str) -> None:
+        if self._on_watcher_status:
+            try:
+                self._on_watcher_status(state)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("on_watcher_status callback failed: {}", e)
+
+    def dismiss_card(self, card_id: str) -> bool:
+        """Dismiss a card: suppress its topic for the meeting, notify the UI.
+
+        Returns True if the card was found.
+        """
+        card = self._emitted_cards.get(card_id)
+        if card is None:
+            logger.warning("Dismiss requested for unknown card", card_id=card_id)
+            return False
+        if self._watcher is not None and card.topic_key:
+            self._watcher.dismiss_topic(card.topic_key)
+        logger.info("Card dismissed", card_id=card_id, topic_key=card.topic_key)
+        if self._on_card_dismissed:
+            try:
+                self._on_card_dismissed(card_id)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("on_card_dismissed callback failed: {}", e)
+        return True
 
     def run_prompt(
         self,
         prompt_template: str,
         title: str | None = None,
         *,
+        prompt_id: str | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
         on_template_setup: Callable[[str], str | None] | None = None,
         on_complete: Callable[[], None] | None = None,
-    ) -> None:
-        """Run a prompt against the current transcript (or auto-transcribe first).
+    ) -> bool:
+        """Run a legacy long-form prompt against the current transcript.
+
+        Kept for the post-meeting/streaming path and backwards compatibility.
+        Long-form streaming is SINGLE-FLIGHT (shared ``LONGFORM_LANE_KEY``):
+        the SSE StreamBuffer/template state is one shared slot, so a second
+        long-form prompt while one is streaming is rejected.
 
         Args:
             prompt_template: The prompt template string with {transcript} placeholder.
             title: Display title for the output.
+            prompt_id: Prompt id carried into processing_complete payloads.
+            model: Per-prompt model override (default POST_MEETING_MODEL).
+            max_tokens: Per-prompt output cap (default POST_MEETING_MAX_TOKENS).
             on_template_setup: UI callback to set up the static HTML template.
                               Receives prompt_template, returns template_type string.
                               Called from the background thread — UI layer must marshal.
+
+        Returns:
+            True if the request was accepted.
         """
-        # Atomic check-and-set for processing state
-        with self._processing_lock:
-            if self._is_processing:
-                logger.warning("Prompt request rejected: already processing")
-                return
-            self._is_processing = True
+        if not self._try_acquire_interactive(LONGFORM_LANE_KEY):
+            logger.warning(
+                "Long-form prompt rejected: another analysis is streaming",
+                prompt_id=prompt_id,
+            )
+            return False
 
         if self._on_progress:
             self._on_progress("Capturing audio and transcribing...")
+
+        thread_kwargs = {
+            "release_key": LONGFORM_LANE_KEY,
+            "prompt_id": prompt_id,
+            "model": model,
+            "max_tokens": max_tokens,
+        }
 
         # Test mode: bypass audio capture and use fixed transcript
         if self._test_transcript:
             threading.Thread(
                 target=self._run_prompt_thread,
                 args=(self._test_transcript, prompt_template, on_template_setup, on_complete),
+                kwargs=thread_kwargs,
                 daemon=True,
             ).start()
-            return
+            return True
 
         # Check for existing transcript
         with self._transcript_lock:
@@ -835,40 +1291,36 @@ class AppController:
             threading.Thread(
                 target=self._run_prompt_thread,
                 args=(transcript_copy, prompt_template, on_template_setup, on_complete),
+                kwargs=thread_kwargs,
                 daemon=True,
             ).start()
-            return
+            return True
 
-        # No transcript — get audio and transcribe first
-        from prompts.templates import (
-            ANSWER_QUESTION_PROMPT,
-            PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-        )
-
-        use_last_30s = prompt_template in [
-            PRACTITIONER_INSIGHTS_STREAMING_PROMPT,
-            ANSWER_QUESTION_PROMPT,
-        ]
-
-        audio_data = None
-        if use_last_30s:
-            audio_data = self.recorder.get_last_n_seconds(30)
-
-        if audio_data is None:
-            audio_data = self.recorder.save_buffer()
+        # No transcript — transcribe the rolling buffer first
+        audio_data = self.recorder.save_buffer()
 
         if audio_data is None:
             logger.warning("Processing failed: No audio in buffer")
-            self.is_processing = False
+            self._release_interactive(LONGFORM_LANE_KEY)
             if self._on_processing_complete:
-                self._on_processing_complete({"error": "No audio in buffer to process"})
-            return
+                self._on_processing_complete(
+                    {"error": "No audio in buffer to process", "prompt_id": prompt_id}
+                )
+            return True
 
         threading.Thread(
             target=self._transcribe_and_process_thread,
-            args=(audio_data, self.recorder.sample_rate, prompt_template, on_template_setup, on_complete),
+            args=(
+                audio_data,
+                self.recorder.sample_rate,
+                prompt_template,
+                on_template_setup,
+                on_complete,
+            ),
+            kwargs=thread_kwargs,
             daemon=True,
         ).start()
+        return True
 
     def _transcribe_and_process_thread(
         self,
@@ -877,6 +1329,11 @@ class AppController:
         prompt_template: str,
         on_template_setup: Callable[[str], str | None] | None,
         on_complete: Callable[[], None] | None = None,
+        *,
+        release_key: str | None = None,
+        prompt_id: str | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         """Background thread: transcribe then process."""
         start_time = time.perf_counter()
@@ -904,10 +1361,20 @@ class AppController:
             if not text.strip():
                 logger.warning("Transcription returned empty text — skipping prompt execution")
                 if self._on_processing_complete:
-                    self._on_processing_complete({"error": "Transcription returned empty text"})
+                    self._on_processing_complete(
+                        {"error": "Transcription returned empty text", "prompt_id": prompt_id}
+                    )
                 return
 
-            self._run_prompt_thread(text, prompt_template, on_template_setup, on_complete)
+            self._run_prompt_thread(
+                text,
+                prompt_template,
+                on_template_setup,
+                on_complete,
+                prompt_id=prompt_id,
+                model=model,
+                max_tokens=max_tokens,
+            )
 
             total_duration_ms = (time.perf_counter() - start_time) * 1000
             logger.info(
@@ -923,9 +1390,10 @@ class AppController:
                 exc_info=True,
             )
             if self._on_processing_complete:
-                self._on_processing_complete({"error": str(e)})
+                self._on_processing_complete({"error": str(e), "prompt_id": prompt_id})
         finally:
-            self.is_processing = False
+            if release_key is not None:
+                self._release_interactive(release_key)
 
     def _run_prompt_thread(
         self,
@@ -933,6 +1401,11 @@ class AppController:
         prompt_template: str,
         on_template_setup: Callable[[str], str | None] | None,
         on_complete: Callable[[], None] | None = None,
+        *,
+        release_key: str | None = None,
+        prompt_id: str | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         """Background thread: process transcript with Claude API."""
         start_time = time.perf_counter()
@@ -958,7 +1431,16 @@ class AppController:
                     self._on_stream_chunk(text)
 
             result = self.api_client.process_with_anthropic(
-                transcript, prompt_template, stream=True, callback=handle_stream
+                transcript,
+                prompt_template,
+                stream=True,
+                callback=handle_stream,
+                model=model,
+                max_tokens=max_tokens,
+                context_pack_text=(
+                    self.context_pack.as_text() if self.context_pack is not None else None
+                ),
+                lane="interactive",
             )
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.info(
@@ -969,7 +1451,7 @@ class AppController:
             )
 
             if self._on_processing_complete:
-                self._on_processing_complete({"result": result})
+                self._on_processing_complete({"result": result, "prompt_id": prompt_id})
             if on_complete:
                 on_complete()
         except Exception as e:
@@ -982,6 +1464,7 @@ class AppController:
                 exc_info=True,
             )
             if self._on_processing_complete:
-                self._on_processing_complete({"error": str(e)})
+                self._on_processing_complete({"error": str(e), "prompt_id": prompt_id})
         finally:
-            self.is_processing = False
+            if release_key is not None:
+                self._release_interactive(release_key)

@@ -47,6 +47,19 @@ def test_csp_allows_self_connect() -> None:
     assert "'self'" in csp
 
 
+def test_csp_script_src_disallows_unsafe_inline() -> None:
+    """LLM output renders in the page — inline script execution must stay blocked.
+
+    The APP_TOKEN bootstrap moved to a static .js file, so script-src is
+    'self' only. style-src keeps 'unsafe-inline' (current CSS needs it).
+    """
+    client = TestClient(_make_app(), raise_server_exceptions=True)
+    csp = client.get("/").headers["content-security-policy"]
+    directives = {d.strip().split(" ")[0]: d.strip() for d in csp.split(";") if d.strip()}
+    assert directives["script-src"] == "script-src 'self'"
+    assert "'unsafe-inline'" not in directives["script-src"]
+
+
 def test_csp_applied_to_all_responses() -> None:
     app = Starlette()
     app.add_middleware(CSPMiddleware)

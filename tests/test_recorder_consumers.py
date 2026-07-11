@@ -1,25 +1,35 @@
 """Tests for ContinuousRecorder consumer registration API (DAR2-24).
 
-Tests the add_chunk_consumer / remove_chunk_consumer fan-out pattern
-that replaces the single-slot _on_chunk callback.
+Tests the add_chunk_consumer / remove_chunk_consumer fan-out pattern and the
+in-memory rolling buffer (mono int16 mixing, no file writes).
+
+Chunk format under test: int16, shape (1600, 2) — 100 ms at 16 kHz,
+column 0 = ME (mic), column 1 = THEM (speaker loopback).
 """
 
+import inspect
 import threading
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
+import config
 from audio.recorder import ContinuousRecorder
 
 
+def _chunk(me: int = 0, them: int = 0) -> np.ndarray:
+    """Build an int16 (1600, 2) chunk with constant per-column values."""
+    chunk = np.empty((1600, 2), dtype=np.int16)
+    chunk[:, 0] = me
+    chunk[:, 1] = them
+    return chunk
+
+
 @pytest.fixture
-def recorder():
-    """Create a ContinuousRecorder with mocked soundcard."""
-    with patch("audio.recorder.sc.get_microphone") as mock_mic:
-        mock_mic.return_value = Mock()
-        rec = ContinuousRecorder(buffer_minutes=1)
-    return rec
+def recorder() -> ContinuousRecorder:
+    """Create a ContinuousRecorder (no devices touched at construction)."""
+    return ContinuousRecorder(buffer_minutes=1)
 
 
 class TestConsumerRegistration:
@@ -53,9 +63,7 @@ class TestConsumerRegistration:
     def test_on_chunk_constructor_param_registers_consumer(self):
         """Test on_chunk constructor param registers as a consumer."""
         callback = Mock()
-        with patch("audio.recorder.sc.get_microphone") as mock_mic:
-            mock_mic.return_value = Mock()
-            rec = ContinuousRecorder(buffer_minutes=1, on_chunk=callback)
+        rec = ContinuousRecorder(buffer_minutes=1, on_chunk=callback)
         assert callback in rec._chunk_consumers
 
 
@@ -67,7 +75,7 @@ class TestChunkFanout:
         callback = Mock()
         recorder.add_chunk_consumer(callback)
 
-        chunk = np.zeros((48000, 2), dtype=np.float32)
+        chunk = _chunk(me=100, them=-100)
         recorder._deliver_to_consumers(chunk)
 
         callback.assert_called_once()
@@ -83,7 +91,7 @@ class TestChunkFanout:
         recorder.add_chunk_consumer(cb2)
         recorder.add_chunk_consumer(cb3)
 
-        chunk = np.ones((48000, 2), dtype=np.float32) * 0.5
+        chunk = _chunk(me=500)
         recorder._deliver_to_consumers(chunk)
 
         for cb in [cb1, cb2, cb3]:
@@ -92,8 +100,7 @@ class TestChunkFanout:
 
     def test_no_consumers_no_error(self, recorder):
         """Test delivering with no consumers does not raise."""
-        chunk = np.zeros((48000, 2), dtype=np.float32)
-        recorder._deliver_to_consumers(chunk)  # should not raise
+        recorder._deliver_to_consumers(_chunk())  # should not raise
 
 
 class TestConsumerErrorIsolation:
@@ -107,8 +114,7 @@ class TestConsumerErrorIsolation:
         recorder.add_chunk_consumer(failing_cb)
         recorder.add_chunk_consumer(healthy_cb)
 
-        chunk = np.zeros((48000, 2), dtype=np.float32)
-        recorder._deliver_to_consumers(chunk)
+        recorder._deliver_to_consumers(_chunk())
 
         failing_cb.assert_called_once()
         healthy_cb.assert_called_once()
@@ -123,11 +129,9 @@ class TestConsumerThreadSafety:
         delivered = []
 
         def slow_consumer(chunk):
-            """Consumer that takes a bit of time."""
             delivered.append(chunk)
 
         def add_remove_loop():
-            """Rapidly add and remove a consumer."""
             try:
                 cb = Mock()
                 for _ in range(100):
@@ -138,12 +142,8 @@ class TestConsumerThreadSafety:
 
         recorder.add_chunk_consumer(slow_consumer)
 
-        # Deliver chunks while another thread adds/removes consumers
         deliver_thread = threading.Thread(
-            target=lambda: [
-                recorder._deliver_to_consumers(np.zeros((100, 2), dtype=np.float32))
-                for _ in range(50)
-            ]
+            target=lambda: [recorder._deliver_to_consumers(_chunk()) for _ in range(50)]
         )
         mutate_thread = threading.Thread(target=add_remove_loop)
 
@@ -156,38 +156,61 @@ class TestConsumerThreadSafety:
         assert len(delivered) == 50
 
 
-class TestDualModeIntegration:
-    """Test bounded capture works alongside consumer fan-out."""
+class TestBufferAccess:
+    """Test the rolling buffer: mono int16 mixing, snapshot semantics."""
 
-    def test_get_last_n_seconds_works_with_consumers_registered(self, recorder):
-        """Test bounded capture returns correct audio even with consumers registered."""
-        ws_callback = Mock()
-        recorder.add_chunk_consumer(ws_callback)
-
-        # Simulate recording by manually adding chunks to buffer
-        for i in range(10):
-            chunk = np.full((48000, 2), fill_value=i * 0.1, dtype=np.float32)
+    def _fill_buffer(self, recorder, chunks):
+        for c in chunks:
             with recorder.buffer_lock:
-                recorder.audio_buffer.append(chunk)
+                recorder.audio_buffer.append(c)
 
-        # Bounded capture should work independently
+    def test_get_last_n_seconds_returns_mono_int16(self, recorder):
+        """Bounded capture returns mixed mono int16 of the right length."""
+        recorder.add_chunk_consumer(Mock())
+        # 100 chunks of 100 ms = 10 s of audio
+        self._fill_buffer(recorder, [_chunk(me=1000, them=200) for _ in range(100)])
+
         result = recorder.get_last_n_seconds(5)
         assert result is not None
-        assert len(result) == 5 * 48000  # 5 seconds of mono audio
+        assert result.dtype == np.int16
+        assert result.ndim == 1
+        assert len(result) == 5 * config.SAMPLE_RATE  # 5 s of mono @ 16 kHz
+        # Mixed = me + them
+        assert np.all(result == 1200)
+
+    def test_get_last_n_seconds_empty_buffer_returns_none(self, recorder):
+        assert recorder.get_last_n_seconds(5) is None
+
+    def test_save_buffer_returns_full_mono_mix(self, recorder):
+        self._fill_buffer(recorder, [_chunk(me=100, them=-40) for _ in range(30)])
+
+        result = recorder.save_buffer()
+        assert result is not None
+        assert result.dtype == np.int16
+        assert len(result) == 30 * 1600
+        assert np.all(result == 60)
+
+    def test_save_buffer_empty_returns_none(self, recorder):
+        assert recorder.save_buffer() is None
+
+    def test_save_buffer_takes_no_filename_and_writes_no_files(self, recorder):
+        """DAR2-24: no WAV side effects — save_buffer is in-memory only."""
+        assert list(inspect.signature(recorder.save_buffer).parameters) == []
+
+    def test_mono_mix_clips_at_int16_range(self, recorder):
+        """Mixing loud columns must clip via int32 intermediate, not wrap."""
+        self._fill_buffer(recorder, [_chunk(me=30000, them=30000)])
+        result = recorder.save_buffer()
+        assert np.all(result == 32767)  # clipped, not wrapped negative
+
+    def test_get_buffer_seconds(self, recorder):
+        self._fill_buffer(recorder, [_chunk() for _ in range(50)])
+        assert recorder.get_buffer_seconds() == 5
 
     def test_buffer_fills_independently_of_consumers(self, recorder):
-        """Test circular buffer fills regardless of consumer state."""
-        # No consumers registered
+        """Test rolling buffer fills regardless of consumer state."""
         assert len(recorder._chunk_consumers) == 0
-
-        # Simulate the capture loop behavior (buffer always fills)
-        for i in range(5):
-            chunk = np.zeros((48000, 2), dtype=np.float32)
-            with recorder.buffer_lock:
-                recorder.audio_buffer.append(chunk)
-
-        assert recorder.get_buffer_seconds() == 5
-
-        # Now register a consumer — buffer should still have data
+        self._fill_buffer(recorder, [_chunk() for _ in range(10)])
+        assert recorder.get_buffer_seconds() == 1
         recorder.add_chunk_consumer(Mock())
-        assert recorder.get_buffer_seconds() == 5
+        assert recorder.get_buffer_seconds() == 1

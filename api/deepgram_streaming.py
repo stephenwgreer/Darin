@@ -1,64 +1,81 @@
 """Deepgram WebSocket streaming client for real-time transcription.
 
-Provides a persistent WebSocket connection to Deepgram's live transcription
-API. Runs an asyncio event loop in a dedicated daemon thread so the rest of
-the application can remain synchronous/threaded.
+Wraps the Deepgram SDK v4 threaded ``ListenWebSocketClient`` with:
 
-DAR2-23: M1 — Deepgram WebSocket Streaming Engine
+- blocking ``connect()`` / ``disconnect()`` (callers wrap in asyncio.to_thread)
+- multichannel ME/THEM speaker attribution (channel 0 = ME mic, channel 1 =
+  THEM speaker loopback)
+- a drop-OLDEST reconnect queue (~30 s of audio) plus automatic reconnect
+  with exponential backoff
+- UtteranceEnd events surfaced from the REAL Deepgram UtteranceEnd message
+
+DAR2-23: M1 — Deepgram WebSocket Streaming Engine (migrated to SDK v4).
 """
 
 from __future__ import annotations
 
-import asyncio
 import queue
 import threading
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
-from deepgram import Deepgram
-from deepgram._enums import LiveTranscriptionEvent
+from deepgram import (
+    DeepgramClient,
+    DeepgramClientOptions,
+    LiveOptions,
+    LiveTranscriptionEvents,
+)
 from loguru import logger
 
 import config
 
 
-# Default options for Deepgram live transcription (v2 SDK dict format)
-DEFAULT_LIVE_OPTIONS: dict = {
-    "model": config.DEEPGRAM_MODEL,
-    "language": config.DEEPGRAM_LANGUAGE,
-    "encoding": "linear16",
-    "sample_rate": config.DEEPGRAM_SAMPLE_RATE,
-    "channels": 1,
-    "interim_results": True,
-    "punctuate": True,
-    "smart_format": True,
-    "endpointing": True,
-    "vad_turnoff": 500,
-}
-
 # Reconnect constants
 _MAX_RECONNECT_DELAY_S = 30
 _INITIAL_RECONNECT_DELAY_S = 1
-_KEEPALIVE_INTERVAL_S = 8
+
+# Reconnect queue depth: ~30 s of audio at 100 ms chunks
+_RECONNECT_QUEUE_CHUNKS = 300
+
+
+def _build_live_options(
+    *,
+    sample_rate: int,
+    channels: int,
+    keyterms: list[str] | None,
+) -> LiveOptions:
+    """Build the nova-3 live transcription options (SDK v4)."""
+    return LiveOptions(
+        model=config.DEEPGRAM_MODEL,
+        language=config.DEEPGRAM_LANGUAGE,
+        encoding="linear16",
+        sample_rate=sample_rate,
+        channels=channels,
+        multichannel=channels > 1,
+        interim_results=True,
+        smart_format=True,
+        punctuate=True,
+        endpointing=300,
+        utterance_end_ms="1000",
+        keyterm=list(keyterms) if keyterms else None,
+    )
 
 
 class DeepgramStreamingClient:
     """Persistent WebSocket connection to Deepgram for real-time transcription.
 
-    Runs its own asyncio event loop in a daemon thread. Audio is sent from
-    the recorder thread via ``send_audio()`` which is thread-safe (the SDK
-    uses an internal ``asyncio.Queue``).
+    The SDK v4 threaded client manages its own listener/keepalive threads.
+    ``send_audio()`` is thread-safe and may be called from the recorder's
+    capture pump thread. ``connect()``/``disconnect()`` are blocking — the
+    caller wraps them in ``asyncio.to_thread``.
 
-    Usage::
-
-        client = DeepgramStreamingClient(
-            api_key="...",
-            on_final_transcript=print,
-        )
-        client.connect()
-        client.send_audio(numpy_chunk)   # from any thread
-        ...
-        client.disconnect()
+    Callback signatures:
+        on_interim_transcript(text, speaker)
+        on_final_transcript(text, speaker)   # speaker: "ME" | "THEM" | None
+        on_utterance_end(full_transcript)    # fired on the REAL UtteranceEnd
+        on_connection_state(state)           # connected/reconnecting/disconnected
+        on_error(message)
     """
 
     def __init__(
@@ -66,14 +83,18 @@ class DeepgramStreamingClient:
         api_key: str,
         *,
         sample_rate: int = config.DEEPGRAM_SAMPLE_RATE,
-        on_interim_transcript: Callable[[str], None] | None = None,
-        on_final_transcript: Callable[[str], None] | None = None,
+        channels: int = 2,
+        keyterms: list[str] | None = None,
+        on_interim_transcript: Callable[[str, str | None], None] | None = None,
+        on_final_transcript: Callable[[str, str | None], None] | None = None,
         on_utterance_end: Callable[[str], None] | None = None,
         on_connection_state: Callable[[str], None] | None = None,
         on_error: Callable[[str], None] | None = None,
     ) -> None:
         self._api_key = api_key
         self._sample_rate = sample_rate
+        self._channels = channels
+        self._keyterms = list(keyterms) if keyterms else []
 
         # Callbacks
         self._on_interim_transcript = on_interim_transcript
@@ -83,97 +104,97 @@ class DeepgramStreamingClient:
         self._on_error = on_error
 
         # Internal state
-        self._connection = None  # LiveTranscription instance
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._loop_thread: threading.Thread | None = None
+        self._ws: Any = None  # deepgram ListenWebSocketClient
+        self._ws_lock = threading.Lock()
         self._should_stop = threading.Event()
         self._connected = threading.Event()
-        # Bounded queue to hold audio during brief reconnections (max ~10 seconds of audio)
-        self._reconnect_queue: queue.Queue[bytes] = queue.Queue(maxsize=10)
+        self._reconnect_thread: threading.Thread | None = None
+        self._reconnect_lock = threading.Lock()
 
-        # Transcript accumulation
+        # Bounded queue to hold audio during reconnections (drop-OLDEST)
+        self._reconnect_queue: queue.Queue[bytes] = queue.Queue(maxsize=_RECONNECT_QUEUE_CHUNKS)
+
+        # Transcript accumulation ("ME: ..." / "THEM: ..." lines in arrival order)
         self._segments_lock = threading.Lock()
         self._final_segments: list[str] = []
 
-        # Live options (copy so callers can't mutate the default)
-        self._options = dict(DEFAULT_LIVE_OPTIONS)
-        self._options["sample_rate"] = sample_rate
+        self._options = _build_live_options(
+            sample_rate=sample_rate, channels=channels, keyterms=self._keyterms
+        )
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def connect(self) -> None:
-        """Start the asyncio event loop thread and connect to Deepgram."""
-        if self._loop_thread is not None and self._loop_thread.is_alive():
+        """Connect to Deepgram (blocking). Check ``is_connected`` afterwards.
+
+        On failure the connection is left in a disconnected state; the caller
+        must call ``disconnect()`` to release any partially started threads.
+        """
+        if self._connected.is_set():
             logger.warning("DeepgramStreamingClient already connected")
             return
 
         self._should_stop.clear()
-        self._connected.clear()
 
-        self._loop_thread = threading.Thread(
-            target=self._run_loop,
-            name="deepgram-ws-loop",
-            daemon=True,
+        try:
+            if self._open_connection():
+                return
+            message = "Deepgram WebSocket connection failed"
+        except Exception as e:
+            message = f"Deepgram WebSocket connection failed: {e}"
+
+        logger.error(
+            "Deepgram connect failed",
+            model=config.DEEPGRAM_MODEL,
+            error=message,
         )
-        self._loop_thread.start()
-
-        # Wait for connection to establish (with timeout)
-        if not self._connected.wait(timeout=10):
-            logger.error("Deepgram WebSocket connection timed out")
-            if self._on_error:
-                self._on_error("Connection timed out after 10 seconds")
+        if self._on_error:
+            self._on_error(message)
 
     def send_audio(self, audio_chunk: np.ndarray) -> None:
         """Send an audio chunk to Deepgram.
 
-        Thread-safe — may be called from the recorder thread.
+        Thread-safe — called from the recorder's capture pump thread.
 
         Args:
-            audio_chunk: Float32 numpy array from the recorder.
-                         Shape: (num_frames, num_channels) or (num_frames,)
+            audio_chunk: int16 numpy array, shape (frames, channels) with
+                channel 0 = ME and channel 1 = THEM (or (frames,) mono).
         """
         if self._should_stop.is_set():
             return
 
-        # Convert float32 numpy → mono int16 PCM bytes
         pcm_bytes = self._to_pcm_bytes(audio_chunk)
 
-        if self._connection is not None and self._connected.is_set():
-            self._connection.send(pcm_bytes)
-        else:
-            # Queue audio during reconnect (drop if queue is full)
+        with self._ws_lock:
+            ws = self._ws
+        if ws is not None and self._connected.is_set():
             try:
-                self._reconnect_queue.put_nowait(pcm_bytes)
-            except queue.Full:
-                pass  # Drop oldest audio rather than blocking
+                if ws.send(pcm_bytes):
+                    return
+            except Exception as e:
+                logger.debug(f"Deepgram send failed — queueing audio: {e}")
+        self._queue_audio(pcm_bytes)
 
     def disconnect(self) -> None:
-        """Gracefully disconnect from Deepgram and stop the event loop."""
+        """Gracefully disconnect from Deepgram and stop all worker threads."""
         logger.info("Disconnecting Deepgram streaming client")
         self._should_stop.set()
 
-        if self._loop and not self._loop.is_closed():
-            # Schedule finish() on the event loop and wait for it
-            future = asyncio.run_coroutine_threadsafe(self._finish(), self._loop)
-            try:
-                future.result(timeout=3)
-            except Exception as e:
-                logger.debug(f"Finish future completed with error: {e}")
+        reconnect_thread = self._reconnect_thread
+        if reconnect_thread is not None and reconnect_thread.is_alive():
+            reconnect_thread.join(timeout=5)
+        self._reconnect_thread = None
 
-        if self._loop_thread is not None:
-            self._loop_thread.join(timeout=5)
-            self._loop_thread = None
-
+        self._close_ws()
         self._connected.clear()
-        self._connection = None
         self._notify_state("disconnected")
 
     def get_full_transcript(self) -> str:
-        """Return the accumulated transcript from all finalized segments."""
+        """Return accumulated "ME: ..."/"THEM: ..." lines joined by newlines."""
         with self._segments_lock:
-            return " ".join(self._final_segments)
+            return "\n".join(self._final_segments)
 
     def clear_transcript(self) -> None:
         """Clear the accumulated transcript segments."""
@@ -185,158 +206,154 @@ class DeepgramStreamingClient:
         return self._connected.is_set()
 
     # ------------------------------------------------------------------
-    # Asyncio event loop (runs in daemon thread)
+    # Connection management
     # ------------------------------------------------------------------
 
-    def _run_loop(self) -> None:
-        """Entry point for the daemon thread — runs the asyncio event loop."""
-        try:
-            asyncio.run(self._run())
-        except Exception as e:
-            logger.error(f"Deepgram event loop crashed: {e}", exc_info=True)
-            if self._on_error:
-                self._on_error(f"Event loop crashed: {e}")
-
-    async def _run(self) -> None:
-        """Main async routine: connect, keepalive, reconnect loop."""
-        self._loop = asyncio.get_running_loop()
-
-        while not self._should_stop.is_set():
-            try:
-                await self._connect_and_stream()
-            except Exception as e:
-                logger.error(f"Deepgram streaming error: {e}", exc_info=True)
-                if self._on_error:
-                    self._on_error(str(e))
-
-            if self._should_stop.is_set():
-                break
-
-            # Reconnect with exponential backoff
-            delay = _INITIAL_RECONNECT_DELAY_S
-            while not self._should_stop.is_set():
-                logger.info(f"Reconnecting to Deepgram in {delay}s")
-                self._notify_state("reconnecting")
-                await asyncio.sleep(delay)
-
-                if self._should_stop.is_set():
-                    break
-
-                try:
-                    await self._connect_and_stream()
-                    break  # Connected successfully
-                except Exception as e:
-                    logger.error(f"Reconnect failed: {e}")
-                    delay = min(delay * 2, _MAX_RECONNECT_DELAY_S)
-
-    async def _connect_and_stream(self) -> None:
-        """Establish connection and wait until it closes or we stop."""
-        dg = Deepgram(self._api_key)
-
-        logger.info(f"Connecting to Deepgram WebSocket (model={self._options.get('model')})")
-        self._connection = await dg.transcription.live(self._options)
-
-        # Register event handlers
-        self._connection.register_handler(
-            LiveTranscriptionEvent.TRANSCRIPT_RECEIVED,
-            self._on_message,
+    def _open_connection(self) -> bool:
+        """Create a fresh SDK websocket client and start it (blocking)."""
+        dg = DeepgramClient(
+            self._api_key,
+            config=DeepgramClientOptions(
+                api_key=self._api_key,
+                options={"keepalive": "true"},
+            ),
         )
-        self._connection.register_handler(
-            LiveTranscriptionEvent.OPEN,
-            self._on_open,
-        )
-        self._connection.register_handler(
-            LiveTranscriptionEvent.CLOSE,
-            self._on_close,
-        )
-        self._connection.register_handler(
-            LiveTranscriptionEvent.ERROR,
-            self._on_ws_error,
-        )
+        ws = dg.listen.websocket.v("1")
 
+        ws.on(LiveTranscriptionEvents.Open, self._handle_open)
+        ws.on(LiveTranscriptionEvents.Transcript, self._handle_transcript)
+        ws.on(LiveTranscriptionEvents.UtteranceEnd, self._handle_utterance_end)
+        ws.on(LiveTranscriptionEvents.Close, self._handle_close)
+        ws.on(LiveTranscriptionEvents.Error, self._handle_error)
+
+        logger.info(
+            "Connecting to Deepgram WebSocket",
+            model=config.DEEPGRAM_MODEL,
+            sample_rate=self._sample_rate,
+            channels=self._channels,
+            keyterms=len(self._keyterms),
+        )
+        if not ws.start(self._options):
+            return False
+
+        with self._ws_lock:
+            self._ws = ws
         self._connected.set()
         self._notify_state("connected")
         logger.info("Deepgram WebSocket connected")
-
-        # Drain any audio queued during reconnect
         self._drain_reconnect_queue()
+        return True
 
-        # Start keepalive task
-        keepalive_task = asyncio.create_task(self._keepalive_loop())
-
-        # Wait until the connection is done or we should stop
+    def _close_ws(self) -> None:
+        """Finish and drop the current SDK websocket client, if any."""
+        with self._ws_lock:
+            ws = self._ws
+            self._ws = None
+        if ws is None:
+            return
         try:
-            while not self._connection.done and not self._should_stop.is_set():
-                await asyncio.sleep(0.1)
-        finally:
-            keepalive_task.cancel()
-            self._connected.clear()
+            ws.finish()
+        except Exception as e:
+            logger.debug(f"Error during Deepgram finish: {e}")
 
-    async def _keepalive_loop(self) -> None:
-        """Send keepalive pings to prevent idle timeout."""
+    def _start_reconnect(self) -> None:
+        """Kick off the reconnect thread (at most one at a time)."""
+        if self._should_stop.is_set():
+            return
+        with self._reconnect_lock:
+            if self._reconnect_thread is not None and self._reconnect_thread.is_alive():
+                return
+            self._reconnect_thread = threading.Thread(
+                target=self._reconnect_loop,
+                name="deepgram-reconnect",
+                daemon=True,
+            )
+            self._reconnect_thread.start()
+
+    def _reconnect_loop(self) -> None:
+        """Reconnect with exponential backoff until success or stop."""
+        delay = _INITIAL_RECONNECT_DELAY_S
+        self._close_ws()
         while not self._should_stop.is_set():
-            await asyncio.sleep(_KEEPALIVE_INTERVAL_S)
-            if self._connection and not self._connection.done:
-                try:
-                    self._connection.keep_alive()
-                except Exception as e:
-                    logger.debug(f"KeepAlive failed: {e}")
-
-    async def _finish(self) -> None:
-        """Gracefully close the WebSocket connection."""
-        if self._connection and not self._connection.done:
+            logger.info(f"Reconnecting to Deepgram in {delay}s")
+            self._notify_state("reconnecting")
+            if self._should_stop.wait(delay):
+                return
             try:
-                await self._connection.finish()
+                if self._open_connection():
+                    return
+                logger.warning("Deepgram reconnect attempt failed")
             except Exception as e:
-                logger.debug(f"Error during finish: {e}")
+                logger.warning(f"Deepgram reconnect attempt failed: {e}")
+            delay = min(delay * 2, _MAX_RECONNECT_DELAY_S)
 
     # ------------------------------------------------------------------
-    # Event handlers (called from asyncio context)
+    # SDK event handlers (called from the SDK listener thread)
     # ------------------------------------------------------------------
 
-    def _on_message(self, result: dict) -> None:
-        """Handle a transcript message from Deepgram."""
-        is_final = result.get("is_final", False)
-        speech_final = result.get("speech_final", False)
-
-        try:
-            transcript = result["channel"]["alternatives"][0]["transcript"]
-        except (KeyError, IndexError):
-            return
-
-        if not transcript:
-            return
-
-        if is_final:
-            with self._segments_lock:
-                self._final_segments.append(transcript)
-            logger.debug(f"Final transcript segment: {transcript[:80]}")
-            if self._on_final_transcript:
-                self._on_final_transcript(transcript)
-
-        if speech_final and self._on_utterance_end:
-            full_text = self.get_full_transcript()
-            self._on_utterance_end(full_text)
-
-        if not is_final and self._on_interim_transcript:
-            self._on_interim_transcript(transcript)
-
-    def _on_open(self, _connection: object) -> None:
+    def _handle_open(self, _client: Any, open: Any = None, **_kwargs: Any) -> None:  # noqa: A002
         """Handle WebSocket open event."""
         logger.info("Deepgram WebSocket opened")
 
-    def _on_close(self, close_code: object) -> None:
-        """Handle WebSocket close event."""
-        logger.info(f"Deepgram WebSocket closed with code: {close_code}")
-        self._connected.clear()
-        self._notify_state("disconnected")
+    def _handle_transcript(self, _client: Any, result: Any = None, **_kwargs: Any) -> None:
+        """Handle a transcript Results message (interim or final)."""
+        try:
+            transcript = result.channel.alternatives[0].transcript
+        except (AttributeError, IndexError):
+            return
+        if not transcript:
+            return
 
-    def _on_ws_error(self, error: object) -> None:
+        speaker = self._speaker_for_result(result)
+        if getattr(result, "is_final", False):
+            line = f"{speaker}: {transcript}" if speaker else transcript
+            with self._segments_lock:
+                self._final_segments.append(line)
+            logger.debug(f"Final transcript segment: {line[:80]}")
+            if self._on_final_transcript:
+                self._on_final_transcript(transcript, speaker)
+        elif self._on_interim_transcript:
+            self._on_interim_transcript(transcript, speaker)
+
+    def _handle_utterance_end(
+        self, _client: Any, utterance_end: Any = None, **_kwargs: Any
+    ) -> None:
+        """Handle the real UtteranceEnd event from Deepgram."""
+        logger.debug("Deepgram UtteranceEnd received")
+        if self._on_utterance_end:
+            self._on_utterance_end(self.get_full_transcript())
+
+    def _handle_close(self, _client: Any, close: Any = None, **_kwargs: Any) -> None:
+        """Handle WebSocket close — reconnect unless we are stopping."""
+        logger.info("Deepgram WebSocket closed")
+        was_connected = self._connected.is_set()
+        self._connected.clear()
+        if self._should_stop.is_set():
+            return
+        if was_connected:
+            self._notify_state("disconnected")
+            self._start_reconnect()
+
+    def _handle_error(self, _client: Any, error: Any = None, **_kwargs: Any) -> None:
         """Handle WebSocket error event."""
         error_str = str(error)
         logger.error(f"Deepgram WebSocket error: {error_str}")
         if self._on_error:
             self._on_error(error_str)
+
+    def _speaker_for_result(self, result: Any) -> str | None:
+        """Map a result's channel index to "ME" (0) / "THEM" (1) / None."""
+        if self._channels < 2:
+            return None
+        channel_index = getattr(result, "channel_index", None) or []
+        if not channel_index:
+            return None
+        channel = channel_index[0]
+        if channel == 0:
+            return "ME"
+        if channel == 1:
+            return "THEM"
+        return None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -344,35 +361,48 @@ class DeepgramStreamingClient:
 
     @staticmethod
     def _to_pcm_bytes(audio_chunk: np.ndarray) -> bytes:
-        """Convert a float32 numpy audio chunk to int16 PCM bytes.
+        """Convert a numpy audio chunk to interleaved int16 PCM bytes.
 
-        Args:
-            audio_chunk: Float32 array, shape (frames, channels) or (frames,).
-
-        Returns:
-            Raw int16 PCM bytes (mono, little-endian).
+        int16 input is passed through (all channels preserved — Deepgram
+        receives interleaved multichannel PCM); float input is clipped to
+        [-1, 1] and scaled.
         """
-        # Take first channel if multichannel
-        if audio_chunk.ndim == 2:
-            mono = audio_chunk[:, 0]
-        else:
-            mono = audio_chunk
+        arr = np.asarray(audio_chunk)
+        if arr.dtype != np.int16:
+            arr = (np.clip(arr, -1.0, 1.0) * 32767).astype(np.int16)
+        return arr.tobytes()
 
-        # Clip and convert float32 [-1.0, 1.0] → int16
-        clipped = np.clip(mono, -1.0, 1.0)
-        pcm_int16 = (clipped * 32767).astype(np.int16)
-        return pcm_int16.tobytes()
+    def _queue_audio(self, pcm_bytes: bytes) -> None:
+        """Queue audio during a reconnect, dropping the OLDEST chunk on overflow."""
+        try:
+            self._reconnect_queue.put_nowait(pcm_bytes)
+        except queue.Full:
+            try:
+                self._reconnect_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._reconnect_queue.put_nowait(pcm_bytes)
+            except queue.Full:
+                pass
 
     def _drain_reconnect_queue(self) -> None:
         """Send any audio that was queued during reconnection."""
+        with self._ws_lock:
+            ws = self._ws
+        if ws is None:
+            return
         drained = 0
-        while not self._reconnect_queue.empty():
+        while True:
             try:
                 pcm_bytes = self._reconnect_queue.get_nowait()
-                if self._connection:
-                    self._connection.send(pcm_bytes)
-                drained += 1
             except queue.Empty:
+                break
+            try:
+                ws.send(pcm_bytes)
+                drained += 1
+            except Exception as e:
+                logger.debug(f"Drain send failed: {e}")
                 break
         if drained:
             logger.info(f"Drained {drained} queued audio chunks after reconnect")

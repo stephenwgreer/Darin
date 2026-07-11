@@ -6,8 +6,8 @@
   <title>Darin</title>
   <link rel="icon" type="image/png" href="/static/Darin_Round.png" />
   <link rel="stylesheet" href="/static/styles.css" />
-  <!-- Bootstrap token from URL before any JS runs -->
-  <script>window.APP_TOKEN = new URLSearchParams(location.search).get('token');</script>
+  <!-- Token bootstrap lives in a static file so CSP can drop 'unsafe-inline' -->
+  <script src="/static/boot.js"></script>
 </head>
 <body>
 
@@ -15,7 +15,13 @@
   <img src="/static/Darin_Round.png" alt="Darin" class="header-logo" />
   <h1>DARIN</h1>
   <span id="state-badge" class="badge badge-idle">Idle</span>
-  <div style="margin-left:auto;display:flex;align-items:center;gap:0.6rem">
+  <span id="watcher-dot" class="watcher-dot watcher-stopped" title="Watcher off"></span>
+  <div class="header-actions">
+    <div id="persona-toggle" class="persona-toggle" title="Persona">
+      <button class="persona-btn" data-persona="general">General</button>
+      <button class="persona-btn" data-persona="sales">Sales</button>
+      <button class="persona-btn" data-persona="technical">Technical</button>
+    </div>
     <button id="btn-history" class="btn btn-outline">🕐 History</button>
     <button id="btn-settings" class="btn-settings" title="Settings">⚙</button>
   </div>
@@ -23,110 +29,91 @@
 
 <main>
 
-  <!-- ── Meeting Controls (full width) ─────────────────────────── -->
-  <section id="meeting-controls" class="card">
+  <!-- ── Session controls ──────────────────────────────────────────── -->
+  <section id="session-bar" class="card">
     <div class="controls-row">
-      <button id="btn-start-meeting" class="btn btn-green">Start Meeting</button>
-      <button id="btn-stop-meeting"  class="btn btn-red"   hidden>Stop Meeting</button>
-      <button id="btn-new-meeting"   class="btn btn-grey"  hidden>New Meeting</button>
-      <button id="btn-last-30" class="btn btn-outline">Last 30s</button>
-      <button id="btn-last-60" class="btn btn-outline">Last 60s</button>
+      <button id="btn-start-meeting" class="btn btn-green">Start Session</button>
+      <button id="btn-stop-meeting"  class="btn btn-red"  hidden>End Session</button>
+      <button id="btn-new-meeting"   class="btn btn-grey" hidden>New Session</button>
+      <span id="rec-indicator" class="rec-indicator" hidden>
+        <span class="pulse-dot"></span>
+        <span class="rec-label">REC</span>
+        <span id="timer-label">00:00:00</span>
+      </span>
+      <button id="btn-last-30" class="btn btn-outline btn-sm" disabled>Last 30s</button>
+      <button id="btn-last-60" class="btn btn-outline btn-sm" disabled>Last 60s</button>
       <span id="capture-status" class="status-text"></span>
-    </div>
-    <div id="timer-row" hidden>
-      <span class="pulse-dot"></span>
-      <span id="timer-label">00:00:00</span>
+      <span id="usage-line" class="usage-line" title="Estimated LLM spend this meeting"></span>
     </div>
   </section>
 
-  <!-- ── Two-column layout ──────────────────────────────────────── -->
-  <div class="content-grid">
+  <!-- ── Live transcript strip ─────────────────────────────────────── -->
+  <section id="transcript-strip" class="card" hidden>
+    <div id="strip-finals" class="strip-lines"></div>
+    <div id="strip-interims" class="strip-lines"></div>
+  </section>
 
-    <!-- Left column: prompt sections -->
-    <div class="col-prompts">
+  <!-- ── Action bar: 5 reactive buttons + custom + Ask ─────────────── -->
+  <section id="action-bar" class="card">
+    <div class="action-rows">
+      <div id="action-buttons" class="action-buttons"></div>
+      <div id="custom-actions" class="action-buttons action-buttons-custom">
+        <button class="bucket-edit-icon" id="btn-open-prompt-editor" title="Edit prompts">✏</button>
+      </div>
+    </div>
+    <div class="qa-row">
+      <input type="text" id="qa-input" class="qa-input"
+             placeholder="Ask anything about the conversation…" disabled />
+      <button id="btn-ask" class="btn btn-outline" disabled>Ask</button>
+    </div>
+  </section>
 
-      <!-- Sales Prompts -->
-      <section id="sales-prompts" class="prompt-section">
-        <div class="bucket-header bucket-header-sales">Sales</div>
-        <div id="bucket-sales" class="bucket bucket-green"></div>
-      </section>
+  <!-- ── Card feed ─────────────────────────────────────────────────── -->
+  <section id="card-feed-section">
+    <div id="card-feed" class="card-feed"></div>
+    <div id="feed-empty" class="feed-empty">
+      Start a session — proactive cards and button answers appear here.
+    </div>
+  </section>
 
-      <!-- Mid-Meeting Prompts -->
-      <section id="mid-meeting-prompts" class="prompt-section">
-        <div class="bucket-header">Meeting Analysis</div>
-        <div id="bucket-analysis" class="bucket bucket-blue"></div>
+  <!-- ── Post-meeting analysis ─────────────────────────────────────── -->
+  <section id="post-meeting-section" class="card" hidden>
+    <div class="section-title">Post-Meeting Analysis</div>
 
-        <div class="bucket-header">Reasoning Frameworks</div>
-        <div id="bucket-reasoning" class="bucket bucket-amber"></div>
-      </section>
-
-      <!-- Post-Meeting Prompts -->
-      <section id="post-meeting-prompts" class="prompt-section">
-        <div class="bucket-header">Post-Meeting Analysis</div>
-
-        <div id="segment-controls" class="segment-controls">
-          <label class="radio-label">
-            <input type="radio" name="segment-mode" value="full" checked />
-            Full Transcript
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="segment-mode" value="range" />
-            Time Range
-          </label>
-          <span id="range-inputs" class="range-inputs" hidden>
-            <input type="number" id="from-minute" min="0" placeholder="From (min)" class="range-input" />
-            <span>to</span>
-            <input type="number" id="to-minute"   min="0" placeholder="To (min)"   class="range-input" />
-          </span>
-        </div>
-
-        <div id="bucket-post-meeting" class="bucket bucket-purple"></div>
-
-        <div class="controls-row" style="margin-top:1rem">
-          <button id="btn-copy-transcript" class="btn btn-outline">Copy Transcript</button>
-        </div>
-      </section>
-
-      <!-- Custom Prompts -->
-      <section id="custom-prompts" class="prompt-section">
-        <div class="bucket-header" style="color:#93c5fd;display:flex;align-items:center">
-          Custom
-          <button class="bucket-edit-icon" id="btn-open-prompt-editor" title="Edit prompts">✏</button>
-        </div>
-        <div id="bucket-custom" class="bucket bucket-custom">
-          <button class="btn-add-prompt" id="btn-add-prompt">+ Add Prompt</button>
-        </div>
-      </section>
-
+    <div id="segment-controls" class="segment-controls">
+      <label class="radio-label">
+        <input type="radio" name="segment-mode" value="full" checked />
+        Full Transcript
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="segment-mode" value="range" />
+        Time Range
+      </label>
+      <span id="range-inputs" class="range-inputs" hidden>
+        <input type="number" id="from-minute" min="0" placeholder="From (min)" class="range-input" />
+        <span>to</span>
+        <input type="number" id="to-minute"   min="0" placeholder="To (min)"   class="range-input" />
+      </span>
     </div>
 
-    <!-- Right column: output + Q&A -->
-    <div class="col-output">
+    <div id="bucket-post-meeting" class="bucket bucket-purple"></div>
 
-      <!-- Output Section -->
-      <section id="output-section" class="card col-output-panel">
-        <div id="output-title" class="output-title">Analysis Output</div>
-        <div id="output-panel"></div>
-        <div id="output-markdown" hidden></div>
-      </section>
-
-      <!-- Q&A -->
-      <section id="qa-section" class="card">
-        <div class="qa-label">Ask about the transcript</div>
-        <div class="qa-row">
-          <input type="text" id="qa-input" class="qa-input" placeholder="e.g. What were the main concerns raised?" />
-          <button id="btn-ask" class="btn btn-outline">Ask</button>
-        </div>
-      </section>
-
+    <div class="controls-row post-actions">
+      <button id="btn-copy-transcript" class="btn btn-outline btn-sm">Copy Transcript</button>
     </div>
 
-  </div>
+    <div class="output-wrap">
+      <div id="output-title" class="output-title">Analysis Output</div>
+      <div id="output-panel"></div>
+      <div id="output-markdown" hidden></div>
+    </div>
+  </section>
 
-  <!-- ── Progress Bar ──────────────────────────────────────────── -->
+  <!-- ── Progress bar / toast ──────────────────────────────────────── -->
   <div id="progress-bar" class="progress-bar" hidden></div>
+  <div id="toast" class="toast"></div>
 
-  <!-- ── Settings Modal ─────────────────────────────── -->
+  <!-- ── Settings Modal ────────────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-settings">
     <div class="modal">
       <div class="modal-header">
@@ -139,7 +126,7 @@
         <span class="settings-hint">Where meeting transcripts and analyses are saved</span>
         <div class="settings-path-row">
           <input class="settings-path-input" id="settings-path-input" readonly />
-          <button class="btn btn-outline" id="btn-browse-folder" style="white-space:nowrap">Browse…</button>
+          <button class="btn btn-outline btn-nowrap" id="btn-browse-folder">Browse…</button>
         </div>
       </div>
       <hr class="settings-divider"/>
@@ -157,6 +144,26 @@
           </label>
         </div>
       </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Context Pack</div>
+      <div class="settings-row">
+        <span class="settings-hint">
+          Grounding documents cached into every live analysis. Markdown; total budget ~20k tokens.
+        </span>
+        <div class="ptabs" id="ctx-tabs">
+          <button class="ptab active" data-ctx="profile">Profile</button>
+          <button class="ptab" data-ctx="products">Products</button>
+          <button class="ptab" data-ctx="known_issues">Known Issues</button>
+        </div>
+        <textarea class="form-textarea ctx-textarea" id="ctx-textarea"
+                  placeholder="Markdown for this document — who you are, what you own, what tends to break…"></textarea>
+        <div class="ctx-meta">
+          <span id="ctx-token-count">≈ 0 tokens total</span>
+          <span id="ctx-token-warning" class="ctx-warning" hidden>
+            Over the ~20k token budget — trim these docs
+          </span>
+        </div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-close="modal-settings">Cancel</button>
         <button class="btn btn-save" id="btn-save-settings">Save Changes</button>
@@ -164,7 +171,7 @@
     </div>
   </div>
 
-  <!-- ── History Modal ──────────────────────────────── -->
+  <!-- ── History Modal ─────────────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-history">
     <div class="modal modal-wide">
       <div class="modal-header">
@@ -174,12 +181,13 @@
       <div id="history-list-view">
         <div id="meeting-list" class="meeting-list"></div>
       </div>
-      <div id="history-transcript-view" style="display:none">
+      <div id="history-transcript-view" class="hidden-view">
         <button class="tx-back" id="tx-back-btn">← Back to meetings</button>
         <div class="tx-meeting-title" id="tx-title"></div>
         <div class="tx-meta" id="tx-meta"></div>
         <div class="tx-body" id="tx-body"></div>
         <div class="qa-label">Ask about this meeting</div>
+        <span class="settings-hint">The answer appears as a card in the main feed.</span>
         <div class="qa-row">
           <input type="text" id="tx-ask-input" class="qa-input" placeholder="e.g. What were the main concerns?" />
           <button class="btn btn-outline" id="tx-ask-btn">Ask</button>
@@ -188,7 +196,7 @@
     </div>
   </div>
 
-  <!-- ── Prompt Editor Modal ────────────────────────── -->
+  <!-- ── Prompt Editor Modal ───────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-prompts">
     <div class="modal modal-wide">
       <div class="modal-header">
@@ -198,7 +206,7 @@
       <div id="prompt-list-view">
         <div class="ptabs" id="ptabs"></div>
         <div id="prompt-list-items" class="prompt-list-items"></div>
-        <button class="btn btn-outline" id="btn-new-prompt" style="width:100%;font-size:.82rem">
+        <button class="btn btn-outline btn-full" id="btn-new-prompt">
           + New Custom Prompt
         </button>
       </div>
@@ -213,14 +221,15 @@
           <input class="form-input" id="form-out-title" placeholder="e.g. Competitor Analysis"/>
         </div>
         <div class="form-row">
-          <label class="form-label">Prompt Template</label>
-          <textarea class="form-textarea" id="form-template" placeholder="Write your prompt here. Use {transcript} where the meeting transcript should be inserted."></textarea>
-          <span class="form-hint">Use <code>{transcript}</code> as a placeholder for the meeting transcript.</span>
+          <label class="form-label">Prompt Instruction</label>
+          <textarea class="form-textarea" id="form-template"
+                    placeholder="What should Darin do when you click this button? Custom prompts run as reactive cards over the recent conversation."></textarea>
+          <span class="form-hint">Runs over the rolling summary + last ~3 minutes; the result arrives as a card.</span>
         </div>
-        <div class="modal-footer" style="margin-top:0;border-top:none;padding-top:0">
+        <div class="modal-footer form-footer">
           <button class="btn btn-outline" id="prompt-form-cancel">Cancel</button>
-          <button class="btn btn-delete-prompt btn" id="btn-delete-prompt" style="display:none">Delete Prompt</button>
-          <button class="btn btn-save btn" id="btn-save-prompt">Save Prompt</button>
+          <button class="btn btn-delete-prompt" id="btn-delete-prompt">Delete Prompt</button>
+          <button class="btn btn-save" id="btn-save-prompt">Save Prompt</button>
         </div>
       </div>
     </div>

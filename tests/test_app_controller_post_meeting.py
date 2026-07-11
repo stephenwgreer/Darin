@@ -79,16 +79,39 @@ class TestGetSavedAnalyses:
 class TestRunPostMeetingPrompt:
     """Test AppController.run_post_meeting_prompt()."""
 
-    def test_rejects_when_already_processing(self, controller: AppController) -> None:
-        controller._is_processing = True
-        prompt_config = get_prompt_config_by_id("meeting_summary")
+    def test_rejects_second_longform_while_one_streams(self, controller: AppController) -> None:
+        """Long-form streaming is single-flight: the SSE stream pipeline is one
+        shared slot, so ANY second long-form prompt is rejected while one runs."""
+        from app_controller import LONGFORM_LANE_KEY
+
+        assert controller._try_acquire_interactive(LONGFORM_LANE_KEY)
         completed = []
-        controller.run_post_meeting_prompt(
-            prompt_config, on_complete=lambda pid, txt: completed.append(pid)
-        )
-        # Should not start any thread — completed stays empty
+        # Same prompt AND a different long-form prompt are both rejected
+        for prompt_id in ("meeting_summary", "action_items"):
+            accepted = controller.run_post_meeting_prompt(
+                get_prompt_config_by_id(prompt_id),
+                on_complete=lambda pid, txt: completed.append(pid),
+            )
+            assert accepted is False
         time.sleep(0.1)
         assert completed == []
+        controller._release_interactive(LONGFORM_LANE_KEY)
+
+    def test_accepted_longform_returns_true(
+        self, controller: AppController, store: MeetingStore
+    ) -> None:
+        meeting_id = store.start_meeting()
+        store.append_segment(meeting_id, "Hello world content.")
+        store.end_meeting(meeting_id)
+        controller._last_meeting_id = meeting_id
+
+        done = threading.Event()
+        accepted = controller.run_post_meeting_prompt(
+            get_prompt_config_by_id("meeting_summary"),
+            on_complete=lambda pid, txt: done.set(),
+        )
+        assert accepted is True
+        assert done.wait(timeout=2.0)
 
     def test_invokes_on_complete_with_prompt_id(
         self, controller: AppController, store: MeetingStore
@@ -208,36 +231,58 @@ class TestRunPostMeetingPrompt:
 
 
 class TestPromptRegistryIntegrity:
-    """Guard against registry regressions (DAR2-27)."""
+    """Guard against registry regressions (two-lane card copilot)."""
 
     def test_all_registry_prompts_have_bucket(self) -> None:
         from prompts.registry import PROMPT_REGISTRY
 
         for cfg in PROMPT_REGISTRY:
             assert cfg.bucket in (
-                "mid_meeting",
-                "reasoning",
+                "reactive",
                 "post_meeting",
-                "sales",
             ), f"Prompt {cfg.id!r} has unexpected bucket {cfg.bucket!r}"
 
-    def test_get_prompts_by_bucket_mid_meeting_count(self) -> None:
+    def test_get_prompts_by_bucket_reactive_count(self) -> None:
+        """Exactly 5 reactive buttons (Ask is separate, not a button)."""
         from prompts.registry import get_prompts_by_bucket
 
-        prompts = get_prompts_by_bucket("mid_meeting")
-        assert len(prompts) == 7, f"Expected 7 mid-meeting prompts, got {len(prompts)}"
-
-    def test_get_prompts_by_bucket_reasoning_count(self) -> None:
-        from prompts.registry import get_prompts_by_bucket
-
-        prompts = get_prompts_by_bucket("reasoning")
-        assert len(prompts) == 5, f"Expected 5 reasoning prompts, got {len(prompts)}"
+        prompts = get_prompts_by_bucket("reactive")
+        assert [p.id for p in prompts] == [
+            "answer_this",
+            "fact_check",
+            "reframe",
+            "where_are_we",
+            "next_step",
+        ]
 
     def test_get_prompts_by_bucket_post_meeting_count(self) -> None:
         from prompts.registry import get_prompts_by_bucket
 
         prompts = get_prompts_by_bucket("post_meeting")
-        assert len(prompts) == 4, f"Expected 4 post-meeting prompts, got {len(prompts)}"
+        assert [p.id for p in prompts] == ["meeting_summary", "action_items", "key_decisions"]
+
+    def test_killed_prompts_are_gone(self) -> None:
+        """The 21-button estate is gone — killed ids must not resolve."""
+        for prompt_id in (
+            "scqa",
+            "issue_tree",
+            "first_principles",
+            "hypothesis_driven",
+            "buying_signals",
+            "objection_handling",
+            "deal_risk",
+            "sentiment_analysis",
+            "practitioner_insights",
+            "follow_up_questions",
+            "company_fit",
+            "topic_summary",
+            "analyze_statement",
+            "gaps_reasoning",
+            "brainstorming",
+        ):
+            assert get_prompt_config_by_id(prompt_id) is None, (
+                f"Killed prompt {prompt_id!r} is still in the registry"
+            )
 
     def test_all_templates_are_real_strings(self) -> None:
         """Guard: no registry template should be a bare 1-2 word string."""
@@ -249,10 +294,8 @@ class TestPromptRegistryIntegrity:
                 f"({len(cfg.template)} chars) — likely a bare ID string, not a real template"
             )
 
-    def test_new_prompts_have_transcript_placeholder(self) -> None:
-        from prompts.registry import get_prompt_config_by_id
-
-        for prompt_id in ("analyze_statement", "action_items", "key_decisions"):
+    def test_post_meeting_prompts_have_transcript_placeholder(self) -> None:
+        for prompt_id in ("meeting_summary", "action_items", "key_decisions"):
             cfg = get_prompt_config_by_id(prompt_id)
             assert cfg is not None, f"Prompt {prompt_id!r} not found in registry"
             assert "{transcript}" in cfg.template, (
@@ -262,7 +305,6 @@ class TestPromptRegistryIntegrity:
     def test_total_prompt_count(self) -> None:
         from prompts.registry import PROMPT_REGISTRY
 
-        assert len(PROMPT_REGISTRY) == 21, (
-            f"Expected 21 total prompts (5 sales + 7 mid + 5 reasoning + 4 post), "
-            f"got {len(PROMPT_REGISTRY)}"
+        assert len(PROMPT_REGISTRY) == 8, (
+            f"Expected 8 total prompts (5 reactive + 3 post-meeting), got {len(PROMPT_REGISTRY)}"
         )

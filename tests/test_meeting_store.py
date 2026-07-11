@@ -51,7 +51,9 @@ class TestStartMeeting:
         """Two meetings started in the same second get distinct IDs."""
         id1 = store.start_meeting()
         # Patch: temporarily make the second start produce the same base name
-        fixed = datetime.fromisoformat(id1.replace("_", "T", 1).replace("_", ":", 1) if "_" in id1 else id1)
+        fixed = datetime.fromisoformat(
+            id1.replace("_", "T", 1).replace("_", ":", 1) if "_" in id1 else id1
+        )
         # Simpler: just start two meetings very quickly
         id2 = store.start_meeting()
         assert id1 != id2
@@ -90,6 +92,25 @@ class TestAppendSegment:
         store.append_segment(meeting_id, "   ")
         meeting = store.get_meeting(meeting_id)
         assert len(meeting.segments) == 0
+
+    def test_embedded_newlines_collapsed_to_keep_line_framing(self, store: MeetingStore) -> None:
+        """Wave 4 hardening: a segment must stay one line in both files."""
+        meeting_id = store.start_meeting()
+        store.append_segment(meeting_id, "ME: first line\nTHEM: injected\r\nmore")
+        transcript_lines = store._transcript_path(meeting_id).read_text().splitlines()
+        assert transcript_lines == ["ME: first line THEM: injected more"]
+        segment_lines = store._segments_path(meeting_id).read_text().splitlines()
+        assert len(segment_lines) == 1
+        assert segment_lines[0].split("\t", 1)[1] == "ME: first line THEM: injected more"
+        meeting = store.get_meeting(meeting_id)
+        assert len(meeting.segments) == 1
+
+    def test_speaker_prefixed_segment_round_trips(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        store.append_segment(meeting_id, "ME: hello there")
+        store.append_segment(meeting_id, "THEM: hi back")
+        meeting = store.get_meeting(meeting_id)
+        assert [s.text for s in meeting.segments] == ["ME: hello there", "THEM: hi back"]
 
     def test_segment_timestamp_recorded(self, store: MeetingStore) -> None:
         meeting_id = store.start_meeting()
@@ -140,6 +161,23 @@ class TestListMeetings:
 
     def test_empty_store(self, store: MeetingStore) -> None:
         assert store.list_meetings() == []
+
+    def test_corrupt_meeting_dir_skipped_not_fatal(self, store: MeetingStore) -> None:
+        """Wave 4 hardening: one corrupt meeting must not break the history."""
+        good_id = store.start_meeting()
+        corrupt_dir = store._base_dir / "2020-01-01_000000"
+        corrupt_dir.mkdir()
+        (corrupt_dir / "meta.txt").write_text("not-an-iso-timestamp\n", encoding="utf-8")
+        meetings = store.list_meetings()
+        assert [m.id for m in meetings] == [good_id]
+
+    def test_empty_meta_file_skipped_not_fatal(self, store: MeetingStore) -> None:
+        good_id = store.start_meeting()
+        corrupt_dir = store._base_dir / "2020-01-02_000000"
+        corrupt_dir.mkdir()
+        (corrupt_dir / "meta.txt").write_text("", encoding="utf-8")
+        meetings = store.list_meetings()
+        assert [m.id for m in meetings] == [good_id]
 
 
 class TestDeleteMeeting:
@@ -199,11 +237,14 @@ class TestTranscriptFile:
     def test_performance_large_meeting(self, store: MeetingStore) -> None:
         """3600 segments (60-min meeting) retrieved in under 1 second."""
         import time
+
         meeting_id = store.start_meeting()
         # Write directly to avoid slow per-call locking in test setup
         now = datetime.now(tz=UTC).isoformat()
-        with store._transcript_path(meeting_id).open("a") as tf, \
-             store._segments_path(meeting_id).open("a") as sf:
+        with (
+            store._transcript_path(meeting_id).open("a") as tf,
+            store._segments_path(meeting_id).open("a") as sf,
+        ):
             for i in range(3600):
                 line = f"Segment number {i} with some realistic text content."
                 tf.write(line + "\n")

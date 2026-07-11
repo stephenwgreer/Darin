@@ -117,15 +117,21 @@ class MeetingStore:
     # ------------------------------------------------------------------
 
     def append_segment(self, meeting_id: str, text: str) -> None:
-        """Append a transcript segment. Empty/whitespace text is silently ignored."""
+        """Append a transcript segment. Empty/whitespace text is silently ignored.
+
+        Segments arrive as single logical lines ("ME: ..." / "THEM: ...");
+        embedded newlines would break the one-segment-per-line framing of
+        transcript.txt and segments.tsv, so they are collapsed to spaces.
+        """
         if not text or not text.strip():
             return
+        clean = " ".join(part.strip() for part in text.strip().splitlines() if part.strip())
         now = datetime.now(tz=UTC).isoformat()
         with self._lock:
             with self._transcript_path(meeting_id).open("a", encoding="utf-8") as f:
-                f.write(text.strip() + "\n")
+                f.write(clean + "\n")
             with self._segments_path(meeting_id).open("a", encoding="utf-8") as f:
-                f.write(f"{now}\t{text.strip()}\n")
+                f.write(f"{now}\t{clean}\n")
 
     # ------------------------------------------------------------------
     # Retrieval
@@ -171,7 +177,11 @@ class MeetingStore:
         return " ".join(line for line in lines if line)
 
     def list_meetings(self) -> list[MeetingRecord]:
-        """List all meetings, newest first. Segments are NOT loaded."""
+        """List all meetings, newest first. Segments are NOT loaded.
+
+        A single corrupt meeting directory (unreadable/malformed meta.txt)
+        is skipped with a warning — it must never break the whole history.
+        """
         meetings = []
         for d in sorted(self._base_dir.iterdir(), reverse=True):
             if not d.is_dir():
@@ -179,13 +189,22 @@ class MeetingStore:
             meta_path = d / "meta.txt"
             if not meta_path.exists():
                 continue
-            start_time, end_time = self._read_meta(d.name)
+            try:
+                start_time, end_time = self._read_meta(d.name)
+                title = self._read_title(d.name)
+            except Exception as e:  # noqa: BLE001 — corruption isolation per meeting
+                logger.warning(
+                    "Skipping corrupt meeting directory in history",
+                    meeting_id=d.name,
+                    error=str(e),
+                )
+                continue
             meetings.append(
                 MeetingRecord(
                     id=d.name,
                     start_time=start_time,
                     end_time=end_time,
-                    title=self._read_title(d.name),
+                    title=title,
                 )
             )
         return meetings

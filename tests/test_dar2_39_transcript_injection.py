@@ -18,8 +18,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app_controller import AppController
-from prompts.logic_templates import HYPOTHESIS_DRIVEN_PROMPT
-from prompts.registry import PROMPT_REGISTRY
+from prompts.registry import get_prompts_by_bucket
+
+
+# Representative legacy-shape template ({transcript} placeholder, instruction
+# text around it) — the logic_templates module it came from was deleted with
+# the 21-button estate.
+LEGACY_TEMPLATE = """\
+Analyze the following transcript and identify the key hypotheses discussed.
+
+Transcript:
+{transcript}"""
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +94,7 @@ class TestTranscriptInjectionGuard:
         controller._on_processing_complete = on_complete
 
         # Act
-        controller.run_prompt(HYPOTHESIS_DRIVEN_PROMPT)
+        controller.run_prompt(LEGACY_TEMPLATE)
 
         # Assert: error callback fired, NOT process_with_anthropic
         assert done.wait(timeout=2.0), "on_processing_complete was never called"
@@ -102,7 +111,7 @@ class TestTranscriptInjectionGuard:
         done = threading.Event()
         controller._on_processing_complete = lambda result: done.set()
 
-        controller.run_prompt(HYPOTHESIS_DRIVEN_PROMPT)
+        controller.run_prompt(LEGACY_TEMPLATE)
 
         assert done.wait(timeout=2.0)
         controller._mock_api.process_with_anthropic.assert_not_called()
@@ -119,7 +128,7 @@ class TestTranscriptInjectionGuard:
         done = threading.Event()
         controller._on_processing_complete = lambda result: done.set()
 
-        controller.run_prompt(HYPOTHESIS_DRIVEN_PROMPT)
+        controller.run_prompt(LEGACY_TEMPLATE)
 
         assert done.wait(timeout=2.0), "Prompt never completed"
         controller._mock_api.process_with_anthropic.assert_called_once()
@@ -131,9 +140,7 @@ class TestTranscriptInjectionGuard:
             f"Expected transcript {real_transcript!r} as first arg, got {passed_transcript!r}"
         )
 
-    def test_transcript_substituted_in_hypothesis_template(
-        self, controller: AppController
-    ) -> None:
+    def test_transcript_substituted_in_hypothesis_template(self, controller: AppController) -> None:
         """The full substituted content sent to Claude must contain the transcript text."""
         real_transcript = "We hypothesize that cost reduction drives margin improvement."
         controller._mock_recorder.save_buffer.return_value = b"\x00" * 1024
@@ -152,7 +159,7 @@ class TestTranscriptInjectionGuard:
         done = threading.Event()
         controller._on_processing_complete = lambda result: done.set()
 
-        controller.run_prompt(HYPOTHESIS_DRIVEN_PROMPT)
+        controller.run_prompt(LEGACY_TEMPLATE)
 
         assert done.wait(timeout=2.0)
         assert len(captured_content) == 1
@@ -167,23 +174,27 @@ class TestTranscriptInjectionGuard:
 
 
 class TestAllTemplatesHaveTranscriptPlaceholder:
-    """Guard: every prompt in the registry must have a {transcript} placeholder."""
+    """Guard: every POST-MEETING prompt must have a {transcript} placeholder.
 
-    def test_all_registry_templates_have_transcript_placeholder(self) -> None:
-        """Regression for DAR2-39: every template must inject the transcript."""
+    Reactive prompts are pure instructions — the transcript travels as a
+    separate cached context block, so they intentionally have no placeholder.
+    """
+
+    def test_all_post_meeting_templates_have_transcript_placeholder(self) -> None:
+        """Regression for DAR2-39: every long-form template must inject the transcript."""
         missing = [
-            cfg.id for cfg in PROMPT_REGISTRY if "{transcript}" not in cfg.template
+            cfg.id
+            for cfg in get_prompts_by_bucket("post_meeting")
+            if "{transcript}" not in cfg.template
         ]
-        assert not missing, (
-            f"These prompts are missing the {{transcript}} placeholder: {missing}"
-        )
+        assert not missing, f"These prompts are missing the {{transcript}} placeholder: {missing}"
 
     def test_all_templates_can_format_with_transcript(self) -> None:
         """Verify no template raises KeyError when formatted with transcript=..."""
         sample_transcript = "Sample transcript content for testing."
         failures: list[tuple[str, str]] = []
 
-        for cfg in PROMPT_REGISTRY:
+        for cfg in get_prompts_by_bucket("post_meeting"):
             try:
                 result = cfg.template.format(transcript=sample_transcript)
                 if sample_transcript not in result:
@@ -193,7 +204,6 @@ class TestAllTemplatesHaveTranscriptPlaceholder:
             except Exception as e:
                 failures.append((cfg.id, f"{type(e).__name__}: {e}"))
 
-        assert not failures, (
-            "Template formatting failures:\n"
-            + "\n".join(f"  {pid}: {msg}" for pid, msg in failures)
+        assert not failures, "Template formatting failures:\n" + "\n".join(
+            f"  {pid}: {msg}" for pid, msg in failures
         )

@@ -8,12 +8,14 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 
-# unsafe-inline in script-src is kept for the small APP_TOKEN bootstrap
-# script injected inline in index.html.  unsafe-eval and ws:/wss: are no
-# longer needed (removed Vue.js / WebSocket dependency).
+# script-src is 'self' only: the APP_TOKEN bootstrap moved from an inline
+# <script> in index.html to a static .js file, so 'unsafe-inline' is no
+# longer required for scripts (LLM output renders in the page — inline
+# script execution must stay blocked). style-src keeps 'unsafe-inline'
+# because the current CSS relies on inline style attributes.
 _CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
     "font-src 'self' data:; "

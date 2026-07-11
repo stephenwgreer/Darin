@@ -1,22 +1,107 @@
 """API client for Anthropic and Deepgram services.
 
-Provides high-level interface for transcription and AI processing.
+Provides the shared cache-first request shape for all three LLM lanes:
+
+    system   = [stable instructions block, context-pack block]   (cached)
+    messages = [append-only transcript blocks (cached breakpoint on last)]
+             + [per-request instruction]                          (uncached)
+
+Live-lane JSON cards are obtained by FORCED TOOL USE (``emit_cards``) — see
+``services.cards``. Retries are SDK-only: the watcher lane uses a dedicated
+client with ``max_retries=0, timeout=8s`` so a stalled tick can never queue
+behind a live meeting; every other lane uses SDK defaults (max_retries=2).
+
+Per-call usage telemetry (input/output/cache tokens + estimated $) is logged
+via loguru and accumulated into a per-meeting cost readout.
 """
 
-import time
-from collections.abc import Callable
+from __future__ import annotations
 
-from anthropic import Anthropic, APIConnectionError, APIError, RateLimitError
+import threading
+from collections.abc import Callable
+from typing import Any
+
+import numpy as np
+from anthropic import Anthropic
 from loguru import logger
 
 import config
 from api.deepgram_utils import transcribe_with_deepgram
+from services.cards import EMIT_CARDS_TOOL, Card, parse_cards
 
 
-# Retry configuration for transient API errors
-_MAX_RETRIES = 3
-_INITIAL_BACKOFF_S = 1.0
-_BACKOFF_MULTIPLIER = 2.0
+# Pricing per million tokens: model -> (input $, output $). Cache reads bill at
+# ~0.1x input, cache writes at ~1.25x input (5-minute TTL).
+_MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-sonnet-5": (3.00, 15.00),
+}
+_CACHE_READ_MULT = 0.1
+_CACHE_WRITE_MULT = 1.25
+
+# Default stable system instructions for lanes that don't supply their own
+# (post-meeting analyses, titles, map-reduce, rolling summary).
+DEFAULT_SYSTEM_INSTRUCTIONS = (
+    "You are Darin, a meeting copilot. You analyze meeting transcripts where "
+    'lines may be prefixed "ME:" (the user) and "THEM:" (other participants). '
+    "Follow the task instruction at the end of the request exactly."
+)
+
+
+def estimate_cost_usd(model: str, usage: Any) -> float:
+    """Estimate the $ cost of one call from its usage block."""
+    pricing = _MODEL_PRICING.get(model)
+    if pricing is None:
+        # Fall back to the most expensive known tier so we never under-report.
+        pricing = _MODEL_PRICING[config.POST_MEETING_MODEL]
+    input_price, output_price = pricing
+    input_tokens = getattr(usage, "input_tokens", 0) or 0
+    output_tokens = getattr(usage, "output_tokens", 0) or 0
+    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    return (
+        input_tokens * input_price
+        + cache_read * input_price * _CACHE_READ_MULT
+        + cache_write * input_price * _CACHE_WRITE_MULT
+        + output_tokens * output_price
+    ) / 1_000_000
+
+
+def build_system_blocks(instructions: str, context_pack_text: str | None = None) -> list[dict]:
+    """Build the cached system prefix: [stable instructions, context pack].
+
+    ``cache_control`` goes on the LAST system block so the whole prefix
+    (tools + system) is cached together.
+    """
+    blocks: list[dict] = [{"type": "text", "text": instructions}]
+    if context_pack_text and context_pack_text.strip():
+        blocks.append({"type": "text", "text": context_pack_text})
+    blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+    return blocks
+
+
+def build_transcript_messages(
+    transcript_blocks: list[str],
+    instruction: str,
+    *,
+    cache_transcript: bool = True,
+) -> list[dict]:
+    """Build messages: append-only transcript blocks + final uncached instruction.
+
+    The cache breakpoint sits on the LAST transcript block; because the block
+    list only ever grows, each request re-reads the previous prefix and writes
+    only the new tail (the watcher-lane incremental cache).
+    """
+    content: list[dict] = [
+        {"type": "text", "text": block} for block in transcript_blocks if block and block.strip()
+    ]
+    messages: list[dict] = []
+    if content:
+        if cache_transcript:
+            content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
+        messages.append({"role": "user", "content": content})
+    messages.append({"role": "user", "content": [{"type": "text", "text": instruction}]})
+    return messages
 
 
 class ApiClient:
@@ -34,10 +119,6 @@ class ApiClient:
 
         Raises:
             ValueError: If API keys are invalid (empty or whitespace-only)
-
-        Note:
-            If keys are not provided, uses validated keys from config module.
-            Keys are validated at application startup in main.py.
         """
         # Use provided keys or fall back to validated config module keys.
         # Use explicit None check so an empty string ("") bypasses the fallback
@@ -49,20 +130,167 @@ class ApiClient:
             deepgram_api_key if deepgram_api_key is not None else config.DEEPGRAM_API_KEY
         )
 
-        # Validate keys are present and non-empty
         if not self.anthropic_api_key or not self.anthropic_api_key.strip():
             raise ValueError("Anthropic API key must be provided and non-empty")
         if not self.deepgram_api_key or not self.deepgram_api_key.strip():
             raise ValueError("Deepgram API key must be provided and non-empty")
 
         self._anthropic_client: Anthropic | None = None
+        self._watcher_anthropic_client: Anthropic | None = None
+
+        # Per-meeting cost telemetry
+        self._cost_lock = threading.Lock()
+        self._meeting_cost_usd: float = 0.0
+        # Invoked after every call with {"meeting_cost_usd": float} — the
+        # controller wires this to the SSE "usage" event.
+        self.on_usage: Callable[[dict], None] | None = None
+
+    # ------------------------------------------------------------------
+    # Lane-specific Anthropic clients
+    # ------------------------------------------------------------------
 
     @property
     def anthropic_client(self) -> Anthropic:
-        """Lazy-load the Anthropic client when needed."""
+        """Lazy-load the default Anthropic client (SDK defaults: max_retries=2)."""
         if self._anthropic_client is None:
             self._anthropic_client = Anthropic(api_key=self.anthropic_api_key)
         return self._anthropic_client
+
+    @property
+    def watcher_anthropic_client(self) -> Anthropic:
+        """Watcher-lane client: fail fast (max_retries=0, timeout=8s)."""
+        if self._watcher_anthropic_client is None:
+            self._watcher_anthropic_client = Anthropic(
+                api_key=self.anthropic_api_key,
+                max_retries=config.WATCHER_MAX_RETRIES,
+                timeout=config.WATCHER_TIMEOUT_S,
+            )
+        return self._watcher_anthropic_client
+
+    # ------------------------------------------------------------------
+    # Usage / cost telemetry
+    # ------------------------------------------------------------------
+
+    @property
+    def meeting_cost_usd(self) -> float:
+        with self._cost_lock:
+            return self._meeting_cost_usd
+
+    def reset_meeting_cost(self) -> None:
+        with self._cost_lock:
+            self._meeting_cost_usd = 0.0
+
+    def _record_usage(self, *, lane: str, model: str, response: Any) -> None:
+        """Log per-call usage + cost, accumulate meeting cost, flag truncation."""
+        usage = getattr(response, "usage", None)
+        stop_reason = getattr(response, "stop_reason", None)
+        cost = estimate_cost_usd(model, usage) if usage is not None else 0.0
+        with self._cost_lock:
+            self._meeting_cost_usd += cost
+            total = self._meeting_cost_usd
+
+        logger.info(
+            "LLM call usage",
+            lane=lane,
+            model=model,
+            input_tokens=getattr(usage, "input_tokens", None),
+            output_tokens=getattr(usage, "output_tokens", None),
+            cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", None),
+            cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", None),
+            stop_reason=stop_reason,
+            call_cost_usd=f"{cost:.6f}",
+            meeting_cost_usd=f"{total:.4f}",
+        )
+        if stop_reason == "max_tokens":
+            logger.warning("LLM response truncated at max_tokens", lane=lane, model=model)
+        if self.on_usage is not None:
+            try:
+                self.on_usage({"meeting_cost_usd": round(total, 6)})
+            except Exception as e:  # noqa: BLE001 — telemetry must never break a lane
+                logger.warning("on_usage callback failed: {}", e)
+
+    # ------------------------------------------------------------------
+    # Card lanes (forced tool use)
+    # ------------------------------------------------------------------
+
+    def create_cards(
+        self,
+        *,
+        lane: str,
+        model: str,
+        max_tokens: int,
+        system: list[dict],
+        messages: list[dict],
+    ) -> list[Card]:
+        """Run one forced-tool-use request and return validated Cards.
+
+        Args:
+            lane: "watcher" (fail-fast client, proactive cards) or "reactive".
+            model: Model ID for this lane.
+            max_tokens: Per-prompt output cap.
+            system: Cached system blocks (see ``build_system_blocks``).
+            messages: Transcript context + final instruction
+                (see ``build_transcript_messages``).
+
+        Returns:
+            Zero or more validated Cards (``[]`` is the "nothing to say" result).
+        """
+        client = self.watcher_anthropic_client if lane == "watcher" else self.anthropic_client
+
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+            "tools": [EMIT_CARDS_TOOL],
+            "tool_choice": {"type": "tool", "name": "emit_cards"},
+        }
+        if lane == "reactive":
+            # REACTIVE_MODEL defaults to adaptive thinking when the param is
+            # omitted — the reactive lane explicitly disables it for latency.
+            kwargs["thinking"] = {"type": "disabled"}
+
+        response = client.messages.create(**kwargs)
+        self._record_usage(lane=lane, model=model, response=response)
+
+        raw_input: object = None
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "emit_cards":
+                raw_input = block.input
+                break
+        if raw_input is None:
+            logger.warning("No emit_cards tool_use block in response", lane=lane)
+            return []
+
+        card_lane = "proactive" if lane == "watcher" else "reactive"
+        return parse_cards(raw_input, lane=card_lane)
+
+    # ------------------------------------------------------------------
+    # Long-form lane (post-meeting / titles / map-reduce / rolling summary)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _split_template(prompt_template: str | None) -> str:
+        """Extract the instruction text from a legacy ``{transcript}`` template.
+
+        Legacy templates embed the transcript mid-template; the cache-first
+        shape sends the transcript as a cached block and the instruction as the
+        FINAL uncached message, so we lift the instruction text out. Uses
+        ``partition`` (not ``format``) so stray braces never raise.
+
+        When a placeholder was lifted out, a pointer to the transcript's real
+        location is appended so the instruction never ends in a dangling
+        content label (e.g. "Transcript:") that points at nothing.
+        """
+        if not prompt_template:
+            return "Respond to the transcript above."
+        if "{transcript}" in prompt_template:
+            pre, _, post = prompt_template.partition("{transcript}")
+            instruction = "\n\n".join(part.strip() for part in (pre, post) if part.strip())
+            if not instruction:
+                return "Respond to the transcript above."
+            return instruction + "\n\n(The transcript is provided in the previous message.)"
+        return prompt_template.strip()
 
     def process_with_anthropic(
         self,
@@ -70,116 +298,106 @@ class ApiClient:
         prompt_template: str | None = None,
         stream: bool = True,
         callback: Callable[[str], None] | None = None,
+        *,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        system_instructions: str | None = None,
+        context_pack_text: str | None = None,
+        lane: str = "background",
+        cache_transcript: bool = True,
     ) -> str:
-        """
-        Process text with Anthropic's Claude API with streaming support.
+        """Process a transcript with Claude using the cache-first request shape.
 
         Args:
-            text: Input text to process
-            prompt_template: Optional template string with {transcript} placeholder
-            stream: Whether to stream the response
-            callback: Optional callback function for streaming chunks
+            text: The transcript text (sent as a cached block).
+            prompt_template: Legacy template with a ``{transcript}`` placeholder;
+                its instruction text is sent as the final uncached message.
+            stream: Whether to stream the response.
+            callback: Optional callback for streaming chunks.
+            model: Model ID (default: POST_MEETING_MODEL).
+            max_tokens: Output cap (default: POST_MEETING_MAX_TOKENS).
+            system_instructions: Stable system block text (default generic).
+            context_pack_text: Optional context pack appended to the cached system.
+            lane: Telemetry label ("background" | "interactive").
+            cache_transcript: Whether to put a cache breakpoint on the transcript
+                block. Pass False for one-shot lanes (map-reduce chunks, titles,
+                rolling summary) where the block is never re-read — a cache
+                write there is a pure 1.25x input premium.
 
         Returns:
-            Complete response text from Claude
+            Complete response text from Claude.
 
         Raises:
-            ValueError: If Anthropic API key is not set
-            APIError: If Anthropic API returns an error
-            APIConnectionError: If network connection fails
-            RateLimitError: If rate limit is exceeded
+            ValueError: If the Anthropic API key is not set.
+            anthropic.APIError subclasses: On API failure (SDK-managed retries only).
         """
         if not self.anthropic_api_key:
             raise ValueError("Anthropic API key not set")
 
+        model = model or config.POST_MEETING_MODEL
+        max_tokens = max_tokens or config.POST_MEETING_MAX_TOKENS
+        instruction = self._split_template(prompt_template)
+        system = build_system_blocks(
+            system_instructions or DEFAULT_SYSTEM_INSTRUCTIONS, context_pack_text
+        )
+        transcript_block = f"<transcript>\n{text}\n</transcript>" if text else ""
+        messages = build_transcript_messages(
+            [transcript_block], instruction, cache_transcript=cache_transcript
+        )
+
+        request_kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        }
+        # claude-sonnet-5 runs ADAPTIVE thinking when the param is omitted:
+        # thinking tokens bill as output and count against max_tokens, so the
+        # long-form/background lanes disable it explicitly. claude-haiku-4-5
+        # runs WITHOUT thinking when the param is omitted — nothing to send.
+        if model.startswith("claude-sonnet-5"):
+            request_kwargs["thinking"] = {"type": "disabled"}
+
         client = self.anthropic_client
+        logger.info(
+            "Sending prompt to Claude API",
+            lane=lane,
+            model=model,
+            transcript_chars=len(text),
+        )
 
-        if prompt_template:
-            content = prompt_template.format(transcript=text)
-        else:
-            content = text
+        if stream:
+            response_chunks: list[str] = []
+            with client.messages.stream(**request_kwargs) as stream_context:
+                for chunk_text in stream_context.text_stream:
+                    response_chunks.append(chunk_text)
+                    if callback:
+                        callback(chunk_text)
+                final_message = stream_context.get_final_message()
 
-        logger.info("Sending prompt to Claude API")
-        logger.debug(f"Content length: {len(content)} characters")
+            self._record_usage(lane=lane, model=model, response=final_message)
+            response_text = "".join(response_chunks)
+            logger.info(f"Completed streaming response: {len(response_text)} chars")
+            return response_text
 
-        attempt = 0
-        backoff = _INITIAL_BACKOFF_S
-        last_error: Exception | None = None
+        response = client.messages.create(**request_kwargs)
+        self._record_usage(lane=lane, model=model, response=response)
+        response_text = "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        )
+        logger.info(f"Received complete response: {len(response_text)} chars")
+        return response_text
 
-        while attempt <= _MAX_RETRIES:
-            try:
-                if stream:
-                    response_chunks: list[str] = []
-                    with client.messages.stream(
-                        model=config.CLAUDE_MODEL,
-                        max_tokens=config.MAX_TOKENS,
-                        messages=[{"role": "user", "content": content}],
-                    ) as stream_context:
-                        for chunk_text in stream_context.text_stream:
-                            logger.debug(f"Received chunk: {len(chunk_text)} chars")
-                            response_chunks.append(chunk_text)
-                            if callback:
-                                callback(chunk_text)
+    # ------------------------------------------------------------------
+    # Deepgram batch path
+    # ------------------------------------------------------------------
 
-                    response_text = "".join(response_chunks)
-                    logger.info(f"Completed streaming response: {len(response_text)} chars")
-                    return response_text
-                else:
-                    response = client.messages.create(
-                        model=config.CLAUDE_MODEL,
-                        max_tokens=config.MAX_TOKENS,
-                        messages=[{"role": "user", "content": content}],
-                    )
-                    first_block = response.content[0]
-                    if hasattr(first_block, "text"):
-                        response_text = first_block.text
-                        logger.info(f"Received complete response: {len(response_text)} chars")
-                        return response_text
-                    else:
-                        error_msg = f"Unexpected content block type: {type(first_block)}"
-                        logger.error(error_msg)
-                        raise RuntimeError(error_msg)
-
-            except RateLimitError as e:
-                last_error = e
-                if attempt < _MAX_RETRIES:
-                    logger.warning(
-                        f"Rate limit hit, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
-                    )
-                    time.sleep(backoff)
-                    backoff *= _BACKOFF_MULTIPLIER
-                else:
-                    logger.error(f"Rate limit exceeded after {_MAX_RETRIES} retries: {e}")
-                    raise RuntimeError(
-                        "Claude API rate limit exceeded. Please try again later."
-                    ) from e
-            except APIConnectionError as e:
-                last_error = e
-                if attempt < _MAX_RETRIES:
-                    logger.warning(
-                        f"Connection error, retrying in {backoff}s (attempt {attempt + 1}/{_MAX_RETRIES})"
-                    )
-                    time.sleep(backoff)
-                    backoff *= _BACKOFF_MULTIPLIER
-                else:
-                    logger.error(f"API connection failed after {_MAX_RETRIES} retries: {e}")
-                    raise RuntimeError(
-                        "Failed to connect to Claude API. Check your network connection."
-                    ) from e
-            except APIError as e:
-                logger.error(f"Claude API error: {e}")
-                raise RuntimeError(f"Error processing with Claude: {e}") from e
-
-            attempt += 1
-
-        raise RuntimeError(f"Claude API failed after {_MAX_RETRIES} retries: {last_error}")
-
-    def transcribe_with_deepgram(self, audio_data: bytes, sample_rate: int) -> str:
+    def transcribe_with_deepgram(self, audio_data: np.ndarray, sample_rate: int) -> str:
         """
-        Transcribe audio using Deepgram API.
+        Transcribe audio using Deepgram API (batch/REST path).
 
         Args:
-            audio_data: Raw audio bytes to transcribe
+            audio_data: Audio samples as a numpy array (mono int16 expected)
             sample_rate: Sample rate of the audio in Hz
 
         Returns:
@@ -195,7 +413,7 @@ class ApiClient:
         if audio_data is None or len(audio_data) == 0:
             raise ValueError("Audio data cannot be empty")
 
-        logger.info(f"Transcribing audio: {len(audio_data)} bytes at {sample_rate} Hz")
+        logger.info(f"Transcribing audio: {len(audio_data)} samples at {sample_rate} Hz")
 
         try:
             result = transcribe_with_deepgram(self.deepgram_api_key, audio_data, sample_rate)

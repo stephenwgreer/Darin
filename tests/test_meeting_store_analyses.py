@@ -116,9 +116,15 @@ class TestGetTranscriptSegmentRange:
         # Override meta with a known start time
         store._meta_path(meeting_id).write_text(start_time.isoformat() + "\n")
 
-        self._write_segment_at_offset(store, meeting_id, start_time, 0, "intro")       # minute 0 — before range
-        self._write_segment_at_offset(store, meeting_id, start_time, 310, "in range")  # ~5m10s — in [5,10]
-        self._write_segment_at_offset(store, meeting_id, start_time, 700, "outro")     # ~11m40s — after range
+        self._write_segment_at_offset(
+            store, meeting_id, start_time, 0, "intro"
+        )  # minute 0 — before range
+        self._write_segment_at_offset(
+            store, meeting_id, start_time, 310, "in range"
+        )  # ~5m10s — in [5,10]
+        self._write_segment_at_offset(
+            store, meeting_id, start_time, 700, "outro"
+        )  # ~11m40s — after range
 
         result = store.get_transcript_segment_range(meeting_id, 5, 10)
         assert "in range" in result

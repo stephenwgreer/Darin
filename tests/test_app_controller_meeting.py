@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app_controller import AppController
+from app_controller import AppController, MeetingAlreadyActiveError, MeetingStartError
 
 
 @pytest.fixture
@@ -61,6 +61,48 @@ class TestMeetingState:
         loop.run_until_complete(controller.reset_to_idle())
         assert controller.meeting_state == "idle"
         loop.close()
+
+    def test_start_meeting_while_active_raises_409_error(self, controller: AppController) -> None:
+        """A second start_meeting while active must be rejected, not restarted."""
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        with pytest.raises(MeetingAlreadyActiveError):
+            loop.run_until_complete(controller.start_meeting())
+        # Only ONE streaming session / timer task was created
+        controller.start_streaming.assert_called_once()
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
+    def test_failed_streaming_start_does_not_enter_active(self, controller: AppController) -> None:
+        """start_streaming() failure must never produce a false 'active' state."""
+        controller.start_streaming = MagicMock(return_value=False)
+        states: list[str] = []
+        controller.on_meeting_state_change(states.append)
+        errors: list[str] = []
+        controller.on_error = errors.append
+
+        loop = asyncio.new_event_loop()
+        with pytest.raises(MeetingStartError):
+            loop.run_until_complete(controller.start_meeting())
+        loop.close()
+
+        assert controller.meeting_state == "idle"
+        assert controller._timer_task is None
+        assert states == []  # no state_change('active') was emitted
+        assert errors, "an error must be surfaced to the UI"
+
+    def test_reset_to_idle_stops_capture_while_active(self, controller: AppController) -> None:
+        """/reset during an active meeting must stop streaming AND the recorder."""
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        controller._streaming_client = MagicMock()  # simulate live stream
+        loop.run_until_complete(controller.reset_to_idle())
+        loop.close()
+
+        controller.stop_streaming.assert_called_once()
+        controller.recorder.stop_recording.assert_called_once()
+        assert controller.meeting_state == "idle"
+        assert controller._timer_task is None
 
 
 class TestMeetingCallbacks:
@@ -128,6 +170,73 @@ class TestTimerTick:
         loop.close()
 
         assert len(ticks) == tick_count_at_stop
+
+
+class TestCopilotServiceLifecycle:
+    """Watcher + rolling summary are session-scoped (start/stop with meeting)."""
+
+    def test_start_meeting_starts_watcher_and_rolling_summary(
+        self, controller: AppController
+    ) -> None:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+
+        assert controller._watcher is not None
+        assert controller._watcher.is_running
+        assert controller._rolling_summary is not None
+        assert controller._rolling_summary.is_running
+
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
+    def test_stop_meeting_stops_watcher_and_rolling_summary(
+        self, controller: AppController
+    ) -> None:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
+        assert controller._watcher is None
+        assert controller._rolling_summary is None
+
+    def test_no_copilot_services_before_meeting(self, controller: AppController) -> None:
+        assert controller._watcher is None
+        assert controller._rolling_summary is None
+
+    def test_start_meeting_resets_meeting_cost(self, controller: AppController) -> None:
+        reset = MagicMock()
+        controller.api_client = MagicMock()
+        controller.api_client.reset_meeting_cost = reset
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
+        reset.assert_called_once()
+
+    def test_utterance_end_feeds_watcher(self, controller: AppController) -> None:
+        watcher = MagicMock()
+        controller._watcher = watcher
+
+        controller._handle_utterance_end("ME: full transcript so far")
+
+        watcher.on_utterance_end.assert_called_once_with("ME: full transcript so far")
+
+    def test_copilot_services_not_started_when_streaming_fails(
+        self, controller: AppController
+    ) -> None:
+        """No copilot services may start when start_streaming fails."""
+        controller.start_streaming = MagicMock(return_value=False)
+
+        loop = asyncio.new_event_loop()
+        with pytest.raises(MeetingStartError):
+            loop.run_until_complete(controller.start_meeting())
+        loop.close()
+
+        assert controller._watcher is None
+        assert controller._rolling_summary is None
 
 
 class TestGetMeetingTranscript:

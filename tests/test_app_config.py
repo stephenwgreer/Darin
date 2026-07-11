@@ -72,3 +72,99 @@ def test_corrupt_config_file_returns_defaults(tmp_path):
     store = AppConfigStore(config_path=p)
     cfg = store.load()
     assert isinstance(cfg, AppConfig)
+
+
+@pytest.mark.unit
+def test_corrupt_config_backed_up_to_bak_before_fresh_start(tmp_path):
+    """Wave 4 hardening: a corrupt config must be preserved, not silently lost."""
+    p = tmp_path / "config.json"
+    p.write_text("{ definitely not json")
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert isinstance(cfg, AppConfig)
+    bak = tmp_path / "config.json.bak"
+    assert bak.exists()
+    assert bak.read_text() == "{ definitely not json"
+    # Original moved aside so the next save() writes a fresh file.
+    assert not p.exists()
+
+
+@pytest.mark.unit
+def test_non_object_config_root_treated_as_corrupt(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text('["valid json", "wrong shape"]')
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert isinstance(cfg, AppConfig)
+    assert (tmp_path / "config.json.bak").exists()
+
+
+@pytest.mark.unit
+def test_unknown_fields_in_custom_prompt_do_not_destroy_config(tmp_path):
+    """A custom prompt with extra fields loads (extras dropped), rest intact."""
+    import json
+
+    p = tmp_path / "config.json"
+    p.write_text(
+        json.dumps(
+            {
+                "storage_path": "/my/path",
+                "custom_prompts": [
+                    {
+                        "id": "cp_ok",
+                        "button_text": "OK",
+                        "output_title": "Out",
+                        "template": "T",
+                        "future_field": "from a newer version",
+                    }
+                ],
+                "deleted_prompt_ids": ["deal_risk"],
+            }
+        )
+    )
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert cfg.storage_path == "/my/path"
+    assert cfg.deleted_prompt_ids == ["deal_risk"]
+    assert len(cfg.custom_prompts) == 1
+    assert cfg.custom_prompts[0].id == "cp_ok"
+    # Not treated as corrupt — no backup created.
+    assert not (tmp_path / "config.json.bak").exists()
+
+
+@pytest.mark.unit
+def test_malformed_custom_prompt_skipped_but_others_kept(tmp_path):
+    import json
+
+    p = tmp_path / "config.json"
+    p.write_text(
+        json.dumps(
+            {
+                "custom_prompts": [
+                    {"id": "cp_broken"},  # missing required fields
+                    "not even a dict",
+                    {
+                        "id": "cp_good",
+                        "button_text": "Good",
+                        "output_title": "Out",
+                        "template": "T",
+                    },
+                ],
+            }
+        )
+    )
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert [cp.id for cp in cfg.custom_prompts] == ["cp_good"]
+
+
+@pytest.mark.unit
+def test_custom_prompts_not_a_list_ignored(tmp_path):
+    import json
+
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"custom_prompts": {"oops": "a dict"}, "persona": "sales"}))
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert cfg.custom_prompts == []
+    assert cfg.persona == "sales"

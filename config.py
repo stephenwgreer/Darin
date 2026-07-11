@@ -18,40 +18,60 @@ ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
 DEEPGRAM_API_KEY: str | None = os.getenv("DEEPGRAM_API_KEY")
 
 # Audio Settings
+# Internal capture format: int16, 16 kHz, 100 ms chunks (1600 frames),
+# shape (1600, 2) — column 0 = ME (default mic), column 1 = THEM (speaker loopback).
 BUFFER_MINUTES: Final[int] = 5
-SAMPLE_RATE: Final[int] = 48000
-CHUNK_SECONDS: Final[int] = 1
+SAMPLE_RATE: Final[int] = 16000
+CHUNK_SECONDS: Final[float] = 0.1
+# Fallback capture rate when a device refuses 16 kHz (decimated 3:1 to 16 kHz).
+FALLBACK_SAMPLE_RATE: Final[int] = 48000
 
 # Deepgram Streaming Settings
-DEEPGRAM_MODEL: Final[str] = "nova-2"
+DEEPGRAM_MODEL: Final[str] = "nova-3"
 DEEPGRAM_LANGUAGE: Final[str] = "en-US"
-DEEPGRAM_SAMPLE_RATE: Final[int] = 48000
+DEEPGRAM_SAMPLE_RATE: Final[int] = 16000
+# Domain vocabulary boosted via nova-3 keyterm prompting (user-editable later
+# via AppConfig; empty list = no boosting).
+DEEPGRAM_KEYTERMS: Final[list[str]] = []
 
-# Model Settings
-CLAUDE_MODEL: Final[str] = "claude-sonnet-4-5-20250929"
-MAX_TOKENS: Final[int] = 4096
-TEMPERATURE: Final[int] = 0
+# Model tiers (verified live 2026-07-10 — both IDs resolve on the Anthropic API).
+# WATCHER_MODEL: proactive watcher ticks, titles, rolling summary, map-reduce.
+# REACTIVE_MODEL: the 5 reactive card buttons + freeform Ask.
+# POST_MEETING_MODEL: long-form post-meeting analyses.
+WATCHER_MODEL: Final[str] = "claude-haiku-4-5"
+REACTIVE_MODEL: Final[str] = "claude-sonnet-5"
+POST_MEETING_MODEL: Final[str] = "claude-sonnet-5"
 
-# File Settings
-TEMP_AUDIO_FILE: Final[str] = "BSGPT_REC.wav"
+# Per-lane defaults. Temperature is never sent (removed on current models).
+WATCHER_MAX_TOKENS: Final[int] = 500
+REACTIVE_MAX_TOKENS: Final[int] = 400
+ASK_MAX_TOKENS: Final[int] = 600
+POST_MEETING_MAX_TOKENS: Final[int] = 4096
+TITLE_MAX_TOKENS: Final[int] = 64
+
+# Watcher lane client: fail fast, never queue retries behind a live meeting.
+WATCHER_TIMEOUT_S: Final[float] = 8.0
+WATCHER_MAX_RETRIES: Final[int] = 0
+
+# Background lane: rolling summary cadence (~every 5 min of meeting time).
+ROLLING_SUMMARY_INTERVAL_S: Final[float] = 300.0
+ROLLING_SUMMARY_MAX_TOKENS: Final[int] = 400
+
+# Context pack budget (estimated as len(text.split()) * 1.3).
+CONTEXT_PACK_MAX_TOKENS: Final[int] = 20_000
 
 
 def validate_api_keys(
     *,
     anthropic_key: str | None = None,
     deepgram_key: str | None = None,
-    _use_module_defaults: bool = True,
 ) -> None:
     """
     Validate that required API keys are present and non-empty.
 
     Args:
-        anthropic_key: Anthropic API key override for testing.
-                      If None and _use_module_defaults=False, treated as missing.
-        deepgram_key: Deepgram API key override for testing.
-                     If None and _use_module_defaults=False, treated as missing.
-        _use_module_defaults: If True, use module-level config when keys are None.
-                             If False, None means missing (for testing).
+        anthropic_key: Explicit key to validate; None means "use module config".
+        deepgram_key: Explicit key to validate; None means "use module config".
 
     Raises:
         EnvironmentError: If any required API keys are missing or empty.
@@ -65,22 +85,15 @@ def validate_api_keys(
         >>> validate_api_keys()
 
         >>> # Test missing keys
-        >>> validate_api_keys(anthropic_key=None, deepgram_key=None, _use_module_defaults=False)
+        >>> validate_api_keys(anthropic_key="", deepgram_key="")
         ... # Raises EnvironmentError
 
         >>> # Test with explicit keys
-        >>> validate_api_keys(anthropic_key="test-key", deepgram_key="test-key", _use_module_defaults=False)
+        >>> validate_api_keys(anthropic_key="test-key", deepgram_key="test-key")
         ... # Passes validation
     """
-    # Determine which keys to validate
-    if _use_module_defaults:
-        # Production mode: use module config if parameters are None
-        api_key_anthropic = anthropic_key if anthropic_key is not None else ANTHROPIC_API_KEY
-        api_key_deepgram = deepgram_key if deepgram_key is not None else DEEPGRAM_API_KEY
-    else:
-        # Test mode: use provided values directly (None means missing)
-        api_key_anthropic = anthropic_key
-        api_key_deepgram = deepgram_key
+    api_key_anthropic = ANTHROPIC_API_KEY if anthropic_key is None else anthropic_key
+    api_key_deepgram = DEEPGRAM_API_KEY if deepgram_key is None else deepgram_key
 
     missing_keys: list[str] = []
 

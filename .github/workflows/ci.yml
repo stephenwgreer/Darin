@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - claude-redesign
+      - rewrite
   pull_request:
     branches:
       - main
       - claude-redesign
+      - rewrite
 
 # Prevent concurrent runs on the same ref
 concurrency:
@@ -16,74 +18,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Detect which files changed to determine which checks to run
-  detect-changes:
-    name: Detect Changed Files
-    runs-on: ubuntu-latest
-    outputs:
-      python: ${{ steps.filter.outputs.python }}
-      typescript: ${{ steps.filter.outputs.typescript }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            python:
-              - '**/*.py'
-              - 'requirements.txt'
-              - 'pyproject.toml'
-              - 'uv.lock'
-            typescript:
-              - '**/*.ts'
-              - '**/*.tsx'
-              - 'package.json'
-              - 'bun.lockb'
-              - 'tsconfig.json'
-
-  # Python CI checks - enforces uv package manager
+  # Python CI checks — every step below GATES the build (no continue-on-error).
+  # NOTE: mypy is not run here — the codebase has hundreds of pre-existing
+  # strict-mode errors, so a mypy step would be either red forever or
+  # advisory theater. Run `uv run mypy .` locally; reinstate a gating step
+  # once the strict backlog is burned down.
   python-ci:
     name: Python CI (uv enforced)
     runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.python == 'true'
-
-    strategy:
-      matrix:
-        python-version: ['3.11']
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
 
       - name: Verify uv installation
         run: uv --version
 
-      - name: Create virtual environment
-        run: uv venv
-
       - name: Install dependencies with uv
-        run: |
-          uv sync
-
-      - name: Cache uv dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
+        run: uv sync
 
       # CRITICAL: Enforce no pip usage
       - name: Verify no pip/conda usage
@@ -98,41 +56,27 @@ jobs:
             echo "ALLOWED: requirements.txt, pyproject.toml, uv.lock ONLY"
             exit 1
           fi
-          echo "✓ Package manager verification passed (uv only)"
+          echo "Package manager verification passed (uv only)"
 
       - name: Run ruff linter
-        run: |
-          source .venv/bin/activate
-          ruff check . --output-format=github
+        run: uv run ruff check . --output-format=github
 
       - name: Run ruff formatter check
-        run: |
-          source .venv/bin/activate
-          ruff format --check .
+        run: uv run ruff format --check .
 
-      - name: Run mypy type checking
-        run: |
-          source .venv/bin/activate
-          mypy . --exclude '\.venv' --exclude '__pycache__' --ignore-missing-imports || true
-        continue-on-error: true  # Type checking is advisory for now
+      # Coverage gate lives in pyproject addopts (--cov-fail-under=80,
+      # the level the suite actually meets today) — this step FAILS the
+      # build on test failures or a coverage regression.
+      - name: Run pytest with coverage (gating)
+        run: uv run pytest tests/ --cov-report=xml
 
-      - name: Run pytest with coverage
-        run: |
-          source .venv/bin/activate
-          pytest tests/ --cov=. --cov-report=term-missing --cov-report=xml --cov-config=.coveragerc || true
-        continue-on-error: true  # Don't fail on test errors during initial setup
-
-      - name: Check coverage threshold
-        run: |
-          source .venv/bin/activate
-          coverage report --fail-under=80 || echo "Warning: Coverage below 80% (target threshold)"
-        continue-on-error: true  # Advisory for now
-
-      - name: Security audit with safety
-        run: |
-          source .venv/bin/activate
-          safety check --json || echo "Warning: Security vulnerabilities detected"
-        continue-on-error: true  # Advisory for now
+      # Dependency vulnerability audit — real tool (replaces the broken
+      # `safety` step, which was never even installed). Advisory only:
+      # known upstream vulns exist today in transitive deps (aiohttp via
+      # deepgram-sdk, starlette via fastapi); gate once those are bumped.
+      - name: Dependency vulnerability audit (pip-audit)
+        run: uv run --with pip-audit pip-audit --progress-spinner off
+        continue-on-error: true
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
@@ -140,174 +84,20 @@ jobs:
         with:
           files: ./coverage.xml
           flags: python
-          name: python-${{ matrix.python-version }}
+          name: python-3.12
         continue-on-error: true
 
-  # TypeScript CI checks - enforces bun package manager
-  typescript-ci:
-    name: TypeScript CI (bun enforced)
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.typescript == 'true'
-
-    strategy:
-      matrix:
-        node-version: ['20', '22']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Install bun
-        run: |
-          curl -fsSL https://bun.sh/install | bash
-          echo "$HOME/.bun/bin" >> $GITHUB_PATH
-
-      - name: Verify bun installation
-        run: bun --version
-
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      # CRITICAL: Enforce no npm/yarn/pnpm usage
-      - name: Verify no npm/yarn/pnpm usage
-        run: |
-          if [ -f "package-lock.json" ]; then
-            echo "ERROR: Found package-lock.json (npm)"
-            echo "REQUIRED: Use bun.lockb only"
-            exit 1
-          fi
-          if [ -f "yarn.lock" ]; then
-            echo "ERROR: Found yarn.lock"
-            echo "REQUIRED: Use bun.lockb only"
-            exit 1
-          fi
-          if [ -f "pnpm-lock.yaml" ]; then
-            echo "ERROR: Found pnpm-lock.yaml"
-            echo "REQUIRED: Use bun.lockb only"
-            exit 1
-          fi
-          if grep -r "npm install\|yarn add\|pnpm add" . --include="*.ts" --include="*.tsx" --include="*.js" --include="*.sh" --include="*.json" --exclude="package.json" --exclude="bun.lockb" --exclude-dir=".venv" --exclude-dir="node_modules" 2>/dev/null; then
-            echo "ERROR: Found unauthorized package manager usage in source files"
-            echo "REQUIRED: Use 'bun install' or 'bun add' only"
-            exit 1
-          fi
-          if [ -f "bun.lockb" ]; then
-            echo "✓ Package manager verification passed (bun only)"
-          fi
-
-      - name: Install dependencies with bun
-        if: hashFiles('package.json') != ''
-        run: bun install --frozen-lockfile
-
-      - name: Run ESLint
-        if: hashFiles('package.json') != ''
-        run: bun run lint
-        continue-on-error: true
-
-      - name: Run TypeScript type check
-        if: hashFiles('package.json') != ''
-        run: bun run typecheck || bun tsc --noEmit
-        continue-on-error: true
-
-      - name: Run tests with coverage
-        if: hashFiles('package.json') != ''
-        run: bun test --coverage
-        continue-on-error: true
-
-      - name: Check coverage threshold
-        if: hashFiles('package.json') != ''
-        run: |
-          # Extract coverage percentage and check threshold
-          echo "Warning: Coverage threshold check (75% target) - implement coverage parsing"
-        continue-on-error: true
-
-      - name: Security audit with bun
-        if: hashFiles('package.json') != ''
-        run: |
-          bun audit || echo "Warning: Security vulnerabilities detected"
-        continue-on-error: true
-
-  # Integration with enterprise workflows
-  workflow-validation:
-    name: Workflow Integration Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate workflow phase
-        run: |
-          echo "CI Pipeline runs at Phase 4 (Implementation) of:"
-          echo "  - Bug Fix Workflow (10 steps)"
-          echo "  - Feature Workflow (11 steps)"
-          echo ""
-          echo "✓ CI checks passed - Ready for Phase 5 (Code Review)"
-
-      - name: Check for required files
-        run: |
-          # Check for health check endpoint (required for deployment)
-          if [ -f "main.py" ]; then
-            if grep -q "health" main.py || grep -q "/health" main.py; then
-              echo "✓ Health check endpoint detected"
-            else
-              echo "⚠ Warning: No health check endpoint found in main.py"
-              echo "  Add a /health endpoint before deployment"
-            fi
-          fi
-
-      - name: Verify environment configuration
-        run: |
-          if [ -f ".env.template" ] || [ -f ".env.example" ]; then
-            echo "✓ Environment template found"
-          else
-            echo "⚠ Warning: No .env.template or .env.example found"
-            echo "  Create environment configuration template for deployments"
-          fi
-
-          if grep -q "\.env$" .gitignore 2>/dev/null; then
-            echo "✓ .env properly gitignored"
-          else
-            echo "⚠ Warning: .env should be in .gitignore"
-          fi
-
-  # Final status check - all jobs must pass
+  # Final status check — required-check anchor for branch protection
   ci-complete:
     name: CI Pipeline Complete
     runs-on: ubuntu-latest
-    needs: [detect-changes, python-ci, workflow-validation]
+    needs: [python-ci]
     if: always()
     steps:
       - name: Check CI status
         run: |
-          if [ "${{ needs.python-ci.result }}" == "failure" ]; then
+          if [ "${{ needs.python-ci.result }}" != "success" ]; then
             echo "ERROR: Python CI checks failed"
             exit 1
           fi
-
-          echo "=========================================="
-          echo "CI Pipeline Complete"
-          echo "=========================================="
-          echo ""
-          echo "✓ All checks passed"
-          echo "✓ Package manager enforcement verified"
-          echo "✓ Code quality standards met"
-          echo "✓ Ready for code review (Phase 5)"
-          echo ""
-          echo "Next steps:"
-          echo "  1. Request code review from senior engineer"
-          echo "  2. Address review feedback"
-          echo "  3. Merge to claude-redesign branch"
-          echo "  4. Proceed to staging deployment (Phase 7)"
+          echo "All CI gates passed"
