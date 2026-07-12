@@ -108,6 +108,7 @@ let currentPersona = 'general';
 // F4 retention: when false (default) expired proactive cards dim + collapse to
 // a headline + cues (kept in the feed); when true they fade out and are removed.
 let autoHideExpired = false;
+let autoAnswerEnabled = true;
 
 // ── requestAnimationFrame render queue ─────────────────────────────────────
 // Every SSE-driven DOM write is enqueued here and flushed once per frame.
@@ -436,6 +437,13 @@ function buildCardElement(card) {
   chip.className = `card-chip chip-${card.type}`;
   chip.textContent = CARD_TYPE_LABELS[card.type] || card.type;
   top.appendChild(chip);
+
+  if (card.trigger === 'auto_answer') {
+    const auto = document.createElement('span');
+    auto.className = 'card-auto-chip';
+    auto.textContent = 'AUTO';
+    top.appendChild(auto);
+  }
 
   if (card.urgency === 'now') {
     const urgent = document.createElement('span');
@@ -1188,6 +1196,8 @@ async function openSettings() {
     if (radio) radio.checked = true;
     autoHideExpired = !!settings.auto_hide_expired;
     $('auto-hide-expired').checked = autoHideExpired;
+    autoAnswerEnabled = settings.auto_answer_enabled !== false; // default true
+    $('auto-answer-enabled').checked = autoAnswerEnabled;
     renderEndpointList(settings.custom_endpoints || []);
   }
   contextData = {
@@ -1222,6 +1232,7 @@ $('btn-save-settings').addEventListener('click', async () => {
   const bgRadio = document.querySelector('input[name="bg-style"]:checked');
   const bgStyle = bgRadio ? bgRadio.value : 'default';
   const autoHide = $('auto-hide-expired').checked;
+  const autoAnswer = $('auto-answer-enabled').checked;
 
   const { endpoints, error } = collectEndpoints();
   if (error) { showToast(error); return; }
@@ -1232,6 +1243,7 @@ $('btn-save-settings').addEventListener('click', async () => {
   const settingsBody = {
     background_style: bgStyle,
     auto_hide_expired: autoHide,
+    auto_answer_enabled: autoAnswer,
     custom_endpoints: endpoints,
   };
   if (path) settingsBody.storage_path = path;
@@ -1245,6 +1257,7 @@ $('btn-save-settings').addEventListener('click', async () => {
     return;
   }
   autoHideExpired = autoHide;
+  autoAnswerEnabled = autoAnswer;
   applyBackground(bgStyle);
   closeModal('modal-settings');
   showToast('Settings saved');
@@ -1658,6 +1671,7 @@ async function init() {
   if (savedSettings) {
     applyBackground(savedSettings.background_style || 'default');
     autoHideExpired = !!savedSettings.auto_hide_expired;
+    autoAnswerEnabled = savedSettings.auto_answer_enabled !== false; // default true
   }
   await loadPrompts();
   loadPersona();

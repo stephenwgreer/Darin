@@ -117,6 +117,7 @@ def create_app(token: str) -> FastAPI:
     # endpoints route through the adapter; refreshed live on settings save.
     controller.api_client.model_registry = ModelRegistry(app_cfg)
     controller.watcher_model = app_cfg.watcher_model
+    controller.auto_answer_enabled = app_cfg.auto_answer_enabled
     controller.on_meeting_state_change(lambda s: bus.put_event("state_change", {"state": s}))
     controller.on_timer_tick(lambda e: bus.put_event("timer_tick", {"elapsed": e}))
 

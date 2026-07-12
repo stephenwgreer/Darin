@@ -63,6 +63,9 @@ class AppConfig:
     # dimmed "aged" state and are kept in the feed; when True the old
     # fade-and-remove behavior is restored.
     auto_hide_expired: bool = False
+    # Auto-Answer: when True (default) a watcher "question_at_user" card
+    # automatically triggers the reactive answer_this pipeline.
+    auto_answer_enabled: bool = True
 
 
 class AppConfigStore:
@@ -107,6 +110,7 @@ class AppConfigStore:
             custom_endpoints=self._parse_custom_endpoints(data.get("custom_endpoints", [])),
             watcher_model=watcher_model if isinstance(watcher_model, str) else None,
             auto_hide_expired=bool(data.get("auto_hide_expired", False)),
+            auto_answer_enabled=bool(data.get("auto_answer_enabled", True)),
         )
 
     def _backup_corrupt_config(self) -> Path | None:
@@ -198,6 +202,7 @@ class AppConfigStore:
             "custom_endpoints": [asdict(e) for e in config.custom_endpoints],
             "watcher_model": config.watcher_model,
             "auto_hide_expired": config.auto_hide_expired,
+            "auto_answer_enabled": config.auto_answer_enabled,
         }
         self._path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.debug("Config saved to {}", self._path)

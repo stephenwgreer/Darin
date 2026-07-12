@@ -545,6 +545,16 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   letter-spacing: 0.05em;
 }
 
+.card-auto-chip {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(99,102,241,.20);
+  color: #a5b4fc;
+}
+
 .card-dismiss {
   margin-left: auto;
   background: none;

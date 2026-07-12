@@ -106,6 +106,7 @@ class SaveSettingsBody(BaseModel):
     custom_endpoints: list[CustomEndpointBody] | None = None
     watcher_model: str | None = None
     auto_hide_expired: bool | None = None
+    auto_answer_enabled: bool | None = None
 
 
 class ContextPackBody(BaseModel):
@@ -385,6 +386,7 @@ def create_router(
             "background_style": cfg.background_style,
             "watcher_model": cfg.watcher_model,
             "auto_hide_expired": cfg.auto_hide_expired,
+            "auto_answer_enabled": cfg.auto_answer_enabled,
             "custom_endpoints": [
                 {
                     "id": e.id,
@@ -483,11 +485,14 @@ def create_router(
             cfg.watcher_model = body.watcher_model
         if body.auto_hide_expired is not None:
             cfg.auto_hide_expired = body.auto_hide_expired
+        if body.auto_answer_enabled is not None:
+            cfg.auto_answer_enabled = body.auto_answer_enabled
         await asyncio.to_thread(app_cfg_store.save, cfg)
         # Rebind the model registry LIVE so newly-added/removed custom endpoints
         # route immediately (F2) — no restart needed.
         controller.api_client.model_registry = ModelRegistry(cfg)
         controller.watcher_model = cfg.watcher_model
+        controller.auto_answer_enabled = cfg.auto_answer_enabled
         return {"status": "ok"}
 
     @router.post("/pick_folder")

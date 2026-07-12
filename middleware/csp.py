@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+
 # script-src is 'self' only: the APP_TOKEN bootstrap moved from an inline
 # <script> in index.html to a static .js file, so 'unsafe-inline' is no
 # longer required for scripts (LLM output renders in the page — inline

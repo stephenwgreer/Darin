@@ -24,6 +24,7 @@ import config
 from api.client import ApiClient, build_system_blocks, build_transcript_messages
 from api.deepgram_streaming import DeepgramStreamingClient
 from audio.recorder import ContinuousRecorder
+from services.auto_answer import AUTO_ANSWER_TRIGGER, AutoAnswerPolicy
 from services.cards import Card
 from services.context_pack import ContextPack
 from services.rolling_summary import RollingSummaryService
@@ -119,6 +120,10 @@ class AppController:
         # fall back to config.WATCHER_MODEL. Set/refreshed by the web layer from
         # AppConfig.watcher_model.
         self.watcher_model: str | None = None
+
+        # Auto-Answer (default enabled; refreshed by the web layer from AppConfig).
+        self.auto_answer_enabled: bool = True
+        self._auto_answer_policy = AutoAnswerPolicy()
 
         # Card plumbing: emitted cards by id (for dismiss), recent transcript
         # lines with monotonic timestamps (for the reactive "last ~3 min").
@@ -1086,6 +1091,8 @@ class AppController:
         question: str | None = None,
         transcript_override: str | None = None,
         on_complete: Callable[[], None] | None = None,
+        trigger_override: str | None = None,
+        discard_if_inactive: bool = False,
     ) -> bool:
         """Run a reactive card prompt (built-in buttons / Ask / custom prompts).
 
@@ -1103,6 +1110,10 @@ class AppController:
         threading.Thread(
             target=self._run_reactive_thread,
             args=(prompt_config, question, transcript_override, on_complete),
+            kwargs={
+                "trigger_override": trigger_override,
+                "discard_if_inactive": discard_if_inactive,
+            },
             daemon=True,
         ).start()
         return True
@@ -1113,6 +1124,9 @@ class AppController:
         question: str | None,
         transcript_override: str | None,
         on_complete: Callable[[], None] | None,
+        *,
+        trigger_override: str | None = None,
+        discard_if_inactive: bool = False,
     ) -> None:
         """Background thread: build reactive context, force emit_cards, emit."""
         from prompts.templates import REACTIVE_SYSTEM_PROMPT, persona_line
@@ -1170,14 +1184,22 @@ class AppController:
                 duration_ms=f"{duration_ms:.2f}",
             )
 
+            if trigger_override is not None:
+                for card in cards:
+                    card.trigger = trigger_override
+
+            # Late-completion guard (mirrors watcher.py post-stop discard): an
+            # auto-answer that finished after the meeting ended must not surface.
+            if discard_if_inactive and self._meeting_state != "active":
+                logger.info("Auto-answer finished after meeting end — discarded")
+                return
+
             for card in cards:
                 self._emit_card(card)
             if self._on_processing_complete:
                 self._on_processing_complete(
                     {"cards": [c.to_dict() for c in cards], "prompt_id": prompt_id}
                 )
-            if on_complete:
-                on_complete()
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.error(
@@ -1190,6 +1212,11 @@ class AppController:
             if self._on_processing_complete:
                 self._on_processing_complete({"error": str(e), "prompt_id": prompt_id})
         finally:
+            # Guarantee the auto-answer in-flight guard is released on every exit
+            # path (no-transcript return, discard, success, or exception); the
+            # try body no longer calls on_complete so this fires exactly once.
+            if on_complete:
+                on_complete()
             self._release_interactive(prompt_id)
 
     # ------------------------------------------------------------------
@@ -1206,6 +1233,50 @@ class AppController:
                 self._on_card(card_dict)
             except Exception as e:  # noqa: BLE001 — a bad consumer never kills a lane
                 logger.warning("on_card callback failed: {}", e)
+
+        # Auto-Answer: a watcher card asking the user a question auto-triggers
+        # the reactive answer_this pipeline (non-blocking).
+        if card.trigger == "question_at_user":
+            self._maybe_auto_answer(card)
+
+    def _maybe_auto_answer(self, source_card: Card) -> None:
+        """Kick off an auto-answer for a watcher question card, if gated in."""
+        allowed, reason = self._auto_answer_policy.should_answer(
+            enabled=self.auto_answer_enabled,
+            trigger=source_card.trigger,
+            meeting_active=self._meeting_state == "active",
+            source_card_id=source_card.id,
+        )
+        if not allowed:
+            logger.info("Auto-answer skipped", reason=reason, source_card_id=source_card.id)
+            return
+
+        from prompts.registry import get_prompt_config_by_id
+
+        answer_cfg = get_prompt_config_by_id("answer_this")
+        if answer_cfg is None:
+            logger.warning("Auto-answer: answer_this prompt not found")
+            return
+
+        self._auto_answer_policy.note_started(source_card.id)
+
+        def _release() -> None:
+            self._auto_answer_policy.note_finished(source_card.id)
+
+        accepted = self.run_reactive_prompt(
+            answer_cfg,
+            trigger_override=AUTO_ANSWER_TRIGGER,
+            discard_if_inactive=True,
+            on_complete=_release,
+        )
+        if accepted:
+            self._auto_answer_policy.note_accepted()
+        else:
+            # answer_this already in flight (manual click) — release the source
+            # guard so a later watcher card can retry. Cooldown stays unarmed:
+            # nothing ran.
+            self._auto_answer_policy.note_finished(source_card.id)
+            logger.info("Auto-answer not started: answer_this already in flight")
 
     def _persist_card(self, card_dict: dict) -> None:
         """Append a rendered card (both lanes) to the meeting's cards.jsonl (F4)."""
