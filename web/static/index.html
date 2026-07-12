@@ -208,6 +208,26 @@
           </span>
         </div>
       </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Knowledge Base / SAS Corpus</div>
+      <div class="settings-row">
+        <span class="settings-hint">
+          Local RAG over a folder of SAS Viya PDFs. Passages are vectorized
+          on-device and injected into live answers — nothing leaves this machine.
+        </span>
+        <label class="settings-toggle">
+          <input type="checkbox" id="kb-enabled" />
+          <span class="bg-option-label">Enable SAS knowledge base</span>
+        </label>
+        <div class="settings-path-row">
+          <input class="settings-path-input" id="kb-folder-input"
+                 placeholder="/path/to/SAS Viya docs folder" />
+          <button class="btn btn-outline btn-nowrap" id="kb-scan-btn" type="button">Scan folder</button>
+        </div>
+        <div class="kb-stats" id="kb-stats"></div>
+        <div class="kb-progress" id="kb-progress" hidden></div>
+        <div class="kb-doc-list" id="kb-doc-list"></div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-close="modal-settings">Cancel</button>
         <button class="btn btn-save" id="btn-save-settings">Save Changes</button>
@@ -285,6 +305,15 @@
           </label>
           <span class="form-hint" id="form-web-search-hint">
             Only available on Anthropic models.
+          </span>
+        </div>
+        <div class="form-row">
+          <label class="bg-option">
+            <input type="checkbox" id="form-use-rag" />
+            <span class="bg-option-label">Use SAS knowledge base</span>
+          </label>
+          <span class="form-hint">
+            Ground this prompt in the local SAS Viya corpus (Settings → Knowledge Base).
           </span>
         </div>
         <div class="form-row">

@@ -862,6 +862,34 @@ const handlers = {
       });
     });
   },
+
+  // Corpus ingestion progress: parsing → embedding pct% → ready/failed. Drives
+  // the #kb-progress line in the (possibly closed) Settings dialog and refreshes
+  // the doc list once a document reaches a terminal state.
+  kb_ingest(data) {
+    enqueueRender(() => {
+      const progress = $('kb-progress');
+      if (!progress) return;
+      const status = data && data.status;
+      const docId = (data && data.doc_id) || '';
+      if (status === 'parsing') {
+        progress.hidden = false;
+        progress.textContent = `Parsing ${docId}…`;
+      } else if (status === 'embedding') {
+        progress.hidden = false;
+        const pct = Math.round(Number(data.pct) || 0);
+        progress.textContent = `Embedding ${docId}… ${pct}%`;
+      } else if (status === 'ready') {
+        progress.hidden = true;
+        progress.textContent = '';
+        refreshKnowledge();
+      } else if (status === 'failed') {
+        progress.hidden = false;
+        progress.textContent = `Failed to ingest ${docId}`;
+        refreshKnowledge();
+      }
+    });
+  },
 };
 
 // ── SSE connection ─────────────────────────────────────────────────────────
@@ -1185,9 +1213,10 @@ $('btn-add-endpoint').addEventListener('click', () => {
 });
 
 async function openSettings() {
-  const [settings, context] = await Promise.all([
+  const [settings, context, knowledge] = await Promise.all([
     apiGet('/api/settings'),
     apiGet('/api/context'),
+    apiGet('/api/knowledge'),
   ]);
   if (settings) {
     $('settings-path-input').value = settings.storage_path || '';
@@ -1211,10 +1240,210 @@ async function openSettings() {
   });
   $('ctx-textarea').value = contextData.profile;
   updateCtxTokenCount();
+  renderKnowledge(knowledge);
   openModal('modal-settings');
 }
 
 el.btnSettings.addEventListener('click', openSettings);
+
+// ── Knowledge Base / SAS Corpus (Settings) ──────────────────────────────────
+// A local RAG corpus over a folder of SAS Viya PDFs. Enable-toggle and
+// folder-scan post immediately (out-of-band from the batched Save button);
+// ingestion progress streams in via the kb_ingest SSE case, which refreshes
+// the doc list on completion. Card content is written with textContent only.
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function renderKnowledge(kb) {
+  if (!kb) {
+    // Backend has no KnowledgeBase (rag extra absent / controller.knowledge_base
+    // is None): the endpoint 503s. Present the section as unavailable.
+    $('kb-enabled').checked = false;
+    $('kb-enabled').disabled = true;
+    $('kb-folder-input').value = '';
+    $('kb-stats').textContent = 'Knowledge base unavailable (install darin[rag]).';
+    $('kb-doc-list').textContent = '';
+    $('kb-progress').hidden = true;
+    return;
+  }
+  $('kb-enabled').disabled = false;
+  $('kb-enabled').checked = !!kb.enabled;
+  $('kb-folder-input').value = kb.docs_folder || '';
+  renderKbStats(kb);
+  renderKbDocs(kb.docs || []);
+}
+
+function renderKbStats(kb) {
+  const docCount = Number(kb.doc_count) || 0;
+  const chunkCount = Number(kb.chunk_count) || 0;
+  const parts = [
+    `${docCount} doc${docCount === 1 ? '' : 's'}`,
+    `${chunkCount} chunk${chunkCount === 1 ? '' : 's'}`,
+    formatBytes(kb.total_bytes),
+  ];
+  if (kb.embed_model) parts.push(kb.embed_model);
+  $('kb-stats').textContent = parts.join(' · ');
+}
+
+function renderKbDocs(docs) {
+  const list = $('kb-doc-list');
+  list.textContent = '';
+  if (!docs.length) {
+    const empty = document.createElement('div');
+    empty.className = 'kb-doc-empty';
+    empty.textContent = 'No documents ingested yet — set a folder and scan.';
+    list.appendChild(empty);
+    return;
+  }
+  docs.forEach(doc => list.appendChild(buildKbDocRow(doc)));
+}
+
+function buildKbDocRow(doc) {
+  const row = document.createElement('div');
+  row.className = 'kb-doc-row';
+  row.dataset.docId = doc.doc_id;
+
+  const info = document.createElement('div');
+  info.className = 'kb-doc-info';
+
+  const name = document.createElement('div');
+  name.className = 'kb-doc-name';
+  name.textContent = doc.filename || doc.doc_id;
+  info.appendChild(name);
+
+  const meta = document.createElement('div');
+  meta.className = 'kb-doc-meta';
+  const metaParts = [
+    `${Number(doc.pages) || 0} pages`,
+    `${Number(doc.chunk_count) || 0} chunks`,
+    formatBytes(doc.size_bytes),
+  ];
+  if (doc.status && doc.status !== 'ready') metaParts.push(doc.status);
+  if (doc.ingested_at) metaParts.push(formatKbDate(doc.ingested_at));
+  meta.textContent = metaParts.join(' · ');
+  info.appendChild(meta);
+
+  row.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'kb-doc-actions';
+
+  const previewBtn = document.createElement('button');
+  previewBtn.type = 'button';
+  previewBtn.className = 'pact-btn';
+  previewBtn.textContent = 'Preview';
+  previewBtn.addEventListener('click', () => previewChunks(doc.doc_id, row, previewBtn));
+  actions.appendChild(previewBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'pact-btn pact-btn-delete';
+  delBtn.textContent = '✕';
+  delBtn.title = 'Delete this document from the corpus';
+  delBtn.addEventListener('click', () => deleteKbDoc(doc.doc_id));
+  actions.appendChild(delBtn);
+
+  row.appendChild(actions);
+  return row;
+}
+
+function formatKbDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function refreshKnowledge() {
+  const kb = await apiGet('/api/knowledge');
+  renderKnowledge(kb);
+}
+
+async function scanKbFolder() {
+  const folder = $('kb-folder-input').value.trim();
+  if (!folder) { showToast('Enter a folder path first'); return; }
+  const btn = $('kb-scan-btn');
+  btn.disabled = true;
+  const resp = await apiPost('/api/knowledge/scan', { folder });
+  btn.disabled = false;
+  if (!resp || !resp.ok) {
+    showToast(resp && resp.status === 400 ? 'That folder does not exist' : 'Scan failed');
+    return;
+  }
+  const data = await resp.json().catch(() => null);
+  const queued = data && Number(data.queued);
+  showToast(queued ? `Scanning — ${queued} document${queued === 1 ? '' : 's'} queued` : 'Nothing new to ingest');
+  await refreshKnowledge();
+}
+
+async function deleteKbDoc(docId) {
+  const resp = await apiDelete('/api/knowledge/' + encodeURIComponent(docId));
+  if (!resp || !resp.ok) {
+    showToast(resp && resp.status === 404 ? 'Document already removed' : 'Delete failed');
+    return;
+  }
+  await refreshKnowledge();
+}
+
+async function previewChunks(docId, row, btn) {
+  // Toggle an inline preview panel under the doc row.
+  const existing = row.querySelector('.kb-chunk-preview');
+  if (existing) {
+    existing.remove();
+    btn.textContent = 'Preview';
+    return;
+  }
+  btn.disabled = true;
+  const data = await apiGet('/api/knowledge/' + encodeURIComponent(docId) + '/chunks?limit=5');
+  btn.disabled = false;
+  const panel = document.createElement('div');
+  panel.className = 'kb-chunk-preview';
+  const chunks = (data && data.chunks) || [];
+  if (!chunks.length) {
+    const empty = document.createElement('div');
+    empty.className = 'kb-chunk-empty';
+    empty.textContent = 'No chunks to preview.';
+    panel.appendChild(empty);
+  } else {
+    chunks.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'kb-chunk';
+      const head = document.createElement('div');
+      head.className = 'kb-chunk-head';
+      const headParts = [];
+      if (c.page != null) headParts.push(`p.${c.page}`);
+      if (c.section) headParts.push(c.section);
+      head.textContent = headParts.join(' · ');
+      const body = document.createElement('div');
+      body.className = 'kb-chunk-text';
+      body.textContent = c.text || '';
+      if (head.textContent) item.appendChild(head);
+      item.appendChild(body);
+      panel.appendChild(item);
+    });
+  }
+  row.appendChild(panel);
+  btn.textContent = 'Hide';
+}
+
+async function toggleKb() {
+  const enabled = $('kb-enabled').checked;
+  const resp = await apiPost('/api/knowledge/toggle', { enabled });
+  if (!resp || !resp.ok) {
+    $('kb-enabled').checked = !enabled; // revert optimistic flip
+    showToast('Failed to toggle knowledge base');
+    return;
+  }
+  showToast(enabled ? 'Knowledge base enabled' : 'Knowledge base disabled');
+}
+
+$('kb-scan-btn').addEventListener('click', scanKbFolder);
+$('kb-enabled').addEventListener('change', toggleKb);
 
 $('btn-browse-folder').addEventListener('click', async () => {
   const resp = await apiPost('/api/pick_folder', {});
@@ -1606,6 +1835,7 @@ function openPromptEditForm(prompt) {
   $('form-template').value = prompt ? prompt.template : '';
   populateModelDropdown(prompt ? prompt.model : undefined);
   $('form-web-search').checked = !!(prompt && prompt.web_search);
+  $('form-use-rag').checked = !!(prompt && prompt.use_rag);
   updateWebSearchState();
   $('btn-delete-prompt').style.display = prompt && prompt.is_custom ? 'inline-flex' : 'none';
   $('prompt-list-view').style.display = 'none';
@@ -1625,12 +1855,14 @@ async function savePrompt() {
 
   const model = $('form-model').value;
   const webSearch = $('form-web-search').checked;
+  const useRag = $('form-use-rag').checked;
   const payload = {
     button_text: buttonText,
     output_title: outputTitle,
     template,
     model,
     web_search: webSearch,
+    use_rag: useRag,
   };
 
   let resp;

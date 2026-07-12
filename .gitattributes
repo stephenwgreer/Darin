@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts must stay LF everywhere — Windows checkouts with autocrlf were
+# giving them CRLF endings, which breaks them under WSL/bash ($'\r' errors).
+*.sh text eol=lf

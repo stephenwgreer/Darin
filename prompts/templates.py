@@ -12,6 +12,19 @@ Layout (cache-first request shape):
 
 from __future__ import annotations
 
+import config
+
+
+# ME's identity — shared by both live-lane system prompts. Spelled-out aliases
+# matter: the transcript layer may render the name either way, and a question
+# addressed by name is aimed at ME even without any other cue.
+_NAME_ALIASES = " or ".join(f'"{a}"' for a in config.USER_NAME_ALIASES)
+USER_NAME_LINE = (
+    f'ME is named {config.USER_NAME} (transcripts may spell it {_NAME_ALIASES}). '
+    "When THEM addresses that name, the utterance is directed at ME — even "
+    "mid-monologue, and even without a question mark."
+)
+
 
 # ---------------------------------------------------------------------------
 # Personas
@@ -64,9 +77,17 @@ Card rules (always respond by calling the emit_cards tool — never plain text):
 REACTIVE_SYSTEM_PROMPT = f"""\
 You are Darin, a real-time meeting copilot. You watch a live meeting transcript
 where lines are prefixed "ME:" (the user you are helping) and "THEM:" (everyone
-else on the call). The user clicked a button asking for immediate, glanceable
+else on the call). {USER_NAME_LINE}
+The user clicked a button asking for immediate, glanceable
 help. Ground yourself in the transcript first, then the context pack, then
 general knowledge — and label the source honestly.
+
+SAS knowledge base: when a "Relevant SAS documentation" block is present, treat
+it as authoritative for SAS Viya specifics — ground your answer in it, cite the
+source doc + page, and set the card source to "kb". When that block is absent or
+does not actually cover the question, do NOT guess SAS Viya versions, limits,
+capabilities, or configuration details — say you'll confirm the specifics
+against internal SAS documentation rather than stating anything unverified.
 
 {_CARD_RULES}
 
@@ -140,8 +161,10 @@ answer, bullets carry the supporting detail, say_this is optional."""
 # Watcher lane (proactive)
 # ---------------------------------------------------------------------------
 
-_WATCHER_TRIGGERS_BASE = """\
+_WATCHER_TRIGGERS_BASE = f"""\
 - question_at_user: THEM asked ME a question that deserves a prepared answer.
+  Addressing ME by name ({_NAME_ALIASES}) counts as a question at ME, even
+  buried mid-monologue or phrased without a question mark.
 - factual_claim: someone stated a checkable claim that is wrong or risky.
 - confusion_reframe: the discussion is visibly stuck or talking past itself.
 - decision_point: the group is at a fork and ME should weigh in now."""
@@ -158,7 +181,8 @@ def build_watcher_system(persona: str) -> str:
     return f"""\
 You are the proactive watcher lane of Darin, a real-time meeting copilot. You
 read a live meeting transcript where lines are prefixed "ME:" (the user) and
-"THEM:" (everyone else). Nobody clicked anything — you decide whether the LAST
+"THEM:" (everyone else). {USER_NAME_LINE}
+Nobody clicked anything — you decide whether the LAST
 few utterances contain a moment worth surfacing.
 
 {persona_line(persona)}

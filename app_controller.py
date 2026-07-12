@@ -16,6 +16,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
@@ -30,6 +31,10 @@ from services.context_pack import ContextPack
 from services.rolling_summary import RollingSummaryService
 from services.watcher import Watcher
 from storage.meeting_store import MeetingStore
+
+
+if TYPE_CHECKING:
+    from services.knowledge_base import KnowledgeBase
 
 
 class MeetingAlreadyActiveError(RuntimeError):
@@ -115,6 +120,10 @@ class AppController:
         self._watcher: Watcher | None = None
         self._rolling_summary: RollingSummaryService | None = None
         self.context_pack: ContextPack | None = None
+        # Local SAS Viya RAG knowledge base (grounds reactive/Ask/auto-answer
+        # lanes). Bound by the web layer; None = RAG inactive. The proactive
+        # watcher lane deliberately never consults it (latency-critical).
+        self.knowledge_base: KnowledgeBase | None = None
         self._persona: str = "general"
         # F2: per-prompt model override for the proactive watcher lane. None =
         # fall back to config.WATCHER_MODEL. Set/refreshed by the web layer from
@@ -1153,6 +1162,22 @@ class AppController:
                 recent = self._recent_transcript(180.0) or self.current_transcript[-6000:]
                 if recent.strip():
                     blocks.append(f"Most recent transcript (last ~3 minutes):\n{recent}")
+
+            # RAG grounding: retrieved chunks change every query, so they go in
+            # the per-request transcript blocks (never the cached system block).
+            # A KB failure must never break the reactive run — fall back to an
+            # ungrounded answer. The watcher lane never reaches this path.
+            kb = self.knowledge_base
+            if kb and kb.enabled and not kb.is_empty and getattr(prompt_config, "use_rag", True):
+                try:
+                    kb_query = question if question is not None else (
+                        self._recent_transcript(60.0) or ""
+                    )
+                    hits = kb.search(kb_query, k=config.KB_TOP_K)
+                    if hits:
+                        blocks.append(kb.format_for_prompt(hits))
+                except Exception as e:
+                    logger.warning("RAG retrieval failed; continuing ungrounded", error=str(e))
 
             if not any(b.strip() for b in blocks):
                 if self._on_processing_complete:

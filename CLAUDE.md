@@ -12,6 +12,13 @@ Darin Audio Assistant — a real-time meeting copilot. During a session it captu
 # Install dependencies
 uv sync
 
+# Optional: local RAG knowledge base (SAS Viya PDFs). Pulls sentence-transformers
+# + torch (~2GB). Base app runs fine without it (RAG degrades to inactive).
+uv sync --extra rag
+# To avoid CUDA torch wheels on Linux/WSL, pin the CPU index, e.g.:
+#   uv sync --extra rag --extra-index-url https://download.pytorch.org/whl/cpu
+# First KB use downloads the embedding model (~130MB) from HuggingFace.
+
 # Run the application (opens browser with one-time auth token)
 uv run python main.py
 

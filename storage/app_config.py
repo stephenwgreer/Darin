@@ -26,6 +26,9 @@ class CustomPromptConfig:
     # config.REACTIVE_MODEL at registry-effective time.
     model: str = ""
     web_search: bool = False
+    # Opt-in local RAG grounding for this custom prompt. Default off for custom
+    # prompts (built-in reactive prompts default on); see PromptConfig.use_rag.
+    use_rag: bool = False
 
 
 @dataclass
@@ -66,6 +69,9 @@ class AppConfig:
     # Auto-Answer: when True (default) a watcher "question_at_user" card
     # automatically triggers the reactive answer_this pipeline.
     auto_answer_enabled: bool = True
+    # Knowledge base (local RAG). Enable flag + the folder of PDFs to ingest.
+    knowledge_base_enabled: bool = True
+    knowledge_docs_folder: str = ""
 
 
 class AppConfigStore:
@@ -111,6 +117,8 @@ class AppConfigStore:
             watcher_model=watcher_model if isinstance(watcher_model, str) else None,
             auto_hide_expired=bool(data.get("auto_hide_expired", False)),
             auto_answer_enabled=bool(data.get("auto_answer_enabled", True)),
+            knowledge_base_enabled=bool(data.get("knowledge_base_enabled", True)),
+            knowledge_docs_folder=str(data.get("knowledge_docs_folder", "") or ""),
         )
 
     def _backup_corrupt_config(self) -> Path | None:
@@ -137,7 +145,15 @@ class AppConfigStore:
             )
             return []
 
-        known_fields = {"id", "button_text", "output_title", "template", "model", "web_search"}
+        known_fields = {
+            "id",
+            "button_text",
+            "output_title",
+            "template",
+            "model",
+            "web_search",
+            "use_rag",
+        }
         prompts: list[CustomPromptConfig] = []
         for entry in raw_prompts:
             if not isinstance(entry, dict):
@@ -203,6 +219,8 @@ class AppConfigStore:
             "watcher_model": config.watcher_model,
             "auto_hide_expired": config.auto_hide_expired,
             "auto_answer_enabled": config.auto_answer_enabled,
+            "knowledge_base_enabled": config.knowledge_base_enabled,
+            "knowledge_docs_folder": config.knowledge_docs_folder,
         }
         self._path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.debug("Config saved to {}", self._path)

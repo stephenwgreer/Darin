@@ -31,6 +31,7 @@ from prompts.registry import (
 )
 from prompts.templates import PERSONAS
 from services.context_pack import ContextPack
+from services.knowledge_base import KnowledgeBase
 from storage.app_config import AppConfigStore, CustomEndpointConfig, CustomPromptConfig
 from storage.meeting_store import MeetingStore
 from web.sse_event_bus import SSEEventBus
@@ -119,6 +120,14 @@ class PersonaBody(BaseModel):
     persona: str
 
 
+class KnowledgeScanBody(BaseModel):
+    folder: str
+
+
+class KnowledgeToggleBody(BaseModel):
+    enabled: bool
+
+
 class CreateCustomPromptBody(BaseModel):
     button_text: str
     output_title: str
@@ -126,6 +135,7 @@ class CreateCustomPromptBody(BaseModel):
     # Per-prompt model + web search (F6). Empty model = fall back to REACTIVE_MODEL.
     model: str = ""
     web_search: bool = False
+    use_rag: bool = False
 
 
 class UpdatePromptBody(BaseModel):
@@ -135,6 +145,7 @@ class UpdatePromptBody(BaseModel):
     # Per-prompt model + web search (F6). For built-ins these become overrides.
     model: str | None = None
     web_search: bool | None = None
+    use_rag: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +344,69 @@ def create_router(
         await asyncio.to_thread(_persist)
         return {"status": "ok", "persona": body.persona}
 
+    # ---- Knowledge base (SAS RAG corpus) ----------------------------------
+
+    @router.get("/knowledge")
+    async def get_knowledge() -> dict:
+        kb: KnowledgeBase | None = controller.knowledge_base
+        if kb is None:
+            raise HTTPException(status_code=503, detail="Knowledge base unavailable")
+        return await asyncio.to_thread(kb.summary)
+
+    @router.post("/knowledge/scan")
+    async def scan_knowledge(body: KnowledgeScanBody) -> dict:
+        kb: KnowledgeBase | None = controller.knowledge_base
+        if kb is None:
+            raise HTTPException(status_code=503, detail="Knowledge base unavailable")
+        if not Path(body.folder).is_dir():
+            raise HTTPException(status_code=400, detail="Folder does not exist")
+        queued = await asyncio.to_thread(kb.set_folder_and_scan, body.folder)
+
+        # Persist the folder so it survives restart (out-of-band from the
+        # batched Settings save — the scan is an immediate, explicit action).
+        def _persist() -> None:
+            cfg = app_cfg_store.load()
+            cfg.knowledge_docs_folder = body.folder
+            app_cfg_store.save(cfg)
+
+        await asyncio.to_thread(_persist)
+        return {"status": "scanning", "queued": queued}
+
+    @router.delete("/knowledge/{doc_id}")
+    async def delete_knowledge_doc(doc_id: str) -> dict:
+        _validate_path_id(doc_id, kind="doc id")
+        kb: KnowledgeBase | None = controller.knowledge_base
+        if kb is None:
+            raise HTTPException(status_code=503, detail="Knowledge base unavailable")
+        removed = await asyncio.to_thread(kb.delete, doc_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {"status": "ok"}
+
+    @router.get("/knowledge/{doc_id}/chunks")
+    async def get_knowledge_chunks(doc_id: str, limit: int = 5) -> dict:
+        _validate_path_id(doc_id, kind="doc id")
+        kb: KnowledgeBase | None = controller.knowledge_base
+        if kb is None:
+            raise HTTPException(status_code=503, detail="Knowledge base unavailable")
+        chunks = await asyncio.to_thread(kb.preview, doc_id, limit)
+        return {"chunks": chunks}
+
+    @router.post("/knowledge/toggle")
+    async def toggle_knowledge(body: KnowledgeToggleBody) -> dict:
+        kb: KnowledgeBase | None = controller.knowledge_base
+        if kb is None:
+            raise HTTPException(status_code=503, detail="Knowledge base unavailable")
+        kb.enabled = body.enabled
+
+        def _persist() -> None:
+            cfg = app_cfg_store.load()
+            cfg.knowledge_base_enabled = body.enabled
+            app_cfg_store.save(cfg)
+
+        await asyncio.to_thread(_persist)
+        return {"status": "ok", "enabled": body.enabled}
+
     # ---- Data queries -----------------------------------------------------
 
     @router.get("/state")
@@ -463,10 +537,19 @@ def create_router(
             resolved_endpoints = None
 
         if path_changed:
-            # Rebind MeetingStore + ContextPack LIVE — no restart needed.
+            # Rebind MeetingStore + ContextPack + KnowledgeBase LIVE — no restart.
             def _rebind() -> None:
                 controller.meeting_store = MeetingStore(base_dir=path)
                 controller.context_pack = ContextPack(path)
+                old_kb = controller.knowledge_base
+                if old_kb is not None:
+                    old_kb.stop()
+                    controller.knowledge_base = KnowledgeBase(
+                        path,
+                        enabled=old_kb.enabled,
+                        docs_folder=old_kb.docs_folder,
+                        on_progress=lambda ev: bus.put_event("kb_ingest", ev),
+                    )
 
             try:
                 await asyncio.to_thread(_rebind)
@@ -493,6 +576,11 @@ def create_router(
         controller.api_client.model_registry = ModelRegistry(cfg)
         controller.watcher_model = cfg.watcher_model
         controller.auto_answer_enabled = cfg.auto_answer_enabled
+        # Apply persisted KB config live so a toggle/folder change from the
+        # Settings save takes effect without a restart.
+        if controller.knowledge_base is not None:
+            controller.knowledge_base.enabled = cfg.knowledge_base_enabled
+            controller.knowledge_base.docs_folder = cfg.knowledge_docs_folder
         return {"status": "ok"}
 
     @router.post("/pick_folder")
@@ -600,6 +688,7 @@ def create_router(
                     "is_custom": p.bucket == "custom",
                     "model": p.model,
                     "web_search": p.web_search,
+                    "use_rag": p.use_rag,
                 }
                 for p in registry
             ]
@@ -620,6 +709,7 @@ def create_router(
                     template=body.template,
                     model=body.model,
                     web_search=body.web_search,
+                    use_rag=body.use_rag,
                 )
             )
             app_cfg_store.save(cfg)
@@ -647,6 +737,8 @@ def create_router(
                     custom.model = body.model
                 if body.web_search is not None:
                     custom.web_search = body.web_search
+                if body.use_rag is not None:
+                    custom.use_rag = body.use_rag
                 app_cfg_store.save(cfg)
                 return True
 
@@ -665,6 +757,8 @@ def create_router(
                 overrides["model"] = body.model
             if body.web_search is not None:
                 overrides["web_search"] = body.web_search
+            if body.use_rag is not None:
+                overrides["use_rag"] = body.use_rag
             app_cfg_store.save(cfg)
             return True
 

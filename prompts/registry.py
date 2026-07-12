@@ -54,6 +54,9 @@ class PromptConfig:
     # F3: when True and the model is Anthropic, attach the server-side web
     # search tool to this prompt's request. Ignored on openai_compat models.
     web_search: bool = False
+    # When True, ground this prompt's answer in the local SAS knowledge base
+    # (RAG). Built-in reactive prompts default on; custom prompts opt in.
+    use_rag: bool = True
 
 
 PROMPT_REGISTRY = [
@@ -201,6 +204,7 @@ def get_effective_registry(app_config: AppConfig) -> list[PromptConfig]:
                 model=cp.model or config.REACTIVE_MODEL,
                 max_tokens=config.ASK_MAX_TOKENS,
                 web_search=cp.web_search,
+                use_rag=cp.use_rag,
             )
         )
     return result

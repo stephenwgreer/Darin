@@ -44,7 +44,8 @@ class SSEEventBus:
     transcription_complete, processing_complete, progress, stream_text,
     stream_item, section_header, template_setup, interim_transcript,
     final_transcript. New events (Wave 3): card, card_dismissed,
-    watcher_status, usage.
+    watcher_status, usage. Knowledge base (RAG): kb_ingest
+    ({doc_id, status, pct} — status in parsing/embedding/ready/failed).
     """
 
     def __init__(self) -> None:

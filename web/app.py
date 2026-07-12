@@ -35,6 +35,7 @@ from app_controller import AppController
 from middleware.csp import CSPMiddleware
 from middleware.token_auth import TokenAuthMiddleware
 from services.context_pack import ContextPack
+from services.knowledge_base import KnowledgeBase
 from storage.app_config import AppConfigStore
 from storage.meeting_store import MeetingStore
 from web.api_router import create_router
@@ -123,6 +124,14 @@ def create_app(token: str) -> FastAPI:
 
     # Copilot engine wiring (Wave 2): context pack, persona, card/usage events
     controller.context_pack = ContextPack(Path(app_cfg.storage_path))
+    # SAS knowledge base (RAG): retrieval grounding for reactive/Ask/auto-answer.
+    # Ingest progress fans out to the UI as "kb_ingest" SSE events.
+    controller.knowledge_base = KnowledgeBase(
+        Path(app_cfg.storage_path),
+        enabled=app_cfg.knowledge_base_enabled,
+        docs_folder=app_cfg.knowledge_docs_folder,
+        on_progress=lambda ev: bus.put_event("kb_ingest", ev),
+    )
     controller.persona = app_cfg.persona
     controller.on_card = lambda card: bus.put_event("card", card)
     controller.on_card_dismissed = lambda card_id: bus.put_event("card_dismissed", {"id": card_id})
@@ -143,6 +152,20 @@ def create_app(token: str) -> FastAPI:
         test_wav_path = os.environ.get("TEST_AUDIO_WAV")
         if test_wav_path and os.path.exists(test_wav_path):
             await asyncio.to_thread(_load_test_transcript, controller, test_wav_path)
+
+        # Warm the embedder once so the first grounded query isn't cold — only
+        # when there's an index to serve. Fire-and-forget + fail-soft: a missing
+        # rag extra or a failed model download must never block or break startup.
+        kb = controller.knowledge_base
+        if kb is not None and not kb.is_empty:
+
+            async def _warmup_kb() -> None:
+                try:
+                    await asyncio.to_thread(kb.warmup)
+                except Exception as e:  # noqa: BLE001 — warmup must never break boot
+                    logger.warning("Knowledge base warmup failed: {}", e)
+
+            asyncio.create_task(_warmup_kb())
 
         yield
 

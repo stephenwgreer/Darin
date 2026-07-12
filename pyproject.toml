@@ -15,7 +15,9 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26.0,<2.0",
     "soundcard==0.4.3",
-    "comtypes==1.4.10",
+    # comtypes is Windows COM bindings — soundcard's WASAPI backend needs it;
+    # macOS (CoreAudio) and Linux (PulseAudio) backends do not.
+    "comtypes==1.4.10; sys_platform == 'win32'",
     "soundfile==0.13.1",
     "deepgram-sdk>=4,<5",
     "python-dotenv==1.0.0",
@@ -24,6 +26,15 @@ dependencies = [
     "loguru>=0.7.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+]
+
+[project.optional-dependencies]
+# Local RAG knowledge base (SAS Viya PDFs). Heavy (sentence-transformers pulls
+# torch, ~2GB). Install with: uv sync --extra rag
+# To avoid CUDA wheels on Linux, pin the CPU torch index (see CLAUDE.md).
+rag = [
+    "pymupdf>=1.24,<2.0",
+    "sentence-transformers>=3.0",
 ]
 
 [dependency-groups]

@@ -757,6 +757,75 @@ def test_get_custom_prompts_includes_model_and_web_search(tmp_path):
 
 
 @pytest.mark.unit
+def test_create_custom_prompt_round_trips_use_rag(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    resp = client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={
+            "button_text": "Grounded",
+            "output_title": "Out",
+            "template": "t",
+            "use_rag": True,
+        },
+    )
+    assert resp.status_code == 200
+    saved = store.load().custom_prompts[0]
+    assert saved.use_rag is True
+
+
+@pytest.mark.unit
+def test_update_custom_prompt_use_rag(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    pid = client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={"button_text": "Mine", "output_title": "Out", "template": "t"},
+    ).json()["id"]
+    resp = client.put(
+        f"/api/custom_prompts/{pid}?token={TOKEN}",
+        json={"use_rag": True},
+    )
+    assert resp.status_code == 200
+    saved = store.load().custom_prompts[0]
+    assert saved.use_rag is True
+
+
+@pytest.mark.unit
+def test_update_builtin_prompt_writes_use_rag_override(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    resp = client.put(
+        f"/api/custom_prompts/fact_check?token={TOKEN}",
+        json={"use_rag": False},
+    )
+    assert resp.status_code == 200
+    overrides = store.load().prompt_overrides["fact_check"]
+    assert overrides["use_rag"] is False
+
+
+@pytest.mark.unit
+def test_get_custom_prompts_includes_use_rag(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={
+            "button_text": "Grounded",
+            "output_title": "Out",
+            "template": "t",
+            "use_rag": True,
+        },
+    )
+    prompts = client.get(f"/api/custom_prompts?token={TOKEN}").json()["prompts"]
+    mine = next(p for p in prompts if p["button_text"] == "Grounded")
+    assert mine["use_rag"] is True
+    # Built-in reactive prompts default use_rag=True so the editor pre-checks the box.
+    fact = next(p for p in prompts if p["id"] == "fact_check")
+    assert fact["use_rag"] is True
+
+
+@pytest.mark.unit
 def test_post_settings_refreshes_model_registry(tmp_path):
     store = AppConfigStore(config_path=tmp_path / "config.json")
     ctrl = _mock_controller()
@@ -1000,3 +1069,115 @@ def test_meeting_id_validation_accepts_store_format() -> None:
     resp = client.get(f"/api/meetings/2026-07-09_141323/transcript?token={TOKEN}")
     assert resp.status_code == 404
     ctrl.meeting_store.get_meeting.assert_called_once_with("2026-07-09_141323")
+
+
+# ---------------------------------------------------------------------------
+# /api/knowledge (SAS RAG corpus) — Phase 5
+# ---------------------------------------------------------------------------
+
+
+def _client_with_kb(tmp_path):
+    """Client wired to a real KnowledgeBase (FakeEmbedder, empty index)."""
+    from services.knowledge_base import FakeEmbedder, KnowledgeBase
+
+    ctrl = _mock_controller()
+    ctrl.knowledge_base = KnowledgeBase(
+        tmp_path, enabled=True, docs_folder="", embedder=FakeEmbedder()
+    )
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(controller=ctrl, app_cfg_store=store)
+    return client, ctrl, store
+
+
+@pytest.mark.unit
+def test_get_knowledge_returns_summary_shape(tmp_path):
+    client, _, _ = _client_with_kb(tmp_path)
+    resp = client.get(f"/api/knowledge?token={TOKEN}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == {
+        "enabled",
+        "docs_folder",
+        "doc_count",
+        "chunk_count",
+        "total_bytes",
+        "embed_model",
+        "docs",
+    }
+    assert body["enabled"] is True
+    assert body["doc_count"] == 0
+    assert body["docs"] == []
+
+
+@pytest.mark.unit
+def test_knowledge_unavailable_returns_503(tmp_path):
+    ctrl = _mock_controller()
+    ctrl.knowledge_base = None
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(controller=ctrl, app_cfg_store=store)
+    assert client.get(f"/api/knowledge?token={TOKEN}").status_code == 503
+    assert (
+        client.post(f"/api/knowledge/scan?token={TOKEN}", json={"folder": "/x"}).status_code == 503
+    )
+    assert client.delete(f"/api/knowledge/doc1?token={TOKEN}").status_code == 503
+    assert client.get(f"/api/knowledge/doc1/chunks?token={TOKEN}").status_code == 503
+    assert (
+        client.post(f"/api/knowledge/toggle?token={TOKEN}", json={"enabled": False}).status_code
+        == 503
+    )
+
+
+@pytest.mark.unit
+def test_scan_bad_folder_returns_400(tmp_path):
+    client, _, _ = _client_with_kb(tmp_path)
+    missing = str(tmp_path / "does_not_exist")
+    resp = client.post(f"/api/knowledge/scan?token={TOKEN}", json={"folder": missing})
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_scan_valid_folder_persists_docs_folder(tmp_path):
+    client, _, store = _client_with_kb(tmp_path)
+    docs = tmp_path / "sas_docs"
+    docs.mkdir()
+    resp = client.post(f"/api/knowledge/scan?token={TOKEN}", json={"folder": str(docs)})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "scanning"
+    assert body["queued"] == 0  # empty folder → nothing enqueued
+    assert store.load().knowledge_docs_folder == str(docs)
+
+
+@pytest.mark.unit
+def test_delete_invalid_id_returns_400(tmp_path):
+    client, _, _ = _client_with_kb(tmp_path)
+    # A single path segment that reaches the handler but fails the id allowlist
+    # (dot is not in _SAFE_ID_RE) — traversal-shaped ids are rejected pre-store.
+    resp = client.delete(f"/api/knowledge/bad.id?token={TOKEN}")
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_delete_missing_doc_returns_404(tmp_path):
+    client, _, _ = _client_with_kb(tmp_path)
+    resp = client.delete(f"/api/knowledge/ghost-doc?token={TOKEN}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.unit
+def test_knowledge_chunks_empty_for_unknown_doc(tmp_path):
+    client, _, _ = _client_with_kb(tmp_path)
+    resp = client.get(f"/api/knowledge/ghost-doc/chunks?token={TOKEN}&limit=3")
+    assert resp.status_code == 200
+    assert resp.json() == {"chunks": []}
+
+
+@pytest.mark.unit
+def test_toggle_persists_to_app_config(tmp_path):
+    client, ctrl, store = _client_with_kb(tmp_path)
+    resp = client.post(f"/api/knowledge/toggle?token={TOKEN}", json={"enabled": False})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "enabled": False}
+    # Live on the KB instance AND persisted to AppConfig.
+    assert ctrl.knowledge_base.enabled is False
+    assert store.load().knowledge_base_enabled is False

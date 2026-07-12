@@ -30,9 +30,17 @@ FALLBACK_SAMPLE_RATE: Final[int] = 48000
 DEEPGRAM_MODEL: Final[str] = "nova-3"
 DEEPGRAM_LANGUAGE: Final[str] = "en-US"
 DEEPGRAM_SAMPLE_RATE: Final[int] = 16000
+# The user's name, as spoken on calls. ALIASES cover the spellings the
+# transcription layer actually produces ("Stephen" and "Steven" are homophones
+# — Deepgram may emit either). Used by the live-lane prompts so questions
+# addressed by name are treated as directed at ME.
+USER_NAME: Final[str] = "Stephen"
+USER_NAME_ALIASES: Final[tuple[str, ...]] = ("Stephen", "Steven")
+
 # Domain vocabulary boosted via nova-3 keyterm prompting (user-editable later
-# via AppConfig; empty list = no boosting).
-DEEPGRAM_KEYTERMS: Final[list[str]] = []
+# via AppConfig; empty list = no boosting). The user's name is boosted so it
+# transcribes reliably when colleagues address ME directly.
+DEEPGRAM_KEYTERMS: Final[list[str]] = [USER_NAME]
 
 # Model tiers (verified live 2026-07-10 — both IDs resolve on the Anthropic API).
 # WATCHER_MODEL: proactive watcher ticks, titles, rolling summary, map-reduce.
@@ -74,6 +82,24 @@ ROLLING_SUMMARY_MAX_TOKENS: Final[int] = 400
 
 # Context pack budget (estimated as len(text.split()) * 1.3).
 CONTEXT_PACK_MAX_TOKENS: Final[int] = 20_000
+
+# Knowledge base (local RAG over SAS Viya PDFs). Retrieval augments the
+# reactive / Ask / Auto-Answer lanes (never the latency-critical watcher) and
+# any custom prompt that opts in. Requires the optional `rag` extra
+# (sentence-transformers + pymupdf); the base app runs fine without it.
+KB_ENABLED_DEFAULT: Final[bool] = True
+KB_EMBED_MODEL: Final[str] = "BAAI/bge-small-en-v1.5"  # 384-dim, ~130MB, CPU ~10ms/query
+KB_EMBED_MODEL_FALLBACK: Final[str] = "sentence-transformers/all-MiniLM-L6-v2"
+KB_TOP_K: Final[int] = 4
+# Cosine floor below which a hit is discarded — an empty result triggers the
+# prompt's honesty guardrail (defer to internal SAS sources) rather than a
+# bluff. Tune empirically against real Viya docs.
+KB_MIN_SIMILARITY: Final[float] = 0.35
+# Injected-context cap (context-rot cliff ~2500 tokens); over-stuffing hurts.
+KB_CONTEXT_MAX_TOKENS: Final[int] = 2500
+KB_CHUNK_TOKENS: Final[int] = 480
+KB_CHUNK_OVERLAP_FRAC: Final[float] = 0.15
+KB_INDEX_VERSION: Final[int] = 1
 
 
 def validate_api_keys(
