@@ -53,6 +53,21 @@ TITLE_MAX_TOKENS: Final[int] = 64
 WATCHER_TIMEOUT_S: Final[float] = 8.0
 WATCHER_MAX_RETRIES: Final[int] = 0
 
+# OpenAI-compatible provider client (custom endpoints): mirror the Anthropic
+# lane retry/timeout posture. Watcher lane = fail fast; everything else uses the
+# SDK defaults (2 retries, 10-min timeout).
+OPENAI_COMPAT_WATCHER_TIMEOUT_S: Final[float] = 8.0
+OPENAI_COMPAT_WATCHER_MAX_RETRIES: Final[int] = 0
+
+# Anthropic server-side web-search tool (F3). Verified live 2026-07-11 against
+# anthropic-sdk 0.78.0: claude-sonnet-5 accepts BOTH the dynamic-filtering
+# `web_search_20260209` variant (which actually searched) and the basic
+# `web_search_20250305`. The 20260209 variant requires an Opus-4.6+/Sonnet-4.6+
+# class model; Haiku falls back to the basic variant.
+ANTHROPIC_WEB_SEARCH_TOOL_TYPE: Final[str] = "web_search_20260209"
+ANTHROPIC_WEB_SEARCH_TOOL_TYPE_BASIC: Final[str] = "web_search_20250305"
+ANTHROPIC_WEB_SEARCH_MAX_USES: Final[int] = 4
+
 # Background lane: rolling summary cadence (~every 5 min of meeting time).
 ROLLING_SUMMARY_INTERVAL_S: Final[float] = 300.0
 ROLLING_SUMMARY_MAX_TOKENS: Final[int] = 400

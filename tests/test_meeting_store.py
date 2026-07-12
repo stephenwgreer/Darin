@@ -257,3 +257,45 @@ class TestTranscriptFile:
         assert elapsed < 1.0, f"Transcript retrieval took {elapsed:.3f}s (must be < 1s)"
         assert "Segment number 0" in transcript
         assert "Segment number 3599" in transcript
+
+
+class TestCardPersistence:
+    def test_append_and_get_cards_round_trip(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        store.append_card(
+            meeting_id, {"id": "card_1", "headline": "First", "cues": ["ask pricing"]}
+        )
+        store.append_card(meeting_id, {"id": "card_2", "headline": "Second", "cues": []})
+        cards = store.get_cards(meeting_id)
+        assert len(cards) == 2
+        assert cards[0]["id"] == "card_1"
+        assert cards[0]["headline"] == "First"
+        assert cards[0]["cues"] == ["ask pricing"]
+        assert cards[1]["id"] == "card_2"
+        # Every persisted card gets an ISO timestamp.
+        assert "ts" in cards[0] and "ts" in cards[1]
+
+    def test_get_cards_empty_when_none_persisted(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        assert store.get_cards(meeting_id) == []
+
+    def test_append_card_skips_missing_meeting_dir(self, store: MeetingStore) -> None:
+        # No exception even though the meeting was never created.
+        store.append_card("2099-01-01_000000", {"id": "x", "headline": "h"})
+        assert store.get_cards("2099-01-01_000000") == []
+
+    def test_get_cards_skips_corrupt_lines(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        store.append_card(meeting_id, {"id": "card_1", "headline": "Good"})
+        with store._cards_path(meeting_id).open("a", encoding="utf-8") as f:
+            f.write("{not valid json\n")
+        store.append_card(meeting_id, {"id": "card_2", "headline": "AlsoGood"})
+        cards = store.get_cards(meeting_id)
+        assert [c["id"] for c in cards] == ["card_1", "card_2"]
+
+    def test_cards_survive_ordering(self, store: MeetingStore) -> None:
+        meeting_id = store.start_meeting()
+        for i in range(5):
+            store.append_card(meeting_id, {"id": f"card_{i}", "headline": f"H{i}"})
+        cards = store.get_cards(meeting_id)
+        assert [c["id"] for c in cards] == [f"card_{i}" for i in range(5)]

@@ -189,6 +189,17 @@ class TestCopilotServiceLifecycle:
         loop.run_until_complete(controller.stop_meeting())
         loop.close()
 
+    def test_watcher_model_override_propagates_to_watcher(self, controller: AppController) -> None:
+        controller.watcher_model = "claude-sonnet-5"
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+
+        assert controller._watcher is not None
+        assert controller._watcher._model == "claude-sonnet-5"
+
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
     def test_stop_meeting_stops_watcher_and_rolling_summary(
         self, controller: AppController
     ) -> None:
@@ -267,3 +278,41 @@ class TestGetMeetingTranscript:
         # _active_meeting_id is cleared by stop_streaming, but _last_meeting_id preserves it
         result = controller.get_meeting_transcript()
         assert result == "Hello world transcript"
+
+
+class TestCardPersistence:
+    """F4: every emitted card (both lanes) is appended to the meeting store."""
+
+    def test_emit_card_persists_to_store(self, controller: AppController) -> None:
+        from services.cards import parse_card
+
+        controller._active_meeting_id = "2026-07-09_141323"
+        card = parse_card(
+            {"type": "answer", "headline": "H", "cues": ["ask pricing"]}, lane="proactive"
+        )
+        assert card is not None
+        controller._emit_card(card)
+        controller._meeting_store.append_card.assert_called_once()
+        mid, card_dict = controller._meeting_store.append_card.call_args.args
+        assert mid == "2026-07-09_141323"
+        assert card_dict["headline"] == "H"
+        assert card_dict["cues"] == ["ask pricing"]
+
+    def test_emit_card_no_meeting_id_does_not_persist(self, controller: AppController) -> None:
+        from services.cards import parse_card
+
+        controller._active_meeting_id = None
+        card = parse_card({"type": "answer", "headline": "H"}, lane="reactive")
+        assert card is not None
+        controller._emit_card(card)
+        controller._meeting_store.append_card.assert_not_called()
+
+    def test_emit_card_persistence_failure_does_not_raise(self, controller: AppController) -> None:
+        from services.cards import parse_card
+
+        controller._active_meeting_id = "2026-07-09_141323"
+        controller._meeting_store.append_card.side_effect = OSError("disk full")
+        card = parse_card({"type": "answer", "headline": "H"}, lane="reactive")
+        assert card is not None
+        # Must not raise — persistence failure never kills a lane.
+        controller._emit_card(card)

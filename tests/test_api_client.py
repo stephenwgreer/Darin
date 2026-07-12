@@ -23,8 +23,11 @@ from api.client import (
     ApiClient,
     build_system_blocks,
     build_transcript_messages,
+    build_web_search_tool,
     estimate_cost_usd,
 )
+from api.providers import ModelRegistry
+from storage.app_config import AppConfig, CustomEndpointConfig
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +647,285 @@ class TestUsageTelemetry:
             client.on_usage = Mock(side_effect=RuntimeError("bad consumer"))
 
             assert client.process_with_anthropic("t", stream=False) == "ok"
+
+
+def make_web_search_cards_response(
+    cards: list[dict], *, stop_reason: str = "end_turn", text: str = ""
+) -> Mock:
+    """A response mixing a text block + an emit_cards tool_use (web-search shape)."""
+    content: list[Mock] = []
+    if text:
+        tb = Mock()
+        tb.type = "text"
+        tb.text = text
+        content.append(tb)
+    if cards is not None:
+        block = Mock()
+        block.type = "tool_use"
+        block.name = "emit_cards"
+        block.input = {"cards": cards}
+        content.append(block)
+    response = Mock()
+    response.content = content
+    response.usage = make_usage()
+    response.stop_reason = stop_reason
+    return response
+
+
+def make_pause_turn_response() -> Mock:
+    """A server-tool pause_turn response (no emit_cards yet)."""
+    stu = Mock()
+    stu.type = "server_tool_use"
+    stu.name = "web_search"
+    response = Mock()
+    response.content = [stu]
+    response.usage = make_usage()
+    response.stop_reason = "pause_turn"
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Tests: provider routing (F2)
+# ---------------------------------------------------------------------------
+
+
+def _openai_registry() -> ModelRegistry:
+    return ModelRegistry(
+        AppConfig(
+            custom_endpoints=[
+                CustomEndpointConfig(
+                    id="groq",
+                    label="Groq",
+                    base_url="https://api.groq.com/openai/v1",
+                    model_name="llama-3.3-70b",
+                    api_key="gsk_x",
+                )
+            ]
+        )
+    )
+
+
+class TestProviderRouting:
+    """create_cards / process_with_anthropic route by model id via the registry."""
+
+    def test_create_cards_routes_openai_compat_to_adapter(
+        self, mock_anthropic_class: MagicMock, valid_keys: dict[str, str]
+    ) -> None:
+        client = ApiClient(**valid_keys, model_registry=_openai_registry())
+        with patch("api.client.create_cards_openai") as mock_adapter:
+            mock_adapter.return_value = []
+            client.create_cards(
+                lane="reactive",
+                model="groq",
+                max_tokens=400,
+                system=build_system_blocks("sys"),
+                messages=build_transcript_messages(["t"], "i"),
+            )
+        mock_adapter.assert_called_once()
+        assert mock_adapter.call_args.kwargs["card_lane"] == "reactive"
+
+    def test_create_cards_openai_compat_ignores_web_search(
+        self, mock_anthropic_class: MagicMock, valid_keys: dict[str, str]
+    ) -> None:
+        client = ApiClient(**valid_keys, model_registry=_openai_registry())
+        with (
+            patch("api.client.create_cards_openai") as mock_adapter,
+            patch("api.client.logger") as mock_logger,
+        ):
+            mock_adapter.return_value = []
+            client.create_cards(
+                lane="reactive",
+                model="groq",
+                max_tokens=400,
+                system=build_system_blocks("sys"),
+                messages=build_transcript_messages(["t"], "i"),
+                web_search=True,
+            )
+        warnings = [str(c.args[0]) for c in mock_logger.warning.call_args_list]
+        assert any("web_search" in m for m in warnings)
+
+    def test_anthropic_model_still_uses_native_forced_tool(
+        self, valid_keys: dict[str, str]
+    ) -> None:
+        with patch("api.client.Anthropic") as mock_cls:
+            mock_sdk = Mock()
+            mock_cls.return_value = mock_sdk
+            mock_sdk.messages.create.return_value = make_cards_response([])
+            client = ApiClient(**valid_keys, model_registry=ModelRegistry(AppConfig()))
+            client.create_cards(
+                lane="reactive",
+                model="claude-sonnet-5",
+                max_tokens=400,
+                system=build_system_blocks("sys"),
+                messages=build_transcript_messages(["t"], "i"),
+            )
+            kwargs = mock_sdk.messages.create.call_args.kwargs
+            assert kwargs["tool_choice"] == {"type": "tool", "name": "emit_cards"}
+
+    def test_unknown_model_with_no_registry_uses_native(self, valid_keys: dict[str, str]) -> None:
+        with patch("api.client.Anthropic") as mock_cls:
+            mock_sdk = Mock()
+            mock_cls.return_value = mock_sdk
+            mock_sdk.messages.create.return_value = make_cards_response([])
+            client = ApiClient(**valid_keys)  # no registry
+            cards = client.create_cards(
+                lane="reactive",
+                model="anything",
+                max_tokens=400,
+                system=build_system_blocks("sys"),
+                messages=build_transcript_messages(["t"], "i"),
+            )
+            assert cards == []
+            mock_sdk.messages.create.assert_called_once()
+
+    def test_process_with_anthropic_routes_openai_compat(self, valid_keys: dict[str, str]) -> None:
+        with patch("api.client.Anthropic") as mock_cls:
+            mock_cls.return_value = Mock()
+            client = ApiClient(**valid_keys, model_registry=_openai_registry())
+            with patch("api.client.process_openai") as mock_proc:
+                mock_proc.return_value = "openai text"
+                out = client.process_with_anthropic("t", stream=False, model="groq")
+            assert out == "openai text"
+            mock_proc.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests: web search (F3)
+# ---------------------------------------------------------------------------
+
+
+class TestWebSearch:
+    @pytest.fixture
+    def client_with_mock_anthropic(
+        self, valid_keys: dict[str, str]
+    ) -> Iterator[tuple[ApiClient, Mock]]:
+        with patch("api.client.Anthropic") as mock_cls:
+            mock_sdk = Mock()
+            mock_cls.return_value = mock_sdk
+            client = ApiClient(**valid_keys, model_registry=ModelRegistry(AppConfig()))
+            yield client, mock_sdk
+
+    def test_build_web_search_tool_variant_by_model(self) -> None:
+        assert (
+            build_web_search_tool("claude-sonnet-5")["type"]
+            == config.ANTHROPIC_WEB_SEARCH_TOOL_TYPE
+        )
+        assert (
+            build_web_search_tool("claude-haiku-4-5")["type"]
+            == config.ANTHROPIC_WEB_SEARCH_TOOL_TYPE_BASIC
+        )
+
+    def test_web_search_attaches_tool_and_unforced_choice(
+        self, client_with_mock_anthropic: tuple[ApiClient, Mock]
+    ) -> None:
+        client, mock_sdk = client_with_mock_anthropic
+        mock_sdk.messages.create.return_value = make_web_search_cards_response(
+            [{"type": "answer", "headline": "hi"}]
+        )
+        client.create_cards(
+            lane="reactive",
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=build_system_blocks("sys"),
+            messages=build_transcript_messages(["t"], "i"),
+            web_search=True,
+        )
+        kwargs = mock_sdk.messages.create.call_args.kwargs
+        tool_types = {t.get("type") for t in kwargs["tools"]}
+        assert "web_search_20260209" in tool_types
+        # emit_cards must NOT be force-selected (model needs to search first).
+        assert "tool_choice" not in kwargs
+        # thinking stays adaptive (not disabled) when searching.
+        assert "thinking" not in kwargs
+
+    def test_web_search_cards_marked_knowledge(
+        self, client_with_mock_anthropic: tuple[ApiClient, Mock]
+    ) -> None:
+        client, mock_sdk = client_with_mock_anthropic
+        mock_sdk.messages.create.return_value = make_web_search_cards_response(
+            [{"type": "answer", "headline": "searched", "source": "transcript"}]
+        )
+        cards = client.create_cards(
+            lane="reactive",
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=build_system_blocks("sys"),
+            messages=build_transcript_messages(["t"], "i"),
+            web_search=True,
+        )
+        assert cards[0].source == "knowledge"
+
+    def test_web_search_kb_grounded_source_preserved(
+        self, client_with_mock_anthropic: tuple[ApiClient, Mock]
+    ) -> None:
+        client, mock_sdk = client_with_mock_anthropic
+        mock_sdk.messages.create.return_value = make_web_search_cards_response(
+            [{"type": "answer", "headline": "kb", "source": "kb"}]
+        )
+        cards = client.create_cards(
+            lane="reactive",
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=build_system_blocks("sys"),
+            messages=build_transcript_messages(["t"], "i"),
+            web_search=True,
+        )
+        assert cards[0].source == "kb"
+
+    def test_web_search_resumes_on_pause_turn(
+        self, client_with_mock_anthropic: tuple[ApiClient, Mock]
+    ) -> None:
+        client, mock_sdk = client_with_mock_anthropic
+        mock_sdk.messages.create.side_effect = [
+            make_pause_turn_response(),
+            make_web_search_cards_response([{"type": "answer", "headline": "done"}]),
+        ]
+        cards = client.create_cards(
+            lane="reactive",
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=build_system_blocks("sys"),
+            messages=build_transcript_messages(["t"], "i"),
+            web_search=True,
+        )
+        assert mock_sdk.messages.create.call_count == 2
+        assert cards[0].headline == "done"
+
+    def test_web_search_text_json_fallback(
+        self, client_with_mock_anthropic: tuple[ApiClient, Mock]
+    ) -> None:
+        """No emit_cards tool_use → parse the text block as JSON."""
+        client, mock_sdk = client_with_mock_anthropic
+        mock_sdk.messages.create.return_value = make_web_search_cards_response(
+            None,  # no tool_use block
+            text='{"cards": [{"type": "answer", "headline": "from text"}]}',
+        )
+        cards = client.create_cards(
+            lane="reactive",
+            model="claude-sonnet-5",
+            max_tokens=400,
+            system=build_system_blocks("sys"),
+            messages=build_transcript_messages(["t"], "i"),
+            web_search=True,
+        )
+        assert len(cards) == 1
+        assert cards[0].headline == "from text"
+
+    def test_process_with_anthropic_web_search_attaches_tool(
+        self, valid_keys: dict[str, str]
+    ) -> None:
+        with patch("api.client.Anthropic") as mock_cls:
+            mock_sdk = Mock()
+            mock_cls.return_value = mock_sdk
+            mock_sdk.messages.create.return_value = make_text_response("ok")
+            client = ApiClient(**valid_keys, model_registry=ModelRegistry(AppConfig()))
+            client.process_with_anthropic(
+                "text", stream=False, model="claude-sonnet-5", web_search=True
+            )
+            kwargs = mock_sdk.messages.create.call_args.kwargs
+            assert kwargs["tools"][0]["name"] == "web_search"
+            # thinking not disabled while searching
+            assert "thinking" not in kwargs
 
 
 # ---------------------------------------------------------------------------

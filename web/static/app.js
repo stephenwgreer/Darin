@@ -9,8 +9,10 @@
  * APP_TOKEN is set by /static/boot.js (no inline scripts — CSP-friendly).
  *
  * Two lanes render here:
- *   - live lanes (watcher + 5 reactive buttons + Ask): atomic 'card' SSE
- *     events rendered into the card feed. Card content is inserted with
+ *   - live lanes (watcher + every reactive registry button + Ask): atomic
+ *     'card' SSE events rendered into the card feed. The action bar renders
+ *     ALL reactive prompts from /api/prompts — no hard-coded button count.
+ *     Card content is inserted with
  *     textContent only — never innerHTML.
  *   - post-meeting lane: long-form streaming (template_setup / stream_item /
  *     stream_text / section_header) into the output panel. stream_text is
@@ -73,7 +75,9 @@ const el = {
   usageLine:         $('usage-line'),
   btnLast30:         $('btn-last-30'),
   btnLast60:         $('btn-last-60'),
+  layout:            $('layout'),
   transcriptStrip:   $('transcript-strip'),
+  transcriptScroll:  $('transcript-scroll'),
   stripFinals:       $('strip-finals'),
   stripInterims:     $('strip-interims'),
   actionButtons:     $('action-buttons'),
@@ -101,6 +105,9 @@ const el = {
 
 let currentState = 'idle';
 let currentPersona = 'general';
+// F4 retention: when false (default) expired proactive cards dim + collapse to
+// a headline + cues (kept in the feed); when true they fade out and are removed.
+let autoHideExpired = false;
 
 // ── requestAnimationFrame render queue ─────────────────────────────────────
 // Every SSE-driven DOM write is enqueued here and flushed once per frame.
@@ -243,6 +250,9 @@ function applyState(state) {
   // Recording indicator + live strip exist ONLY while a session is active.
   el.recIndicator.hidden = state !== 'active';
   el.transcriptStrip.hidden = state !== 'active';
+  // The transcript sidebar column only reserves grid space while it is shown,
+  // so the main column spans full width when there is no live transcript.
+  el.layout.classList.toggle('with-sidebar', state === 'active');
   if (state !== 'active') el.timerLabel.textContent = '00:00:00';
 
   el.btnLast30.disabled = state !== 'active';
@@ -283,15 +293,33 @@ function resetSessionUI() {
   el.progressBar.hidden = true;
 }
 
-// ── Live transcript strip ──────────────────────────────────────────────────
-// Interim lines are muted and replaced in place (one per speaker); finals
-// push in above and only the last MAX_STRIP_LINES stay visible.
+// ── Live transcript sidebar ─────────────────────────────────────────────────
+// The transcript lives in a right-hand, viewport-bound sidebar (F1). Finals
+// accumulate newest-at-bottom inside an internally-scrolling column; interim
+// lines are muted and replaced in place (one per speaker) below the finals.
+// The column auto-scrolls to the newest line UNLESS the user has scrolled up.
 
-const MAX_STRIP_LINES = 3;
+const MAX_STRIP_LINES = 300;
 const interimBySpeaker = new Map();   // speakerKey → element
 const pendingInterims = new Map();    // speakerKey → {text, speaker}
 const pendingFinals = [];
 let transcriptFlushQueued = false;
+let transcriptAutoScroll = true;
+
+function transcriptNearBottom() {
+  const s = el.transcriptScroll;
+  return s.scrollHeight - s.scrollTop - s.clientHeight < 48;
+}
+
+function maybeAutoScrollTranscript() {
+  if (transcriptAutoScroll) el.transcriptScroll.scrollTop = el.transcriptScroll.scrollHeight;
+}
+
+el.transcriptScroll.addEventListener('scroll', () => {
+  // Pause auto-scroll the moment the user scrolls up; resume once they return
+  // to (near) the bottom.
+  transcriptAutoScroll = transcriptNearBottom();
+});
 
 function speakerKey(speaker) {
   return speaker === 'ME' || speaker === 'THEM' ? speaker : 'UNK';
@@ -344,6 +372,7 @@ function flushTranscript() {
     }
   }
   pendingInterims.clear();
+  maybeAutoScrollTranscript();
 }
 
 function clearTranscriptStrip() {
@@ -352,6 +381,7 @@ function clearTranscriptStrip() {
   interimBySpeaker.clear();
   pendingInterims.clear();
   pendingFinals.length = 0;
+  transcriptAutoScroll = true;
 }
 
 // ── Card feed ──────────────────────────────────────────────────────────────
@@ -371,10 +401,31 @@ function updateFeedEmpty() {
   el.feedEmpty.hidden = el.cardFeed.children.length > 0;
 }
 
+function buildCardCues(cues) {
+  const row = document.createElement('div');
+  row.className = 'card-cues';
+  for (const cue of cues.slice(0, 3)) {
+    if (!cue) continue;
+    const badge = document.createElement('span');
+    badge.className = 'card-cue';
+    badge.textContent = cue;
+    row.appendChild(badge);
+  }
+  return row.children.length ? row : null;
+}
+
 function buildCardElement(card) {
   const article = document.createElement('article');
   article.className = `copilot-card lane-${card.lane} urgency-${card.urgency}`;
   article.dataset.cardId = card.id;
+
+  // Aged cards collapse to headline + cues; clicking the card (outside its
+  // buttons) re-expands the full body.
+  article.addEventListener('click', e => {
+    if (!article.classList.contains('aged')) return;
+    if (e.target.closest('button')) return;
+    article.classList.toggle('aged-expanded');
+  });
 
   const top = document.createElement('div');
   top.className = 'card-top';
@@ -423,6 +474,12 @@ function buildCardElement(card) {
     article.appendChild(ul);
   }
 
+  // F4: instant-glance cue badges between bullets and say_this.
+  if (Array.isArray(card.cues) && card.cues.length > 0) {
+    const cueRow = buildCardCues(card.cues);
+    if (cueRow) article.appendChild(cueRow);
+  }
+
   if (card.say_this) {
     const say = document.createElement('div');
     say.className = 'say-this';
@@ -469,17 +526,36 @@ function renderCard(card) {
   el.cardFeed.prepend(node);
   updateFeedEmpty();
 
-  // Proactive cards fade out at expires_in_s; reactive cards stay pinned
-  // until dismissed.
+  // Proactive cards transition at expires_in_s: by default they age (dim +
+  // collapse, kept below the fresh cards); with auto_hide_expired on they fade
+  // out and are removed (old behavior). Reactive cards stay pinned until
+  // dismissed.
   if (card.lane === 'proactive') {
     const expireMs = Math.max(5, Number(card.expires_in_s) || 45) * 1000;
     const t1 = setTimeout(() => {
-      node.classList.add('expiring');
-      const t2 = setTimeout(() => removeCard(card.id), 700);
-      cardExpiryTimers.set(card.id, [t2]);
+      if (autoHideExpired) {
+        node.classList.add('expiring');
+        const t2 = setTimeout(() => removeCard(card.id), 700);
+        cardExpiryTimers.set(card.id, [t2]);
+      } else {
+        ageCard(card.id);
+      }
     }, expireMs);
     cardExpiryTimers.set(card.id, [t1]);
   }
+}
+
+// Move a card to its aged/compact state: dimmed, collapsed to headline + cues,
+// sunk below the fresh cards. Idempotent.
+function ageCard(cardId) {
+  const timers = cardExpiryTimers.get(cardId);
+  if (timers) { timers.forEach(clearTimeout); cardExpiryTimers.delete(cardId); }
+  const node = el.cardFeed.querySelector(`[data-card-id="${CSS.escape(cardId)}"]`);
+  if (!node || node.classList.contains('aged')) return;
+  node.classList.remove('expiring', 'aged-expanded');
+  node.classList.add('aged');
+  el.cardFeed.appendChild(node); // sink beneath the fresh cards
+  updateFeedEmpty();
 }
 
 function removeCard(cardId) {
@@ -500,13 +576,18 @@ function clearCardFeed() {
 async function dismissCard(cardId) {
   const resp = await apiPost(`/api/cards/${encodeURIComponent(cardId)}/dismiss`);
   if (resp && resp.ok) {
-    removeCard(cardId); // card_dismissed SSE also fires; removeCard is idempotent
+    // Compact into history instead of vanishing; the dismiss endpoint still
+    // ran so watcher topic-suppression keeps working. The card_dismissed SSE
+    // also fires; ageCard is idempotent.
+    ageCard(cardId);
   } else {
     showToast('Dismiss failed');
   }
 }
 
-// ── Action bar (5 reactive buttons + custom prompts) ───────────────────────
+// ── Action bar (all reactive registry prompts + custom prompts) ────────────
+// Every reactive prompt returned by /api/prompts becomes a button — the count
+// is whatever the backend registry defines (no hard-coded button count).
 
 function buildReactiveButton(cfg, extraClass) {
   const btn = document.createElement('button');
@@ -597,12 +678,12 @@ async function loadPrompts() {
 }
 
 function rebuildCustomActions(customConfigs) {
-  const editBtn = $('btn-open-prompt-editor');
+  // The prompt-editor entry point now lives as a gear in the nav (F6); this
+  // row holds only the custom reactive buttons.
   el.customActions.textContent = '';
   customConfigs.forEach(cfg => {
     el.customActions.appendChild(buildReactiveButton(cfg, 'btn-action-custom'));
   });
-  el.customActions.appendChild(editBtn);
 }
 
 async function reloadCustomBucket() {
@@ -644,7 +725,8 @@ const handlers = {
   },
 
   card_dismissed(data) {
-    enqueueRender(() => removeCard(data.id));
+    // Dismissed cards compact into history rather than disappearing (F4).
+    enqueueRender(() => ageCard(data.id));
   },
 
   watcher_status(data) {
@@ -989,6 +1071,106 @@ $('ctx-textarea').addEventListener('input', () => {
   updateCtxTokenCount();
 });
 
+// ── Custom model endpoints (Settings) ───────────────────────────────────────
+// GET /api/settings returns api_key masked to its last 4 chars; on save we send
+// the full value if the user typed one, or the "__unchanged__" sentinel to keep
+// the stored key untouched.
+
+const UNCHANGED_SENTINEL = '__unchanged__';
+
+function slugifyEndpointId(label) {
+  const base = (label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `ep-${base || 'endpoint'}-${Date.now().toString(36)}`;
+}
+
+function buildEndpointRow(ep) {
+  ep = ep || {};
+  const row = document.createElement('div');
+  row.className = 'endpoint-row';
+  row.dataset.endpointId = ep.id || slugifyEndpointId(ep.label);
+
+  const grid = document.createElement('div');
+  grid.className = 'endpoint-fields';
+
+  const mkInput = (cls, placeholder, value) => {
+    const input = document.createElement('input');
+    input.className = 'form-input ' + cls;
+    input.placeholder = placeholder;
+    input.value = value || '';
+    return input;
+  };
+
+  const labelInput = mkInput('ep-label', 'Label (e.g. Groq Llama)', ep.label);
+  const urlInput = mkInput('ep-url', 'https://api.example.com/v1', ep.base_url);
+  const modelInput = mkInput('ep-model', 'Model name (e.g. llama-3.3-70b)', ep.model_name);
+
+  const keyInput = document.createElement('input');
+  keyInput.className = 'form-input ep-key';
+  keyInput.type = 'password';
+  const hasKey = !!ep.api_key; // masked, non-empty ⇒ a key is stored
+  keyInput.dataset.hadKey = hasKey ? '1' : '0';
+  keyInput.value = '';
+  keyInput.placeholder = hasKey
+    ? `API key (stored ${ep.api_key} — type to replace)`
+    : 'API key (optional)';
+
+  grid.appendChild(labelInput);
+  grid.appendChild(urlInput);
+  grid.appendChild(modelInput);
+  grid.appendChild(keyInput);
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'pact-btn pact-btn-delete ep-delete';
+  del.textContent = 'Remove';
+  del.addEventListener('click', () => row.remove());
+
+  row.appendChild(grid);
+  row.appendChild(del);
+  return row;
+}
+
+function renderEndpointList(endpoints) {
+  const list = $('endpoint-list');
+  list.textContent = '';
+  endpoints.forEach(ep => list.appendChild(buildEndpointRow(ep)));
+}
+
+// Returns {endpoints, error}. Empty rows (no base_url) are dropped; a row with a
+// base_url that is not http(s) is a hard error surfaced to the user.
+function collectEndpoints() {
+  const rows = $('endpoint-list').querySelectorAll('.endpoint-row');
+  const endpoints = [];
+  for (const row of rows) {
+    const label = row.querySelector('.ep-label').value.trim();
+    const baseUrl = row.querySelector('.ep-url').value.trim();
+    const modelName = row.querySelector('.ep-model').value.trim();
+    const keyInput = row.querySelector('.ep-key');
+    const typedKey = keyInput.value.trim();
+
+    if (!baseUrl && !label && !modelName && !typedKey) continue; // blank row
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      return { error: `Endpoint "${label || row.dataset.endpointId}" needs an http(s) base URL.` };
+    }
+    let apiKey;
+    if (typedKey) apiKey = typedKey;
+    else apiKey = keyInput.dataset.hadKey === '1' ? UNCHANGED_SENTINEL : '';
+
+    endpoints.push({
+      id: row.dataset.endpointId,
+      label,
+      base_url: baseUrl,
+      model_name: modelName,
+      api_key: apiKey,
+    });
+  }
+  return { endpoints };
+}
+
+$('btn-add-endpoint').addEventListener('click', () => {
+  $('endpoint-list').appendChild(buildEndpointRow(null));
+});
+
 async function openSettings() {
   const [settings, context] = await Promise.all([
     apiGet('/api/settings'),
@@ -999,6 +1181,9 @@ async function openSettings() {
     const radio = document.querySelector(
       `input[name="bg-style"][value="${settings.background_style || 'default'}"]`);
     if (radio) radio.checked = true;
+    autoHideExpired = !!settings.auto_hide_expired;
+    $('auto-hide-expired').checked = autoHideExpired;
+    renderEndpointList(settings.custom_endpoints || []);
   }
   contextData = {
     profile: (context && context.profile) || '',
@@ -1031,16 +1216,30 @@ $('btn-save-settings').addEventListener('click', async () => {
   const path = $('settings-path-input').value.trim();
   const bgRadio = document.querySelector('input[name="bg-style"]:checked');
   const bgStyle = bgRadio ? bgRadio.value : 'default';
+  const autoHide = $('auto-hide-expired').checked;
 
-  const requests = [apiPut('/api/context', contextData)];
-  if (path) {
-    requests.push(apiPost('/api/settings', { storage_path: path, background_style: bgStyle }));
-  }
+  const { endpoints, error } = collectEndpoints();
+  if (error) { showToast(error); return; }
+
+  // Always persist the non-path settings (background, Cards retention toggle,
+  // custom endpoints). storage_path is only included when the field is
+  // non-empty so clearing it can't silently drop the rest of the save.
+  const settingsBody = {
+    background_style: bgStyle,
+    auto_hide_expired: autoHide,
+    custom_endpoints: endpoints,
+  };
+  if (path) settingsBody.storage_path = path;
+  const requests = [
+    apiPut('/api/context', contextData),
+    apiPost('/api/settings', settingsBody),
+  ];
   const responses = await Promise.all(requests);
   if (responses.some(r => !r || !r.ok)) {
     showToast('Failed to save settings');
     return;
   }
+  autoHideExpired = autoHide;
   applyBackground(bgStyle);
   closeModal('modal-settings');
   showToast('Settings saved');
@@ -1119,6 +1318,66 @@ async function refreshMeetingList() {
   });
 }
 
+function showHistoryTab(tab) {
+  const onTranscript = tab !== 'cards';
+  $('history-tab-transcript').classList.toggle('active', onTranscript);
+  $('history-tab-cards').classList.toggle('active', !onTranscript);
+  $('tx-transcript-pane').hidden = !onTranscript;
+  $('tx-cards-pane').hidden = onTranscript;
+}
+
+async function loadMeetingCards() {
+  const body = $('tx-cards-body');
+  body.textContent = '';
+  if (!historyCurrentMeetingId) return;
+  const data = await apiGet(
+    '/api/meetings/' + encodeURIComponent(historyCurrentMeetingId) + '/cards');
+  const cards = (data && data.cards) || [];
+  if (cards.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tx-empty';
+    empty.textContent = 'No cards recorded for this meeting.';
+    body.appendChild(empty);
+    return;
+  }
+  cards.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'tx-card-row';
+
+    const headline = document.createElement('div');
+    headline.className = 'tx-card-headline';
+    headline.textContent = c.headline || '';
+    row.appendChild(headline);
+
+    if (Array.isArray(c.cues) && c.cues.length > 0) {
+      const cueRow = buildCardCues(c.cues);
+      if (cueRow) row.appendChild(cueRow);
+    }
+
+    if (c.say_this) {
+      const say = document.createElement('div');
+      say.className = 'tx-card-say';
+      const label = document.createElement('span');
+      label.className = 'say-this-label';
+      label.textContent = 'SAY';
+      const text = document.createElement('span');
+      text.className = 'say-this-text';
+      text.textContent = c.say_this;
+      say.appendChild(label);
+      say.appendChild(text);
+      row.appendChild(say);
+    }
+
+    body.appendChild(row);
+  });
+}
+
+$('history-tab-transcript').addEventListener('click', () => showHistoryTab('transcript'));
+$('history-tab-cards').addEventListener('click', () => {
+  showHistoryTab('cards');
+  loadMeetingCards();
+});
+
 async function openMeetingTranscript(meetingId) {
   historyCurrentMeetingId = meetingId;
   const data = await apiGet('/api/meetings/' + encodeURIComponent(meetingId) + '/transcript');
@@ -1126,6 +1385,7 @@ async function openMeetingTranscript(meetingId) {
 
   $('history-list-view').style.display = 'none';
   $('history-transcript-view').style.display = 'block';
+  showHistoryTab('transcript');
 
   $('tx-title').textContent = data.title
     ? formatMeetingDate(data.start_time) + ' — ' + data.title
@@ -1205,17 +1465,65 @@ const BUCKET_LABELS = {
 const BUCKET_ORDER = ['reactive', 'post_meeting', 'custom'];
 
 let allPromptsCache = [];
+let modelsCache = [];   // [{id,label,provider,model_name,available,supports_web_search}]
 let promptEditorCurrentTab = 'reactive';
 let promptEditorEditingId = null;
+
+async function ensureModelsLoaded() {
+  if (modelsCache.length) return;
+  const data = await apiGet('/api/models');
+  modelsCache = (data && data.models) || [];
+}
 
 async function openPromptEditor(defaultTab) {
   promptEditorCurrentTab = defaultTab || 'reactive';
   promptEditorEditingId = null;
+  await ensureModelsLoaded();
   await refreshPromptEditor();
   $('prompt-list-view').style.display = '';
   $('prompt-edit-form').classList.remove('open');
   openModal('modal-prompts');
 }
+
+// Populate the per-prompt model dropdown (F6). Unavailable models are disabled;
+// each option records whether its model supports web search.
+function populateModelDropdown(selectedId) {
+  const sel = $('form-model');
+  sel.textContent = '';
+  let matched = false;
+  modelsCache.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    const providerLabel = m.provider === 'anthropic' ? 'Anthropic' : 'Custom';
+    opt.textContent = `${m.label} · ${providerLabel}` + (m.available ? '' : ' (unavailable)');
+    opt.disabled = !m.available;
+    opt.dataset.webSearch = m.supports_web_search ? '1' : '';
+    if (m.id === selectedId && m.available) { opt.selected = true; matched = true; }
+    sel.appendChild(opt);
+  });
+  // If the stored model is unknown/unavailable, fall back to the first
+  // available option so the control is never left on a disabled entry.
+  if (!matched) {
+    const firstAvail = modelsCache.find(m => m.available);
+    if (firstAvail) sel.value = firstAvail.id;
+  }
+  updateWebSearchState();
+}
+
+function updateWebSearchState() {
+  const sel = $('form-model');
+  const opt = sel.selectedOptions[0];
+  const supports = !!(opt && opt.dataset.webSearch === '1');
+  const cb = $('form-web-search');
+  cb.disabled = !supports;
+  if (!supports) cb.checked = false;
+  const hint = $('form-web-search-hint');
+  hint.textContent = supports
+    ? 'Attach the server-side web search tool to this prompt.'
+    : 'Web search is only available on Anthropic models.';
+}
+
+$('form-model').addEventListener('change', updateWebSearchState);
 
 async function refreshPromptEditor() {
   const data = await apiGet('/api/custom_prompts');
@@ -1278,6 +1586,9 @@ function openPromptEditForm(prompt) {
   $('form-btn-label').value = prompt ? prompt.button_text : '';
   $('form-out-title').value = prompt ? prompt.output_title : '';
   $('form-template').value = prompt ? prompt.template : '';
+  populateModelDropdown(prompt ? prompt.model : undefined);
+  $('form-web-search').checked = !!(prompt && prompt.web_search);
+  updateWebSearchState();
   $('btn-delete-prompt').style.display = prompt && prompt.is_custom ? 'inline-flex' : 'none';
   $('prompt-list-view').style.display = 'none';
   $('prompt-edit-form').classList.add('open');
@@ -1294,13 +1605,22 @@ async function savePrompt() {
   const template = $('form-template').value.trim();
   if (!buttonText || !template) return;
 
+  const model = $('form-model').value;
+  const webSearch = $('form-web-search').checked;
+  const payload = {
+    button_text: buttonText,
+    output_title: outputTitle,
+    template,
+    model,
+    web_search: webSearch,
+  };
+
   let resp;
   if (promptEditorEditingId) {
     resp = await apiPut('/api/custom_prompts/' + encodeURIComponent(promptEditorEditingId),
-      { button_text: buttonText, output_title: outputTitle, template });
+      payload);
   } else {
-    resp = await apiPost('/api/custom_prompts',
-      { button_text: buttonText, output_title: outputTitle, template });
+    resp = await apiPost('/api/custom_prompts', payload);
   }
   if (!resp || !resp.ok) { showToast('Failed to save prompt'); return; }
 
@@ -1330,7 +1650,10 @@ $('btn-delete-prompt').addEventListener('click', () => {
 
 async function init() {
   const savedSettings = await apiGet('/api/settings');
-  if (savedSettings) applyBackground(savedSettings.background_style || 'default');
+  if (savedSettings) {
+    applyBackground(savedSettings.background_style || 'default');
+    autoHideExpired = !!savedSettings.auto_hide_expired;
+  }
   await loadPrompts();
   loadPersona();
   connectSSE();

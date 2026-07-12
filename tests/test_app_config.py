@@ -1,7 +1,12 @@
 # tests/test_app_config.py
 import pytest
 
-from storage.app_config import AppConfig, AppConfigStore, CustomPromptConfig
+from storage.app_config import (
+    AppConfig,
+    AppConfigStore,
+    CustomEndpointConfig,
+    CustomPromptConfig,
+)
 
 
 @pytest.mark.unit
@@ -168,3 +173,91 @@ def test_custom_prompts_not_a_list_ignored(tmp_path):
     cfg = store.load()
     assert cfg.custom_prompts == []
     assert cfg.persona == "sales"
+
+
+@pytest.mark.unit
+def test_custom_endpoints_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    cfg = store.load()
+    cfg.custom_endpoints.append(
+        CustomEndpointConfig(
+            id="groq",
+            label="Groq",
+            base_url="https://api.groq.com/openai/v1",
+            model_name="llama-3.3-70b",
+            api_key="gsk_secret",
+        )
+    )
+    store.save(cfg)
+    reloaded = store.load()
+    assert len(reloaded.custom_endpoints) == 1
+    ep = reloaded.custom_endpoints[0]
+    assert ep.id == "groq"
+    assert ep.api_key == "gsk_secret"
+
+
+@pytest.mark.unit
+def test_watcher_model_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    cfg = store.load()
+    assert cfg.watcher_model is None
+    cfg.watcher_model = "groq"
+    store.save(cfg)
+    assert store.load().watcher_model == "groq"
+
+
+@pytest.mark.unit
+def test_auto_hide_expired_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    cfg = store.load()
+    assert cfg.auto_hide_expired is False  # F4 retention default: keep cards
+    cfg.auto_hide_expired = True
+    store.save(cfg)
+    assert store.load().auto_hide_expired is True
+
+
+@pytest.mark.unit
+def test_custom_prompt_model_and_web_search_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    cfg = store.load()
+    cfg.custom_prompts.append(
+        CustomPromptConfig(
+            id="cp_x",
+            button_text="X",
+            output_title="X Out",
+            template="t",
+            model="groq",
+            web_search=True,
+        )
+    )
+    store.save(cfg)
+    reloaded = store.load().custom_prompts[0]
+    assert reloaded.model == "groq"
+    assert reloaded.web_search is True
+
+
+@pytest.mark.unit
+def test_malformed_custom_endpoint_skipped(tmp_path):
+    import json
+
+    p = tmp_path / "config.json"
+    p.write_text(
+        json.dumps(
+            {
+                "custom_endpoints": [
+                    {"id": "broken"},  # missing required fields
+                    "not a dict",
+                    {
+                        "id": "ok",
+                        "label": "OK",
+                        "base_url": "https://x/v1",
+                        "model_name": "m",
+                    },
+                ]
+            }
+        )
+    )
+    store = AppConfigStore(config_path=p)
+    cfg = store.load()
+    assert [e.id for e in cfg.custom_endpoints] == ["ok"]
+    assert cfg.custom_endpoints[0].api_key == ""

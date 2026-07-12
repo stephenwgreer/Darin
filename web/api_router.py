@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from api.providers import ModelRegistry
 from app_controller import AppController, MeetingAlreadyActiveError, MeetingStartError
 from prompts.registry import (
     PROMPT_REGISTRY,
@@ -30,9 +31,23 @@ from prompts.registry import (
 )
 from prompts.templates import PERSONAS
 from services.context_pack import ContextPack
-from storage.app_config import AppConfigStore, CustomPromptConfig
+from storage.app_config import AppConfigStore, CustomEndpointConfig, CustomPromptConfig
 from storage.meeting_store import MeetingStore
 from web.sse_event_bus import SSEEventBus
+
+
+# Sentinel a client sends back for a custom-endpoint api_key it did not change
+# (the GET response only ever exposes a masked key — see ``_mask_key``).
+UNCHANGED_SENTINEL = "__unchanged__"
+
+
+def _mask_key(key: str) -> str:
+    """Mask a secret to its last 4 chars for GET responses (never echo in full)."""
+    if not key:
+        return ""
+    if len(key) <= 4:
+        return "•" * len(key)
+    return "••••" + key[-4:]
 
 
 # ---------------------------------------------------------------------------
@@ -74,9 +89,23 @@ class AskQuestionBody(BaseModel):
     question: str
 
 
+class CustomEndpointBody(BaseModel):
+    id: str
+    label: str
+    base_url: str
+    model_name: str
+    api_key: str = ""  # full value, or UNCHANGED_SENTINEL to keep the stored key
+
+
 class SaveSettingsBody(BaseModel):
-    storage_path: str
+    # Optional: the client omits storage_path when its field is left blank so a
+    # cleared path can't drop the rest of the save (background / retention /
+    # endpoints). When absent, the stored path is kept unchanged.
+    storage_path: str | None = None
     background_style: str = "default"
+    custom_endpoints: list[CustomEndpointBody] | None = None
+    watcher_model: str | None = None
+    auto_hide_expired: bool | None = None
 
 
 class ContextPackBody(BaseModel):
@@ -93,12 +122,18 @@ class CreateCustomPromptBody(BaseModel):
     button_text: str
     output_title: str
     template: str
+    # Per-prompt model + web search (F6). Empty model = fall back to REACTIVE_MODEL.
+    model: str = ""
+    web_search: bool = False
 
 
 class UpdatePromptBody(BaseModel):
     button_text: str | None = None
     output_title: str | None = None
     template: str | None = None
+    # Per-prompt model + web search (F6). For built-ins these become overrides.
+    model: str | None = None
+    web_search: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +223,7 @@ def create_router(
             prompt_id=cfg.id,
             model=cfg.model,
             max_tokens=cfg.max_tokens,
+            web_search=cfg.web_search,
             on_template_setup=on_template_setup,
         )
         if not accepted:
@@ -331,27 +367,98 @@ def create_router(
             )
         return result
 
+    # ---- Model registry ---------------------------------------------------
+
+    @router.get("/models")
+    async def get_models() -> dict:
+        """Return the model registry (F2): Anthropic built-ins + custom endpoints."""
+        cfg = await asyncio.to_thread(app_cfg_store.load)
+        return {"models": ModelRegistry(cfg).list()}
+
     # ---- Settings ---------------------------------------------------------
 
     @router.get("/settings")
     async def get_settings() -> dict:
         cfg = await asyncio.to_thread(app_cfg_store.load)
-        return {"storage_path": cfg.storage_path, "background_style": cfg.background_style}
+        return {
+            "storage_path": cfg.storage_path,
+            "background_style": cfg.background_style,
+            "watcher_model": cfg.watcher_model,
+            "auto_hide_expired": cfg.auto_hide_expired,
+            "custom_endpoints": [
+                {
+                    "id": e.id,
+                    "label": e.label,
+                    "base_url": e.base_url,
+                    "model_name": e.model_name,
+                    "api_key": _mask_key(e.api_key),
+                }
+                for e in cfg.custom_endpoints
+            ],
+        }
+
+    def _resolve_endpoints(
+        incoming: list[CustomEndpointBody], existing: list[CustomEndpointConfig]
+    ) -> list[CustomEndpointConfig]:
+        """Validate + merge incoming custom endpoints against the stored set.
+
+        - base_url must be http(s); id must be a unique slug.
+        - api_key == UNCHANGED_SENTINEL keeps the stored key (never re-sent in full).
+        """
+        by_id = {e.id: e for e in existing}
+        seen: set[str] = set()
+        resolved: list[CustomEndpointConfig] = []
+        for ep in incoming:
+            if not _SAFE_ID_RE.fullmatch(ep.id):
+                raise HTTPException(status_code=400, detail=f"Invalid endpoint id: {ep.id}")
+            if ep.id in seen:
+                raise HTTPException(status_code=400, detail=f"Duplicate endpoint id: {ep.id}")
+            seen.add(ep.id)
+            if not (ep.base_url.startswith("http://") or ep.base_url.startswith("https://")):
+                raise HTTPException(
+                    status_code=400, detail=f"base_url must be http(s): {ep.base_url}"
+                )
+            api_key = ep.api_key
+            if api_key == UNCHANGED_SENTINEL:
+                prior = by_id.get(ep.id)
+                api_key = prior.api_key if prior is not None else ""
+            resolved.append(
+                CustomEndpointConfig(
+                    id=ep.id,
+                    label=ep.label,
+                    base_url=ep.base_url,
+                    model_name=ep.model_name,
+                    api_key=api_key,
+                )
+            )
+        return resolved
 
     @router.post("/settings")
     async def save_settings(body: SaveSettingsBody) -> dict:
-        path = Path(body.storage_path)
-        if not path.is_absolute():
-            raise HTTPException(status_code=400, detail="storage_path must be an absolute path")
-
         cfg = await asyncio.to_thread(app_cfg_store.load)
-        path_changed = body.storage_path != cfg.storage_path
+
+        # storage_path is optional: when omitted the stored path is left as-is.
+        if body.storage_path is not None:
+            path = Path(body.storage_path)
+            if not path.is_absolute():
+                raise HTTPException(status_code=400, detail="storage_path must be an absolute path")
+            path_changed = body.storage_path != cfg.storage_path
+        else:
+            path = None
+            path_changed = False
 
         if path_changed and controller.meeting_state == "active":
             raise HTTPException(
                 status_code=409,
                 detail="Cannot change the storage folder while a meeting is active",
             )
+
+        # Validate custom endpoints BEFORE any live rebind so a bad payload
+        # cannot leave the stores half-rebound.
+        if body.custom_endpoints is not None:
+            resolved_endpoints = _resolve_endpoints(body.custom_endpoints, cfg.custom_endpoints)
+        else:
+            resolved_endpoints = None
 
         if path_changed:
             # Rebind MeetingStore + ContextPack LIVE — no restart needed.
@@ -366,10 +473,21 @@ def create_router(
                     status_code=400, detail=f"Storage folder is not usable: {e}"
                 ) from e
 
-        cfg.storage_path = body.storage_path
+        if body.storage_path is not None:
+            cfg.storage_path = body.storage_path
         if body.background_style in ("default", "darin"):
             cfg.background_style = body.background_style
+        if resolved_endpoints is not None:
+            cfg.custom_endpoints = resolved_endpoints
+        if "watcher_model" in body.model_fields_set:
+            cfg.watcher_model = body.watcher_model
+        if body.auto_hide_expired is not None:
+            cfg.auto_hide_expired = body.auto_hide_expired
         await asyncio.to_thread(app_cfg_store.save, cfg)
+        # Rebind the model registry LIVE so newly-added/removed custom endpoints
+        # route immediately (F2) — no restart needed.
+        controller.api_client.model_registry = ModelRegistry(cfg)
+        controller.watcher_model = cfg.watcher_model
         return {"status": "ok"}
 
     @router.post("/pick_folder")
@@ -434,6 +552,14 @@ def create_router(
             "segments": segments,
         }
 
+    @router.get("/meetings/{meeting_id}/cards")
+    async def get_meeting_cards(meeting_id: str) -> dict:
+        _validate_path_id(meeting_id, kind="meeting id")
+        if controller.meeting_store is None:
+            raise HTTPException(status_code=404, detail="No store")
+        cards = await asyncio.to_thread(controller.meeting_store.get_cards, meeting_id)
+        return {"cards": cards}
+
     @router.post("/meetings/{meeting_id}/ask")
     async def ask_about_meeting(meeting_id: str, body: AskQuestionBody) -> dict:
         _validate_path_id(meeting_id, kind="meeting id")
@@ -467,6 +593,8 @@ def create_router(
                     "template": p.template,
                     "bucket": p.bucket,
                     "is_custom": p.bucket == "custom",
+                    "model": p.model,
+                    "web_search": p.web_search,
                 }
                 for p in registry
             ]
@@ -485,6 +613,8 @@ def create_router(
                     button_text=body.button_text,
                     output_title=body.output_title,
                     template=body.template,
+                    model=body.model,
+                    web_search=body.web_search,
                 )
             )
             app_cfg_store.save(cfg)
@@ -508,6 +638,10 @@ def create_router(
                     custom.output_title = body.output_title
                 if body.template is not None:
                     custom.template = body.template
+                if body.model is not None:
+                    custom.model = body.model
+                if body.web_search is not None:
+                    custom.web_search = body.web_search
                 app_cfg_store.save(cfg)
                 return True
 
@@ -522,6 +656,10 @@ def create_router(
                 overrides["output_title"] = body.output_title
             if body.template is not None:
                 overrides["template"] = body.template
+            if body.model is not None:
+                overrides["model"] = body.model
+            if body.web_search is not None:
+                overrides["web_search"] = body.web_search
             app_cfg_store.save(cfg)
             return True
 

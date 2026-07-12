@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 import config as app_config
+from api.providers import ModelRegistry
 from app_controller import AppController
 from middleware.csp import CSPMiddleware
 from middleware.token_auth import TokenAuthMiddleware
@@ -112,6 +113,10 @@ def create_app(token: str) -> FastAPI:
         ),
     )
     controller.meeting_store = MeetingStore(base_dir=Path(app_cfg.storage_path))
+    # F2: resolve per-prompt model ids to providers so custom OpenAI-compatible
+    # endpoints route through the adapter; refreshed live on settings save.
+    controller.api_client.model_registry = ModelRegistry(app_cfg)
+    controller.watcher_model = app_cfg.watcher_model
     controller.on_meeting_state_change(lambda s: bus.put_event("state_change", {"state": s}))
     controller.on_timer_tick(lambda e: bus.put_event("timer_tick", {"elapsed": e}))
 

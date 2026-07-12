@@ -115,6 +115,10 @@ class AppController:
         self._rolling_summary: RollingSummaryService | None = None
         self.context_pack: ContextPack | None = None
         self._persona: str = "general"
+        # F2: per-prompt model override for the proactive watcher lane. None =
+        # fall back to config.WATCHER_MODEL. Set/refreshed by the web layer from
+        # AppConfig.watcher_model.
+        self.watcher_model: str | None = None
 
         # Card plumbing: emitted cards by id (for dismiss), recent transcript
         # lines with monotonic timestamps (for the reactive "last ~3 min").
@@ -576,6 +580,7 @@ class AppController:
             context_pack_text=context_text,
             on_card=self._emit_card,
             on_status=self._emit_watcher_status,
+            model=self.watcher_model or config.WATCHER_MODEL,
         )
         self._watcher.start()
 
@@ -954,6 +959,7 @@ class AppController:
                     self.context_pack.as_text() if self.context_pack is not None else None
                 ),
                 lane="interactive",
+                web_search=getattr(prompt_config, "web_search", False),
             )
 
             output_text = "".join(output_chunks) or str(result)
@@ -1081,7 +1087,7 @@ class AppController:
         transcript_override: str | None = None,
         on_complete: Callable[[], None] | None = None,
     ) -> bool:
-        """Run a reactive card prompt (5 buttons / Ask / custom prompts).
+        """Run a reactive card prompt (built-in buttons / Ask / custom prompts).
 
         Interactive lane: one in-flight request per prompt_id — a second click
         of the SAME button is rejected; different buttons run concurrently.
@@ -1153,6 +1159,7 @@ class AppController:
                 max_tokens=getattr(prompt_config, "max_tokens", config.REACTIVE_MAX_TOKENS),
                 system=system,
                 messages=messages,
+                web_search=getattr(prompt_config, "web_search", False),
             )
 
             duration_ms = (time.perf_counter() - start_time) * 1000
@@ -1190,13 +1197,30 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _emit_card(self, card: Card) -> None:
-        """Register an emitted card (for dismissal) and notify the UI."""
+        """Register an emitted card (for dismissal), persist it, notify the UI."""
         self._emitted_cards[card.id] = card
+        card_dict = card.to_dict()
+        self._persist_card(card_dict)
         if self._on_card:
             try:
-                self._on_card(card.to_dict())
+                self._on_card(card_dict)
             except Exception as e:  # noqa: BLE001 — a bad consumer never kills a lane
                 logger.warning("on_card callback failed: {}", e)
+
+    def _persist_card(self, card_dict: dict) -> None:
+        """Append a rendered card (both lanes) to the meeting's cards.jsonl (F4)."""
+        store = self._meeting_store
+        # Reactive cards can be generated during the post_meeting state (buttons
+        # stay enabled), when _active_meeting_id has already moved to
+        # _last_meeting_id — resolve the same way the reactive lane resolves its
+        # transcript so post-meeting cards still land in the meeting's cards.jsonl.
+        meeting_id = self._active_meeting_id or self._last_meeting_id
+        if store is None or meeting_id is None:
+            return
+        try:
+            store.append_card(meeting_id, card_dict)
+        except Exception as e:  # noqa: BLE001 — persistence must never kill a lane
+            logger.warning("Failed to persist card: {}", e)
 
     def _emit_watcher_status(self, state: str) -> None:
         if self._on_watcher_status:
@@ -1232,6 +1256,7 @@ class AppController:
         prompt_id: str | None = None,
         model: str | None = None,
         max_tokens: int | None = None,
+        web_search: bool = False,
         on_template_setup: Callable[[str], str | None] | None = None,
         on_complete: Callable[[], None] | None = None,
     ) -> bool:
@@ -1248,6 +1273,8 @@ class AppController:
             prompt_id: Prompt id carried into processing_complete payloads.
             model: Per-prompt model override (default POST_MEETING_MODEL).
             max_tokens: Per-prompt output cap (default POST_MEETING_MAX_TOKENS).
+            web_search: Attach Anthropic server-side web search on Anthropic
+                        models (F3); ignored with a warning on openai_compat.
             on_template_setup: UI callback to set up the static HTML template.
                               Receives prompt_template, returns template_type string.
                               Called from the background thread — UI layer must marshal.
@@ -1270,6 +1297,7 @@ class AppController:
             "prompt_id": prompt_id,
             "model": model,
             "max_tokens": max_tokens,
+            "web_search": web_search,
         }
 
         # Test mode: bypass audio capture and use fixed transcript
@@ -1334,6 +1362,7 @@ class AppController:
         prompt_id: str | None = None,
         model: str | None = None,
         max_tokens: int | None = None,
+        web_search: bool = False,
     ) -> None:
         """Background thread: transcribe then process."""
         start_time = time.perf_counter()
@@ -1374,6 +1403,7 @@ class AppController:
                 prompt_id=prompt_id,
                 model=model,
                 max_tokens=max_tokens,
+                web_search=web_search,
             )
 
             total_duration_ms = (time.perf_counter() - start_time) * 1000
@@ -1406,6 +1436,7 @@ class AppController:
         prompt_id: str | None = None,
         model: str | None = None,
         max_tokens: int | None = None,
+        web_search: bool = False,
     ) -> None:
         """Background thread: process transcript with Claude API."""
         start_time = time.perf_counter()
@@ -1441,6 +1472,7 @@ class AppController:
                     self.context_pack.as_text() if self.context_pack is not None else None
                 ),
                 lane="interactive",
+                web_search=web_search,
             )
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.info(

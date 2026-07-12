@@ -1,8 +1,9 @@
 """Prompt registry for the two-lane card copilot.
 
 The 21-button estate is gone. What remains:
-- 5 reactive card prompts (answer_this, fact_check, reframe, where_are_we,
-  next_step) — card output via forced emit_cards tool use, max_tokens 400.
+- 7 reactive card prompts (answer_this, fact_check, reframe, where_are_we,
+  next_step, ask_this, deep_dive) — card output via forced emit_cards tool use.
+  deep_dive uses web search (F3) and max_tokens 600.
 - ask — freeform question, card output, max_tokens 600 (not a button; exposed
   as ``ASK_PROMPT_CONFIG``).
 - 3 post-meeting long-form prompts kept as-is (meeting_summary, action_items,
@@ -26,6 +27,8 @@ from .templates import (
     ACTION_ITEMS_PROMPT,
     ANSWER_THIS_INSTRUCTION,
     ASK_QUESTION_PROMPT,
+    ASK_THIS_INSTRUCTION,
+    DEEP_DIVE_INSTRUCTION,
     FACT_CHECK_INSTRUCTION,
     KEY_DECISIONS_PROMPT,
     MEETING_SUMMARY_PROMPT,
@@ -48,10 +51,13 @@ class PromptConfig:
     bucket: BucketType = field(default="reactive")
     model: str = config.REACTIVE_MODEL
     max_tokens: int = config.REACTIVE_MAX_TOKENS
+    # F3: when True and the model is Anthropic, attach the server-side web
+    # search tool to this prompt's request. Ignored on openai_compat models.
+    web_search: bool = False
 
 
 PROMPT_REGISTRY = [
-    # --- Reactive lane: exactly 5 buttons ---
+    # --- Reactive lane: 7 built-in card buttons ---
     PromptConfig(
         id="answer_this",
         button_text="Answer this",
@@ -91,6 +97,26 @@ PROMPT_REGISTRY = [
         output_title="Suggested Next Step",
         template_type="card",
         bucket="reactive",
+    ),
+    # F5: two new reactive card prompts (7 buttons total now).
+    PromptConfig(
+        id="ask_this",
+        button_text="Good Questions",
+        template=ASK_THIS_INSTRUCTION,
+        output_title="Good Questions",
+        template_type="card",
+        bucket="reactive",
+        max_tokens=400,
+    ),
+    PromptConfig(
+        id="deep_dive",
+        button_text="Deep Dive",
+        template=DEEP_DIVE_INSTRUCTION,
+        output_title="Deep Dive",
+        template_type="card",
+        bucket="reactive",
+        max_tokens=600,
+        web_search=True,
     ),
     # --- Post-meeting lane: long-form streaming, kept as today ---
     PromptConfig(
@@ -172,8 +198,9 @@ def get_effective_registry(app_config: AppConfig) -> list[PromptConfig]:
                 output_title=cp.output_title,
                 template_type="card",
                 bucket="custom",
-                model=config.REACTIVE_MODEL,
+                model=cp.model or config.REACTIVE_MODEL,
                 max_tokens=config.ASK_MAX_TOKENS,
+                web_search=cp.web_search,
             )
         )
     return result

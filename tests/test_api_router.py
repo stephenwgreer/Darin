@@ -370,6 +370,27 @@ def test_post_settings_saves_and_rebinds_stores(tmp_path):
 
 
 @pytest.mark.unit
+def test_post_settings_without_path_preserves_stored_path(tmp_path):
+    """F4 regression: a save that omits storage_path (blank field) must persist
+    the other settings and leave the stored path unchanged — not 400 or wipe it."""
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    cfg = store.load()
+    cfg.storage_path = str(tmp_path / "keep_me")
+    store.save(cfg)
+    client = make_client(app_cfg_store=store)
+
+    resp = client.post(
+        f"/api/settings?token={TOKEN}",
+        json={"background_style": "darin", "auto_hide_expired": True},
+    )
+    assert resp.status_code == 200
+    saved = store.load()
+    assert saved.storage_path == str(tmp_path / "keep_me")
+    assert saved.background_style == "darin"
+    assert saved.auto_hide_expired is True
+
+
+@pytest.mark.unit
 def test_post_settings_rejects_relative_path(tmp_path):
     store = AppConfigStore(config_path=tmp_path / "config.json")
     client = make_client(app_cfg_store=store)
@@ -387,6 +408,170 @@ def test_post_settings_path_change_blocked_during_meeting(tmp_path):
         f"/api/settings?token={TOKEN}", json={"storage_path": str(tmp_path / "elsewhere")}
     )
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# /api/models + custom endpoints (F2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_get_models_lists_anthropic_builtins():
+    client = make_client()
+    resp = client.get(f"/api/models?token={TOKEN}")
+    assert resp.status_code == 200
+    ids = [m["id"] for m in resp.json()["models"]]
+    assert "claude-sonnet-5" in ids
+    assert "claude-haiku-4-5" in ids
+
+
+@pytest.mark.unit
+def test_get_models_includes_custom_endpoints(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/settings?token={TOKEN}",
+        json={
+            "storage_path": str(tmp_path),
+            "custom_endpoints": [
+                {
+                    "id": "groq",
+                    "label": "Groq",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "model_name": "llama-3.3-70b",
+                    "api_key": "gsk_secret_key",
+                }
+            ],
+        },
+    )
+    models = {m["id"]: m for m in client.get(f"/api/models?token={TOKEN}").json()["models"]}
+    assert models["groq"]["provider"] == "openai_compat"
+    assert models["groq"]["supports_web_search"] is False
+
+
+@pytest.mark.unit
+def test_custom_endpoint_api_key_masked_on_read(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/settings?token={TOKEN}",
+        json={
+            "storage_path": str(tmp_path),
+            "custom_endpoints": [
+                {
+                    "id": "groq",
+                    "label": "Groq",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "model_name": "m",
+                    "api_key": "gsk_secret_key",
+                }
+            ],
+        },
+    )
+    ep = client.get(f"/api/settings?token={TOKEN}").json()["custom_endpoints"][0]
+    assert "gsk_secret_key" not in ep["api_key"]
+    assert ep["api_key"].endswith("_key")  # last 4 chars only
+    # Stored value is still the full key.
+    assert store.load().custom_endpoints[0].api_key == "gsk_secret_key"
+
+
+@pytest.mark.unit
+def test_custom_endpoint_unchanged_sentinel_keeps_stored_key(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    body = {
+        "storage_path": str(tmp_path),
+        "custom_endpoints": [
+            {
+                "id": "groq",
+                "label": "Groq",
+                "base_url": "https://api.groq.com/openai/v1",
+                "model_name": "m",
+                "api_key": "gsk_original",
+            }
+        ],
+    }
+    client.post(f"/api/settings?token={TOKEN}", json=body)
+    # Re-save with the sentinel + a new label.
+    body["custom_endpoints"][0]["api_key"] = "__unchanged__"
+    body["custom_endpoints"][0]["label"] = "Groq Renamed"
+    client.post(f"/api/settings?token={TOKEN}", json=body)
+    stored = store.load().custom_endpoints[0]
+    assert stored.api_key == "gsk_original"
+    assert stored.label == "Groq Renamed"
+
+
+@pytest.mark.unit
+def test_custom_endpoint_rejects_non_http_base_url(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    resp = client.post(
+        f"/api/settings?token={TOKEN}",
+        json={
+            "storage_path": str(tmp_path),
+            "custom_endpoints": [
+                {"id": "bad", "label": "B", "base_url": "ftp://x", "model_name": "m"}
+            ],
+        },
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_custom_endpoint_rejects_duplicate_ids(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    ep = {"id": "dup", "label": "D", "base_url": "https://x/v1", "model_name": "m"}
+    resp = client.post(
+        f"/api/settings?token={TOKEN}",
+        json={"storage_path": str(tmp_path), "custom_endpoints": [ep, dict(ep)]},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_settings_without_endpoints_preserves_existing(tmp_path):
+    """A settings POST that omits custom_endpoints must not wipe them."""
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/settings?token={TOKEN}",
+        json={
+            "storage_path": str(tmp_path),
+            "custom_endpoints": [
+                {"id": "groq", "label": "G", "base_url": "https://x/v1", "model_name": "m"}
+            ],
+        },
+    )
+    # Second POST omits custom_endpoints entirely.
+    client.post(f"/api/settings?token={TOKEN}", json={"storage_path": str(tmp_path)})
+    assert [e.id for e in store.load().custom_endpoints] == ["groq"]
+
+
+@pytest.mark.unit
+def test_settings_watcher_model_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/settings?token={TOKEN}",
+        json={"storage_path": str(tmp_path), "watcher_model": "groq"},
+    )
+    assert store.load().watcher_model == "groq"
+    assert client.get(f"/api/settings?token={TOKEN}").json()["watcher_model"] == "groq"
+
+
+@pytest.mark.unit
+def test_settings_auto_hide_expired_round_trip(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    # Default is exposed as False.
+    assert client.get(f"/api/settings?token={TOKEN}").json()["auto_hide_expired"] is False
+    client.post(
+        f"/api/settings?token={TOKEN}",
+        json={"storage_path": str(tmp_path), "auto_hide_expired": True},
+    )
+    assert store.load().auto_hide_expired is True
+    assert client.get(f"/api/settings?token={TOKEN}").json()["auto_hide_expired"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +597,41 @@ def test_get_meeting_transcript_not_found():
     ctrl.meeting_store.get_meeting.return_value = None
     client = make_client(controller=ctrl)
     resp = client.get(f"/api/meetings/nonexistent/transcript?token={TOKEN}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.unit
+def test_get_meeting_cards_returns_persisted_cards():
+    ctrl = _mock_controller()
+    ctrl.meeting_store = MagicMock()
+    ctrl.meeting_store.get_cards.return_value = [
+        {"id": "card_1", "headline": "First", "cues": ["ask pricing"], "ts": "2026-07-09T00:00:00"}
+    ]
+    client = make_client(controller=ctrl)
+    resp = client.get(f"/api/meetings/2026-07-09_141323/cards?token={TOKEN}")
+    assert resp.status_code == 200
+    cards = resp.json()["cards"]
+    assert len(cards) == 1
+    assert cards[0]["headline"] == "First"
+    ctrl.meeting_store.get_cards.assert_called_once_with("2026-07-09_141323")
+
+
+@pytest.mark.unit
+def test_get_meeting_cards_rejects_bad_id():
+    ctrl = _mock_controller()
+    ctrl.meeting_store = MagicMock()
+    client = make_client(controller=ctrl)
+    resp = client.get(f"/api/meetings/..%2Fescape/cards?token={TOKEN}")
+    assert resp.status_code in (400, 404)
+    ctrl.meeting_store.get_cards.assert_not_called()
+
+
+@pytest.mark.unit
+def test_get_meeting_cards_no_store():
+    ctrl = _mock_controller()
+    ctrl.meeting_store = None
+    client = make_client(controller=ctrl)
+    resp = client.get(f"/api/meetings/2026-07-09_141323/cards?token={TOKEN}")
     assert resp.status_code == 404
 
 
@@ -461,6 +681,111 @@ def test_delete_custom_prompt(tmp_path):
 
 
 @pytest.mark.unit
+def test_create_custom_prompt_round_trips_model_and_web_search(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    resp = client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={
+            "button_text": "Deep",
+            "output_title": "Out",
+            "template": "t",
+            "model": "claude-sonnet-5",
+            "web_search": True,
+        },
+    )
+    assert resp.status_code == 200
+    saved = store.load().custom_prompts[0]
+    assert saved.model == "claude-sonnet-5"
+    assert saved.web_search is True
+
+
+@pytest.mark.unit
+def test_update_custom_prompt_model_and_web_search(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    pid = client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={"button_text": "Mine", "output_title": "Out", "template": "t"},
+    ).json()["id"]
+    resp = client.put(
+        f"/api/custom_prompts/{pid}?token={TOKEN}",
+        json={"model": "claude-haiku-4-5", "web_search": True},
+    )
+    assert resp.status_code == 200
+    saved = store.load().custom_prompts[0]
+    assert saved.model == "claude-haiku-4-5"
+    assert saved.web_search is True
+
+
+@pytest.mark.unit
+def test_update_builtin_prompt_writes_model_and_web_search_override(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    resp = client.put(
+        f"/api/custom_prompts/fact_check?token={TOKEN}",
+        json={"model": "claude-haiku-4-5", "web_search": True},
+    )
+    assert resp.status_code == 200
+    overrides = store.load().prompt_overrides["fact_check"]
+    assert overrides["model"] == "claude-haiku-4-5"
+    assert overrides["web_search"] is True
+
+
+@pytest.mark.unit
+def test_get_custom_prompts_includes_model_and_web_search(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    client = make_client(app_cfg_store=store)
+    client.post(
+        f"/api/custom_prompts?token={TOKEN}",
+        json={
+            "button_text": "Mine",
+            "output_title": "Out",
+            "template": "t",
+            "model": "claude-sonnet-5",
+            "web_search": True,
+        },
+    )
+    prompts = client.get(f"/api/custom_prompts?token={TOKEN}").json()["prompts"]
+    mine = next(p for p in prompts if p["button_text"] == "Mine")
+    assert mine["model"] == "claude-sonnet-5"
+    assert mine["web_search"] is True
+    # Built-ins expose their model too so the editor dropdown can preselect it.
+    fact = next(p for p in prompts if p["id"] == "fact_check")
+    assert fact["model"] == "claude-sonnet-5"
+    assert fact["web_search"] is False
+
+
+@pytest.mark.unit
+def test_post_settings_refreshes_model_registry(tmp_path):
+    store = AppConfigStore(config_path=tmp_path / "config.json")
+    ctrl = _mock_controller()
+    client = make_client(controller=ctrl, app_cfg_store=store)
+    resp = client.post(
+        f"/api/settings?token={TOKEN}",
+        json={
+            "storage_path": str(tmp_path / "meetings"),
+            "custom_endpoints": [
+                {
+                    "id": "groq",
+                    "label": "Groq",
+                    "base_url": "https://api.groq.com/openai/v1",
+                    "model_name": "llama-3.3-70b",
+                    "api_key": "sk-live-1234",
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200
+    # The router rebound a fresh registry onto the controller's api client that
+    # can resolve the newly-saved custom endpoint.
+    registry = ctrl.api_client.model_registry
+    spec = registry.resolve("groq")
+    assert spec is not None
+    assert spec.provider == "openai_compat"
+
+
+@pytest.mark.unit
 def test_get_prompts_excludes_deleted_builtin(tmp_path):
     store = AppConfigStore(config_path=tmp_path / "config.json")
     client = make_client(app_cfg_store=store)
@@ -483,7 +808,15 @@ def test_get_prompts_grouped_by_bucket(tmp_path):
     data = resp.json()
     assert set(data.keys()) == {"reactive", "post_meeting", "custom"}
     reactive_ids = [p["id"] for p in data["reactive"]]
-    assert reactive_ids == ["answer_this", "fact_check", "reframe", "where_are_we", "next_step"]
+    assert reactive_ids == [
+        "answer_this",
+        "fact_check",
+        "reframe",
+        "where_are_we",
+        "next_step",
+        "ask_this",
+        "deep_dive",
+    ]
     post_ids = [p["id"] for p in data["post_meeting"]]
     assert post_ids == ["meeting_summary", "action_items", "key_decisions"]
     assert data["custom"] == []

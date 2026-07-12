@@ -6,7 +6,9 @@ A card is the atomic unit the copilot renders:
       id: str, lane: "proactive"|"reactive",
       type: "answer"|"fact_check"|"reframe"|"status"|"next_step"|"heads_up",
       trigger: str|null, headline: str (<=60 chars),
-      bullets: [str] (<=3, each <=140 chars), say_this: str|null,
+      bullets: [str] (<=3, each <=140 chars),
+      cues: [str] (<=3, each <=3 words) — instant-glance keywords,
+      say_this: str|null,
       confidence: "high"|"medium", urgency: "now"|"soon"|"fyi",
       source: "transcript"|"kb"|"knowledge", expires_in_s: int, topic_key: str
     }
@@ -36,6 +38,9 @@ CARD_SOURCES = ("transcript", "kb", "knowledge")
 MAX_HEADLINE_CHARS = 60
 MAX_BULLETS = 3
 MAX_BULLET_CHARS = 140
+# F4: cues are instant-glance keywords — at most 3, each at most 3 words.
+MAX_CUES = 3
+MAX_CUE_WORDS = 3
 
 _DEFAULT_EXPIRES_S = {"proactive": 45, "reactive": 300}
 
@@ -50,6 +55,9 @@ class Card:
     trigger: str | None
     headline: str
     bullets: list[str] = field(default_factory=list)
+    # F4: instant-glance keywords (<=3, each <=3 words) — what the user reads
+    # mid-sentence when bullets are too slow.
+    cues: list[str] = field(default_factory=list)
     say_this: str | None = None
     confidence: str = "medium"
     urgency: str = "fyi"
@@ -87,6 +95,16 @@ EMIT_CARDS_TOOL: dict = {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "Up to 3 bullets, each max 140 characters.",
+                        },
+                        "cues": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Up to 3 instant-glance keyword cues, each max 3 words "
+                                '(e.g. "not k8s-compatible", "suggest OpenShift", '
+                                '"ask pricing") — what the user reads mid-sentence when '
+                                "bullets are too slow."
+                            ),
                         },
                         "say_this": {
                             "type": ["string", "null"],
@@ -148,6 +166,14 @@ def parse_card(raw: object, *, lane: str) -> Card | None:
             if text:
                 bullets.append(text)
 
+    cues_raw = raw.get("cues")
+    cues: list[str] = []
+    if isinstance(cues_raw, list):
+        for item in cues_raw[:MAX_CUES]:
+            cue = " ".join(str(item).split()[:MAX_CUE_WORDS]).strip()
+            if cue:
+                cues.append(cue)
+
     say_this_raw = raw.get("say_this")
     say_this = str(say_this_raw).strip() or None if say_this_raw is not None else None
 
@@ -175,6 +201,7 @@ def parse_card(raw: object, *, lane: str) -> Card | None:
         trigger=trigger,
         headline=headline,
         bullets=bullets,
+        cues=cues,
         say_this=say_this,
         confidence=_pick(raw.get("confidence"), CARD_CONFIDENCES, "medium"),
         urgency=_pick(raw.get("urgency"), CARD_URGENCIES, "fyi"),

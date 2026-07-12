@@ -88,9 +88,68 @@ main {
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem 1.5rem 2.5rem;
-  max-width: 860px;
+  max-width: 1240px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* ── Two-column layout: main content + live-transcript sidebar (F1) ───── */
+/* The sidebar column only exists while a live transcript is showing; the
+   `.with-sidebar` modifier (toggled by app.js) reserves its track so the main
+   column spans full width otherwise. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+.layout.with-sidebar {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.transcript-sidebar {
+  position: sticky;
+  top: 4.75rem;
+  align-self: start;
+  max-height: calc(100vh - 5.75rem);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.85rem;
+  min-height: 0;
+}
+
+.sidebar-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  flex: none;
+}
+
+.transcript-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+@media (max-width: 900px) {
+  .layout.with-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .transcript-sidebar {
+    position: static;
+    max-height: 38vh;
+  }
 }
 
 /* ── Generic panels ──────────────────────────────────────────────────── */
@@ -254,27 +313,25 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Live transcript strip ───────────────────────────────────────────── */
-#transcript-strip { padding: 0.6rem 1rem; }
-
-.strip-lines { display: flex; flex-direction: column; gap: 0.15rem; }
+/* ── Live transcript sidebar lines ───────────────────────────────────── */
+.strip-lines { display: flex; flex-direction: column; gap: 0.3rem; }
+#strip-interims { margin-top: 0.3rem; }
 
 .strip-line {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
-  font-size: 0.85rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.5;
   min-width: 0;
 }
+/* Interim styling preserved: muted + italic (F1). */
 .strip-interim .strip-text { color: var(--text-muted); font-style: italic; }
 
 .strip-text {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .spk {
@@ -383,6 +440,11 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  /* Retention (F4): aged/dismissed cards accumulate here indefinitely (default
+     auto_hide_expired=false), so bound the feed to the viewport and scroll it
+     internally — the main column never grows the page or shifts as cards land. */
+  max-height: calc(100vh - 16rem);
+  overflow-y: auto;
 }
 
 .feed-empty {
@@ -541,6 +603,47 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   font-size: 0.7rem;
   color: var(--text-muted);
 }
+
+/* ── Card cue badges (F4) — instant-glance keywords, visually loud ─────── */
+.card-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+}
+.card-cue {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(245,158,11,.16);
+  color: var(--accent-amber);
+  border: 1px solid rgba(245,158,11,.4);
+}
+
+/* ── Aged / compact retention (F4) ────────────────────────────────────── */
+/* Expired proactive cards and dismissed cards dim and collapse to a headline +
+   cue badges, sinking beneath the fresh cards. Clicking re-expands them. */
+.copilot-card.aged {
+  opacity: 0.6;
+  cursor: pointer;
+  border-left-color: var(--accent-grey);
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+.copilot-card.aged:hover { opacity: 0.85; }
+.copilot-card.aged .card-bullets,
+.copilot-card.aged .say-this,
+.copilot-card.aged .card-meta,
+.copilot-card.aged .card-dismiss,
+.copilot-card.aged .card-urgent-chip { display: none; }
+.copilot-card.aged .card-headline { margin-bottom: 0.25rem; }
+
+.copilot-card.aged.aged-expanded { opacity: 1; cursor: default; }
+.copilot-card.aged.aged-expanded .card-bullets { display: block; }
+.copilot-card.aged.aged-expanded .card-meta { display: block; }
+.copilot-card.aged.aged-expanded .say-this { display: flex; }
 
 /* ── Post-meeting section ────────────────────────────────────────────── */
 .bucket {
@@ -830,6 +933,30 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
 .ctx-meta .over-budget { color: var(--accent-amber); font-weight: 700; }
 .ctx-warning { color: var(--accent-amber); font-weight: 600; }
 
+/* ── Custom model endpoints (Settings, F6) ───────────────────────────── */
+.endpoint-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.1rem; }
+.endpoint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.endpoint-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.endpoint-fields .form-input { font-size: 0.78rem; }
+.ep-delete { align-self: center; flex: none; white-space: nowrap; }
+@media (max-width: 560px) {
+  .endpoint-fields { grid-template-columns: 1fr; }
+}
+
 /* ── History dialog ──────────────────────────────────────────────────── */
 .meeting-list { display: flex; flex-direction: column; gap: 0.4rem; }
 .meeting-row {
@@ -870,6 +997,25 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
 }
 .tx-timestamp { color: var(--accent-blue); font-size: 0.7rem; margin-right: 0.4rem; }
 .tx-empty { color: var(--text-muted); font-style: italic; }
+
+/* History: Cards tab (F4) */
+.history-tabs { margin-bottom: 0.75rem; }
+.tx-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+.tx-card-row {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.tx-card-headline { font-size: 0.85rem; font-weight: 650; }
+.tx-card-say { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem; }
 
 /* ── Gear / header action buttons ────────────────────────────────────── */
 .btn-settings {

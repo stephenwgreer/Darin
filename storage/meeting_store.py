@@ -7,6 +7,7 @@ Each meeting is stored as a directory:
       meta.txt          ← line 1: start ISO, line 2: end ISO (blank if active)
       transcript.txt    ← one segment per line, appended in real time
       segments.tsv      ← ISO_TIMESTAMP<TAB>text per line (for time-range queries)
+      cards.jsonl       ← one card JSON per line ({..card.., "ts": ISO}), appended
       analyses/
         <prompt_id>.txt ← one file per prompt
 
@@ -15,6 +16,7 @@ Thread safety: a threading.Lock serializes all writes.
 
 from __future__ import annotations
 
+import json
 import shutil
 import threading
 from datetime import UTC, datetime
@@ -52,6 +54,9 @@ class MeetingStore:
 
     def _meta_path(self, meeting_id: str) -> Path:
         return self._meeting_dir(meeting_id) / "meta.txt"
+
+    def _cards_path(self, meeting_id: str) -> Path:
+        return self._meeting_dir(meeting_id) / "cards.jsonl"
 
     def _analyses_dir(self, meeting_id: str) -> Path:
         return self._meeting_dir(meeting_id) / "analyses"
@@ -243,6 +248,48 @@ class MeetingStore:
                 results.append(text)
 
         return " ".join(results)
+
+    # ------------------------------------------------------------------
+    # Card persistence (F4) — every rendered card (both lanes) is appended
+    # ------------------------------------------------------------------
+
+    def append_card(self, meeting_id: str, card: dict) -> None:
+        """Append one rendered card to cards.jsonl (one JSON object per line).
+
+        A ``ts`` field (ISO-8601 UTC append time) is added alongside the card's
+        own fields. The meeting directory must already exist; a missing
+        directory is ignored (the meeting may have been reset/deleted).
+        """
+        meeting_dir = self._meeting_dir(meeting_id)
+        if not meeting_dir.exists():
+            logger.warning("append_card skipped: meeting dir missing", meeting_id=meeting_id)
+            return
+        record = {**card, "ts": datetime.now(tz=UTC).isoformat()}
+        line = json.dumps(record, ensure_ascii=False)
+        with self._lock, self._cards_path(meeting_id).open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def get_cards(self, meeting_id: str) -> list[dict]:
+        """Return all persisted cards for a meeting, oldest first.
+
+        Malformed lines are skipped with a warning rather than failing the whole
+        read — one corrupt append must never hide the rest of the history.
+        """
+        path = self._cards_path(meeting_id)
+        if not path.exists():
+            return []
+        cards: list[dict] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as e:
+                logger.warning("Skipping corrupt card line", meeting_id=meeting_id, error=str(e))
+                continue
+            if isinstance(obj, dict):
+                cards.append(obj)
+        return cards
 
     # ------------------------------------------------------------------
     # Analysis persistence

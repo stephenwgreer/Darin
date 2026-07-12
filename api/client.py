@@ -27,6 +27,13 @@ from loguru import logger
 
 import config
 from api.deepgram_utils import transcribe_with_deepgram
+from api.providers import (
+    ModelRegistry,
+    ProviderSpec,
+    create_cards_openai,
+    extract_json_object,
+    process_openai,
+)
 from services.cards import EMIT_CARDS_TOOL, Card, parse_cards
 
 
@@ -65,6 +72,23 @@ def estimate_cost_usd(model: str, usage: Any) -> float:
         + cache_write * input_price * _CACHE_WRITE_MULT
         + output_tokens * output_price
     ) / 1_000_000
+
+
+def build_web_search_tool(model: str) -> dict:
+    """Build the Anthropic server-side web-search tool for a given model (F3).
+
+    The dynamic-filtering ``web_search_20260209`` variant requires an
+    Opus-4.6+/Sonnet-4.6+ class model; Haiku falls back to the basic variant.
+    """
+    if model.startswith("claude-haiku"):
+        tool_type = config.ANTHROPIC_WEB_SEARCH_TOOL_TYPE_BASIC
+    else:
+        tool_type = config.ANTHROPIC_WEB_SEARCH_TOOL_TYPE
+    return {
+        "type": tool_type,
+        "name": "web_search",
+        "max_uses": config.ANTHROPIC_WEB_SEARCH_MAX_USES,
+    }
 
 
 def build_system_blocks(instructions: str, context_pack_text: str | None = None) -> list[dict]:
@@ -108,7 +132,11 @@ class ApiClient:
     """Client for interacting with Anthropic and Deepgram APIs."""
 
     def __init__(
-        self, anthropic_api_key: str | None = None, deepgram_api_key: str | None = None
+        self,
+        anthropic_api_key: str | None = None,
+        deepgram_api_key: str | None = None,
+        *,
+        model_registry: ModelRegistry | None = None,
     ) -> None:
         """
         Initialize API client with validated API keys.
@@ -116,6 +144,10 @@ class ApiClient:
         Args:
             anthropic_api_key: Optional override for Anthropic API key (uses config default)
             deepgram_api_key: Optional override for Deepgram API key (uses config default)
+            model_registry: Optional model registry (F2). When set, model ids are
+                resolved through it so openai_compat models route to the OpenAI-SDK
+                adapter; unknown/anthropic ids stay on the native path. When None,
+                every request uses the native Anthropic path (backwards compatible).
 
         Raises:
             ValueError: If API keys are invalid (empty or whitespace-only)
@@ -137,6 +169,10 @@ class ApiClient:
 
         self._anthropic_client: Anthropic | None = None
         self._watcher_anthropic_client: Anthropic | None = None
+
+        # F2: resolves model ids to providers. Settable after construction so the
+        # controller can rebind it when custom endpoints change.
+        self.model_registry: ModelRegistry | None = model_registry
 
         # Per-meeting cost telemetry
         self._cost_lock = threading.Lock()
@@ -210,6 +246,16 @@ class ApiClient:
                 logger.warning("on_usage callback failed: {}", e)
 
     # ------------------------------------------------------------------
+    # Provider routing (F2)
+    # ------------------------------------------------------------------
+
+    def _resolve_provider(self, model: str) -> ProviderSpec | None:
+        """Resolve a model id via the registry, or None (→ native Anthropic path)."""
+        if self.model_registry is None:
+            return None
+        return self.model_registry.resolve(model)
+
+    # ------------------------------------------------------------------
     # Card lanes (forced tool use)
     # ------------------------------------------------------------------
 
@@ -221,8 +267,13 @@ class ApiClient:
         max_tokens: int,
         system: list[dict],
         messages: list[dict],
+        web_search: bool = False,
     ) -> list[Card]:
-        """Run one forced-tool-use request and return validated Cards.
+        """Run one card request and return validated Cards.
+
+        Anthropic models go through forced ``emit_cards`` tool use (or, when
+        ``web_search`` is set, an unforced tools list so the model can search
+        first). openai_compat models route to the OpenAI-SDK adapter.
 
         Args:
             lane: "watcher" (fail-fast client, proactive cards) or "reactive".
@@ -231,10 +282,27 @@ class ApiClient:
             system: Cached system blocks (see ``build_system_blocks``).
             messages: Transcript context + final instruction
                 (see ``build_transcript_messages``).
+            web_search: Attach the Anthropic server-side web-search tool (F3);
+                ignored (with a warning) on openai_compat models.
 
         Returns:
             Zero or more validated Cards (``[]`` is the "nothing to say" result).
         """
+        card_lane = "proactive" if lane == "watcher" else "reactive"
+
+        spec = self._resolve_provider(model)
+        if spec is not None and spec.provider == "openai_compat":
+            if web_search:
+                logger.warning("web_search requested on openai_compat model — ignored", model=model)
+            return create_cards_openai(
+                spec,
+                lane=lane,
+                card_lane=card_lane,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+            )
+
         client = self.watcher_anthropic_client if lane == "watcher" else self.anthropic_client
 
         kwargs: dict[str, Any] = {
@@ -242,28 +310,59 @@ class ApiClient:
             "max_tokens": max_tokens,
             "system": system,
             "messages": messages,
-            "tools": [EMIT_CARDS_TOOL],
-            "tool_choice": {"type": "tool", "name": "emit_cards"},
         }
-        if lane == "reactive":
-            # REACTIVE_MODEL defaults to adaptive thinking when the param is
-            # omitted — the reactive lane explicitly disables it for latency.
-            kwargs["thinking"] = {"type": "disabled"}
+        if web_search:
+            # Unforced tools list: the model searches, then emits cards LAST.
+            # Forcing emit_cards would prevent it from ever calling web_search.
+            kwargs["tools"] = [EMIT_CARDS_TOOL, build_web_search_tool(model)]
+        else:
+            kwargs["tools"] = [EMIT_CARDS_TOOL]
+            kwargs["tool_choice"] = {"type": "tool", "name": "emit_cards"}
+            if lane == "reactive":
+                # REACTIVE_MODEL defaults to adaptive thinking when the param is
+                # omitted — the reactive lane explicitly disables it for latency.
+                # With web search we leave thinking adaptive so the server-tool
+                # loop can reason between searches.
+                kwargs["thinking"] = {"type": "disabled"}
 
         response = client.messages.create(**kwargs)
         self._record_usage(lane=lane, model=model, response=response)
 
+        # Server-tool (web search) loop: resume until the turn completes.
+        continuations = 0
+        while getattr(response, "stop_reason", None) == "pause_turn" and continuations < 3:
+            continuations += 1
+            resumed_messages = [*messages, {"role": "assistant", "content": response.content}]
+            response = client.messages.create(**{**kwargs, "messages": resumed_messages})
+            self._record_usage(lane=lane, model=model, response=response)
+
+        # Take the LAST emit_cards tool_use block (it comes after any search).
         raw_input: object = None
         for block in response.content:
-            if getattr(block, "type", None) == "tool_use" and block.name == "emit_cards":
+            if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == (
+                "emit_cards"
+            ):
                 raw_input = block.input
-                break
+
+        if raw_input is None and web_search:
+            # Fallback: the model may have answered in text instead of the tool.
+            text = "".join(
+                block.text for block in response.content if getattr(block, "type", None) == "text"
+            )
+            raw_input = extract_json_object(text)
+
         if raw_input is None:
             logger.warning("No emit_cards tool_use block in response", lane=lane)
             return []
 
-        card_lane = "proactive" if lane == "watcher" else "reactive"
-        return parse_cards(raw_input, lane=card_lane)
+        cards = parse_cards(raw_input, lane=card_lane)
+        if web_search:
+            # Cards produced with web search are grounded in general/searched
+            # knowledge unless the model already tagged them KB-grounded.
+            for card in cards:
+                if card.source != "kb":
+                    card.source = "knowledge"
+        return cards
 
     # ------------------------------------------------------------------
     # Long-form lane (post-meeting / titles / map-reduce / rolling summary)
@@ -305,6 +404,7 @@ class ApiClient:
         context_pack_text: str | None = None,
         lane: str = "background",
         cache_transcript: bool = True,
+        web_search: bool = False,
     ) -> str:
         """Process a transcript with Claude using the cache-first request shape.
 
@@ -345,17 +445,41 @@ class ApiClient:
             [transcript_block], instruction, cache_transcript=cache_transcript
         )
 
+        # F2: route openai_compat models through the OpenAI-SDK adapter.
+        spec = self._resolve_provider(model)
+        if spec is not None and spec.provider == "openai_compat":
+            if web_search:
+                logger.warning("web_search requested on openai_compat model — ignored", model=model)
+            logger.info(
+                "Sending prompt to openai_compat model",
+                lane=lane,
+                model=model,
+                transcript_chars=len(text),
+            )
+            return process_openai(
+                spec,
+                lane=lane,
+                max_tokens=max_tokens,
+                system=system,
+                messages=messages,
+                stream=stream,
+                callback=callback,
+            )
+
         request_kwargs: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
             "system": system,
             "messages": messages,
         }
+        if web_search:
+            request_kwargs["tools"] = [build_web_search_tool(model)]
         # claude-sonnet-5 runs ADAPTIVE thinking when the param is omitted:
         # thinking tokens bill as output and count against max_tokens, so the
-        # long-form/background lanes disable it explicitly. claude-haiku-4-5
-        # runs WITHOUT thinking when the param is omitted — nothing to send.
-        if model.startswith("claude-sonnet-5"):
+        # long-form/background lanes disable it explicitly. With web search we
+        # leave thinking adaptive so the server-tool loop can reason. claude-
+        # haiku-4-5 runs WITHOUT thinking when the param is omitted.
+        if model.startswith("claude-sonnet-5") and not web_search:
             request_kwargs["thinking"] = {"type": "disabled"}
 
         client = self.anthropic_client

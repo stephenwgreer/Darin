@@ -229,6 +229,47 @@ class TestRunPostMeetingPrompt:
         assert done.wait(timeout=2.0)
         assert not controller.is_processing
 
+    def test_web_search_threaded_to_anthropic_on_longform(
+        self, controller: AppController, store: MeetingStore
+    ) -> None:
+        """F3 regression: web_search on a long-form prompt must reach
+        process_with_anthropic (it was silently dropped on this lane)."""
+        from dataclasses import replace
+
+        meeting_id = store.start_meeting()
+        store.append_segment(meeting_id, "Some content to summarize.")
+        store.end_meeting(meeting_id)
+        controller._last_meeting_id = meeting_id
+
+        cfg = replace(get_prompt_config_by_id("meeting_summary"), web_search=True)
+
+        done = threading.Event()
+        controller.run_post_meeting_prompt(cfg, on_complete=lambda pid, txt: done.set())
+
+        assert done.wait(timeout=2.0)
+        _, kwargs = controller.api_client.process_with_anthropic.call_args
+        assert kwargs.get("web_search") is True
+
+
+class TestPersistCardMeetingResolution:
+    """F4 regression: cards emitted post-meeting still land in cards.jsonl."""
+
+    def test_persist_card_uses_last_meeting_when_active_none(
+        self, controller: AppController, store: MeetingStore
+    ) -> None:
+        """After stop_meeting, _active_meeting_id is None and the id lives in
+        _last_meeting_id; a card emitted then must still be appended."""
+        meeting_id = store.start_meeting()
+        store.end_meeting(meeting_id)
+        controller._active_meeting_id = None
+        controller._last_meeting_id = meeting_id
+
+        controller._persist_card({"id": "card_deadbeef0001", "headline": "post-meeting card"})
+
+        cards = store.get_cards(meeting_id)
+        assert len(cards) == 1
+        assert cards[0]["headline"] == "post-meeting card"
+
 
 class TestPromptRegistryIntegrity:
     """Guard against registry regressions (two-lane card copilot)."""
@@ -243,7 +284,7 @@ class TestPromptRegistryIntegrity:
             ), f"Prompt {cfg.id!r} has unexpected bucket {cfg.bucket!r}"
 
     def test_get_prompts_by_bucket_reactive_count(self) -> None:
-        """Exactly 5 reactive buttons (Ask is separate, not a button)."""
+        """7 reactive buttons (Ask is separate, not a button)."""
         from prompts.registry import get_prompts_by_bucket
 
         prompts = get_prompts_by_bucket("reactive")
@@ -253,6 +294,8 @@ class TestPromptRegistryIntegrity:
             "reframe",
             "where_are_we",
             "next_step",
+            "ask_this",
+            "deep_dive",
         ]
 
     def test_get_prompts_by_bucket_post_meeting_count(self) -> None:
@@ -305,6 +348,6 @@ class TestPromptRegistryIntegrity:
     def test_total_prompt_count(self) -> None:
         from prompts.registry import PROMPT_REGISTRY
 
-        assert len(PROMPT_REGISTRY) == 8, (
-            f"Expected 8 total prompts (5 reactive + 3 post-meeting), got {len(PROMPT_REGISTRY)}"
+        assert len(PROMPT_REGISTRY) == 10, (
+            f"Expected 10 total prompts (7 reactive + 3 post-meeting), got {len(PROMPT_REGISTRY)}"
         )

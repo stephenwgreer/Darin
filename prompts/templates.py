@@ -44,6 +44,10 @@ _CARD_RULES = """\
 Card rules (always respond by calling the emit_cards tool — never plain text):
 - headline: <= 60 characters, glanceable at a distance.
 - bullets: at most 3, each <= 140 characters, concrete and specific.
+- cues: at most 3 instant-glance keywords, each at most 3 words (e.g.
+  "not k8s-compatible", "suggest OpenShift", "ask pricing"). Cues are what the
+  user reads mid-sentence when the bullets are too slow — the loudest, most
+  scannable signal on the card. Prefer them on every card.
 - say_this: one natural sentence the user could say out loud verbatim, or null.
 - confidence: "high" only when you are sure; otherwise "medium".
 - urgency: "now" (needs a response in this breath), "soon", or "fyi".
@@ -54,7 +58,7 @@ Card rules (always respond by calling the emit_cards tool — never plain text):
 
 
 # ---------------------------------------------------------------------------
-# Reactive lane (5 buttons + Ask)
+# Reactive lane (7 buttons + Ask)
 # ---------------------------------------------------------------------------
 
 REACTIVE_SYSTEM_PROMPT = f"""\
@@ -101,6 +105,25 @@ NEXT_STEP_INSTRUCTION = """\
 Emit ONE card of type "next_step" with the single best next step ME should
 propose: headline names the step, bullets say why now and what it unblocks,
 and say_this is the proposal sentence ME could say verbatim."""
+
+ASK_THIS_INSTRUCTION = """\
+Given the conversation and my context (role: technical sales / systems
+engineer), find the GAPS — what has NOT been addressed that matters (pricing,
+packaging, architecture fit, migration path, impact on our existing platform,
+security/compliance, support model...). Emit ONE card of type "next_step" that
+arms ME with up to 3 sharp questions I could ask right now: each bullet = the
+gap + why it matters, say_this = the single best question phrased naturally out
+loud, cues = the gap keywords. If nothing is genuinely missing, emit
+{"cards": []}."""
+
+DEEP_DIVE_INSTRUCTION = """\
+Identify the current technical topic under discussion and give ME the 3 most
+useful concrete facts/specifics a systems engineer should inject beyond what the
+transcript already covers — versions, limits, costs, known issues,
+compatibility. Emit ONE card of type "heads_up": bullets are the specifics,
+cues are the sharpest keywords, say_this is optional. Use web search when it
+sharpens the facts, and label source honestly ("knowledge" for search/general,
+"kb" for the context pack, "transcript" when grounded in what was said)."""
 
 # Freeform Ask box. {question} is substituted (via str.replace) before sending.
 ASK_QUESTION_PROMPT = """\

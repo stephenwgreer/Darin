@@ -7,6 +7,8 @@ from services.cards import (
     EMIT_CARDS_TOOL,
     MAX_BULLET_CHARS,
     MAX_BULLETS,
+    MAX_CUE_WORDS,
+    MAX_CUES,
     MAX_HEADLINE_CHARS,
     parse_card,
     parse_cards,
@@ -23,6 +25,10 @@ class TestEmitCardsTool:
     def test_card_types_in_schema_match_module(self) -> None:
         item_props = EMIT_CARDS_TOOL["input_schema"]["properties"]["cards"]["items"]["properties"]
         assert item_props["type"]["enum"] == list(CARD_TYPES)
+
+    def test_cues_in_schema(self) -> None:
+        item_props = EMIT_CARDS_TOOL["input_schema"]["properties"]["cards"]["items"]["properties"]
+        assert item_props["cues"]["type"] == "array"
 
 
 class TestParseCard:
@@ -69,6 +75,38 @@ class TestParseCard:
         assert card is not None
         assert len(card.bullets) == MAX_BULLETS
         assert all(len(b) <= MAX_BULLET_CHARS for b in card.bullets)
+
+    def test_cues_parsed(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "cues": ["ask pricing", "suggest OpenShift"]},
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.cues == ["ask pricing", "suggest OpenShift"]
+
+    def test_cues_truncated_to_3_and_3_words(self) -> None:
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "cues": ["one two three four five", "a", "b", "c", "d"],
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert len(card.cues) == MAX_CUES
+        assert card.cues[0] == "one two three"
+        assert all(len(c.split()) <= MAX_CUE_WORDS for c in card.cues)
+
+    def test_cues_default_empty_and_bad_type_ignored(self) -> None:
+        card = parse_card({"type": "answer", "headline": "h"}, lane="reactive")
+        assert card is not None
+        assert card.cues == []
+        card2 = parse_card(
+            {"type": "answer", "headline": "h", "cues": "not a list"}, lane="reactive"
+        )
+        assert card2 is not None
+        assert card2.cues == []
 
     def test_invalid_enums_fall_back_to_defaults(self) -> None:
         card = parse_card(
@@ -121,6 +159,7 @@ class TestParseCard:
             "trigger",
             "headline",
             "bullets",
+            "cues",
             "say_this",
             "confidence",
             "urgency",

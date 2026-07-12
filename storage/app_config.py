@@ -22,6 +22,27 @@ class CustomPromptConfig:
     button_text: str
     output_title: str
     template: str
+    # Per-prompt model choice + web search (F2/F3). Empty model = fall back to
+    # config.REACTIVE_MODEL at registry-effective time.
+    model: str = ""
+    web_search: bool = False
+
+
+@dataclass
+class CustomEndpointConfig:
+    """A user-defined OpenAI-compatible endpoint (Groq / Gemini-OpenAI-compat /
+    Cerebras / local Ollama / a ChatJimmy-style proxy).
+
+    The code knows nothing provider-specific — it is just ``base_url`` +
+    ``/chat/completions``. ``api_key`` may be empty (some proxies need none);
+    the adapter substitutes ``"dummy"`` when talking to the OpenAI SDK.
+    """
+
+    id: str  # unique slug, referenced as a model id
+    label: str
+    base_url: str
+    model_name: str
+    api_key: str = ""
 
 
 @dataclass
@@ -33,6 +54,15 @@ class AppConfig:
     deleted_prompt_ids: list[str] = field(default_factory=list)
     # Overrides for built-in prompts: {prompt_id: {field: new_value}}
     prompt_overrides: dict[str, dict] = field(default_factory=dict)
+    # User-defined OpenAI-compatible endpoints (F2).
+    custom_endpoints: list[CustomEndpointConfig] = field(default_factory=list)
+    # Per-prompt model override for the proactive watcher lane (F2). None =
+    # fall back to config.WATCHER_MODEL.
+    watcher_model: str | None = None
+    # F4 retention: when False (default) expired proactive cards transition to a
+    # dimmed "aged" state and are kept in the feed; when True the old
+    # fade-and-remove behavior is restored.
+    auto_hide_expired: bool = False
 
 
 class AppConfigStore:
@@ -66,6 +96,7 @@ class AppConfigStore:
             )
             return AppConfig()
 
+        watcher_model = data.get("watcher_model")
         return AppConfig(
             storage_path=data.get("storage_path", _DEFAULT_STORAGE_PATH),
             background_style=data.get("background_style", "default"),
@@ -73,6 +104,9 @@ class AppConfigStore:
             custom_prompts=self._parse_custom_prompts(data.get("custom_prompts", [])),
             deleted_prompt_ids=data.get("deleted_prompt_ids", []),
             prompt_overrides=data.get("prompt_overrides", {}),
+            custom_endpoints=self._parse_custom_endpoints(data.get("custom_endpoints", [])),
+            watcher_model=watcher_model if isinstance(watcher_model, str) else None,
+            auto_hide_expired=bool(data.get("auto_hide_expired", False)),
         )
 
     def _backup_corrupt_config(self) -> Path | None:
@@ -99,7 +133,7 @@ class AppConfigStore:
             )
             return []
 
-        known_fields = {"id", "button_text", "output_title", "template"}
+        known_fields = {"id", "button_text", "output_title", "template", "model", "web_search"}
         prompts: list[CustomPromptConfig] = []
         for entry in raw_prompts:
             if not isinstance(entry, dict):
@@ -124,6 +158,34 @@ class AppConfigStore:
                 )
         return prompts
 
+    @staticmethod
+    def _parse_custom_endpoints(raw_endpoints: object) -> list[CustomEndpointConfig]:
+        """Parse custom OpenAI-compatible endpoint entries, skipping malformed ones."""
+        if not isinstance(raw_endpoints, list):
+            logger.warning(
+                "custom_endpoints is not a list — ignoring",
+                got=type(raw_endpoints).__name__,
+            )
+            return []
+
+        known_fields = {"id", "label", "base_url", "model_name", "api_key"}
+        endpoints: list[CustomEndpointConfig] = []
+        for entry in raw_endpoints:
+            if not isinstance(entry, dict):
+                logger.warning("Skipping non-object custom endpoint entry", entry=repr(entry)[:200])
+                continue
+            try:
+                endpoints.append(
+                    CustomEndpointConfig(**{k: entry[k] for k in known_fields & set(entry)})
+                )
+            except TypeError as e:
+                logger.warning(
+                    "Skipping malformed custom endpoint (missing required fields)",
+                    endpoint_id=entry.get("id", "<missing>"),
+                    error=str(e),
+                )
+        return endpoints
+
     def save(self, config: AppConfig) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         data = {
@@ -133,6 +195,9 @@ class AppConfigStore:
             "custom_prompts": [asdict(p) for p in config.custom_prompts],
             "deleted_prompt_ids": config.deleted_prompt_ids,
             "prompt_overrides": config.prompt_overrides,
+            "custom_endpoints": [asdict(e) for e in config.custom_endpoints],
+            "watcher_model": config.watcher_model,
+            "auto_hide_expired": config.auto_hide_expired,
         }
         self._path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         logger.debug("Config saved to {}", self._path)
