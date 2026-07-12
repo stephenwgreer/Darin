@@ -129,3 +129,8 @@ Do not weaken them.
 - `readme.md` / `project_context.md` are stale (describe the retired PyQt6 app) — trust this file and the code.
 - The `DEEPGRAM_API_KEY` in `.env` returned 401 as of 2026-07-10 — rotate before live meeting tests.
 - Haiku's minimum cacheable prefix is 4096 tokens — small context packs won't cache-hit early in a meeting (harmless).
+
+## Design Context
+
+- `PRODUCT.md` — design strategy: product register, web platform, single expert user, "Heads-Up Display for a live call" positioning, glance-first design principles, anti-references (no chatbot UI, no SaaS dashboard chrome).
+- `DESIGN.md` — the visual system: Deep Space palette, Radar Blue primary, one-meaning-per-accent signal vocabulary, flat elevation ("glow means alive"), copilot card anatomy. Consult both before any UI work in `web/static/`.

@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-11T00:00:00Z",
+  "title": "Design System: Darin",
+  "extensions": {
+    "colorMeta": {
+      "deep-space": { "role": "neutral", "displayName": "Deep Space", "canonical": "#0f1117", "tonalRamp": ["#0f1117", "#1a1d27", "#22253a", "#2e3347", "#454b63", "#666e8a", "#8892a4", "#c5cbd8"] },
+      "console-panel": { "role": "neutral", "displayName": "Console Panel", "canonical": "#1a1d27", "tonalRamp": ["#0f1117", "#1a1d27", "#22253a", "#2e3347", "#454b63", "#666e8a", "#8892a4", "#c5cbd8"] },
+      "console-raised": { "role": "neutral", "displayName": "Console Raised", "canonical": "#22253a", "tonalRamp": ["#0f1117", "#1a1d27", "#22253a", "#2e3347", "#454b63", "#666e8a", "#8892a4", "#c5cbd8"] },
+      "hull-line": { "role": "neutral", "displayName": "Hull Line", "canonical": "#2e3347", "tonalRamp": ["#0f1117", "#1a1d27", "#22253a", "#2e3347", "#454b63", "#666e8a", "#8892a4", "#c5cbd8"] },
+      "signal-white": { "role": "neutral", "displayName": "Signal White", "canonical": "#e2e8f0", "tonalRamp": ["#2e3347", "#454b63", "#666e8a", "#8892a4", "#aab2c2", "#c5cbd8", "#e2e8f0", "#f4f6fa"] },
+      "dim-signal": { "role": "neutral", "displayName": "Dim Signal", "canonical": "#8892a4", "tonalRamp": ["#2e3347", "#454b63", "#5a6178", "#6f778e", "#8892a4", "#a3acbc", "#c5cbd8", "#e2e8f0"] },
+      "radar-blue": { "role": "primary", "displayName": "Radar Blue", "canonical": "#3b82f6", "tonalRamp": ["#0c1e3e", "#12315f", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"] },
+      "radar-blue-deep": { "role": "primary", "displayName": "Radar Blue Deep", "canonical": "#2563eb", "tonalRamp": ["#0c1e3e", "#12315f", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"] },
+      "contact-teal": { "role": "secondary", "displayName": "Contact Teal", "canonical": "#14b8a6", "tonalRamp": ["#042f2a", "#0a4f47", "#0f766e", "#0d9488", "#14b8a6", "#2dd4bf", "#5eead4", "#ccfbf1"] },
+      "caution-amber": { "role": "secondary", "displayName": "Caution Amber", "canonical": "#f59e0b", "tonalRamp": ["#3b2606", "#78440c", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fef3c7"] },
+      "go-green": { "role": "secondary", "displayName": "Go Green", "canonical": "#22c55e", "tonalRamp": ["#052e16", "#14532d", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#dcfce7"] },
+      "alert-red": { "role": "secondary", "displayName": "Alert Red", "canonical": "#ef4444", "tonalRamp": ["#450a0a", "#7f1d1d", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fee2e2"] },
+      "analysis-purple": { "role": "secondary", "displayName": "Analysis Purple", "canonical": "#a855f7", "tonalRamp": ["#3b0764", "#581c87", "#7e22ce", "#9333ea", "#a855f7", "#c084fc", "#d8b4fe", "#f3e8ff"] },
+      "standby-grey": { "role": "neutral", "displayName": "Standby Grey", "canonical": "#6b7280", "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "The DARIN wordmark only." },
+      "title": { "displayName": "Title", "purpose": "Card headlines — the one line read mid-call. ≤60 characters." },
+      "body": { "displayName": "Body", "purpose": "Bullets, hints, rows, general UI text." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked section titles and the SAY label." },
+      "micro": { "displayName": "Micro", "purpose": "Speaker tags and card-type chips." },
+      "mono": { "displayName": "Mono", "purpose": "Streaming output, paths, prompt templates." }
+    },
+    "shadows": [
+      { "name": "live-glow-green", "value": "0 0 6px rgba(34,197,94,0.7)", "purpose": "Watcher-armed status dot. Glow means alive." },
+      { "name": "live-glow-amber", "value": "0 0 6px rgba(245,158,11,0.7)", "purpose": "Watcher-thinking status dot, paired with pulse." },
+      { "name": "attention-ring", "value": "0 0 0 3px rgba(245,158,11,0.25)", "purpose": "Urgent card arrival; pulses exactly twice, then stops." },
+      { "name": "toast-float", "value": "0 6px 24px rgba(0,0,0,0.45)", "purpose": "The single floating surface (toast). Panels are flat." },
+      { "name": "focus-ring", "value": "0 0 0 2px rgba(59,130,246,0.15)", "purpose": "Input focus, with border shifting to Radar Blue." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "0.15s (background, color, border-color, opacity)", "purpose": "Default utilitarian transition on all interactive elements." },
+      { "name": "card-in", "value": "0.25s ease-out (opacity 0→1, translateY -6px→0)", "purpose": "Card arrival in the feed." },
+      { "name": "card-expire", "value": "0.7s ease (opacity→0, translateY -4px)", "purpose": "Proactive card expiry fade before removal." },
+      { "name": "pulse", "value": "1.2–1.4s infinite (opacity 1→0.4, scale 1→0.8)", "purpose": "REC dot and watcher-thinking dot. Live state only." },
+      { "name": "spin", "value": "0.7s linear infinite", "purpose": "In-button busy spinner." }
+    ],
+    "breakpoints": [
+      { "name": "sidebar-collapse", "value": "900px" },
+      { "name": "form-stack", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Command Button (Start)",
+      "kind": "button",
+      "refersTo": "button-go",
+      "description": "Solid Go Green session command; the loudest button in the UI.",
+      "html": "<button class=\"ds-btn-go\">Start Session</button>",
+      "css": ".ds-btn-go { display: inline-flex; align-items: center; gap: 0.4rem; background: #22c55e; color: #000; border: none; border-radius: 0.35rem; padding: 0.45rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s; } .ds-btn-go:hover { background: #16a34a; } .ds-btn-go:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Primary Button (Save)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid Radar Blue commit action in modals.",
+      "html": "<button class=\"ds-btn-primary\">Save Changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; background: #3b82f6; color: #fff; border: none; border-radius: 0.35rem; padding: 0.45rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; } .ds-btn-primary:hover { background: #2563eb; } .ds-btn-primary:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }"
+    },
+    {
+      "name": "Action Button (Reactive)",
+      "kind": "button",
+      "refersTo": "button-action",
+      "description": "Tinted Radar Blue prompt trigger; the five-button action bar.",
+      "html": "<button class=\"ds-btn-action\">Answer This</button>",
+      "css": ".ds-btn-action { display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.35); border-radius: 0.35rem; padding: 0.42rem 0.9rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s; } .ds-btn-action:hover { background: rgba(59,130,246,0.3); } .ds-btn-action:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Neutral secondary action on a Hull Line border.",
+      "html": "<button class=\"ds-btn-outline\">History</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; gap: 0.4rem; background: transparent; color: #e2e8f0; border: 1px solid #2e3347; border-radius: 0.35rem; padding: 0.45rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; } .ds-btn-outline:hover { background: #22253a; } .ds-btn-outline:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Copilot Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The signature HUD element: chip → headline → bullets → say-this → meta, lane-coded on the left edge.",
+      "html": "<div class=\"ds-copilot-card\"><div class=\"ds-card-top\"><span class=\"ds-chip ds-chip-answer\">ANSWER</span><span class=\"ds-lane\">reactive</span><button class=\"ds-dismiss\">✕</button></div><div class=\"ds-headline\">They asked about SSO — we support SAML today</div><ul class=\"ds-bullets\"><li>SAML 2.0 shipped in the March release; OIDC is on the roadmap</li><li>Provisioning is manual today — SCIM lands next quarter</li></ul><div class=\"ds-say\"><span class=\"ds-say-label\">SAY</span><span class=\"ds-say-text\">“SAML works out of the box today, and SCIM provisioning is coming next quarter.”</span><button class=\"ds-say-copy\">Copy</button></div><div class=\"ds-meta\">watcher · 42s ago</div></div>",
+      "css": ".ds-copilot-card { background: #1a1d27; border: 1px solid #2e3347; border-left: 3px solid #3b82f6; border-radius: 0.5rem; padding: 0.75rem 0.9rem; color: #e2e8f0; font-size: 0.85rem; max-width: 34rem; } .ds-card-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; } .ds-chip { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.12rem 0.5rem; border-radius: 999px; } .ds-chip-answer { background: rgba(59,130,246,0.18); color: #3b82f6; } .ds-lane { font-size: 0.62rem; color: #8892a4; letter-spacing: 0.05em; } .ds-dismiss { margin-left: auto; background: none; border: none; color: #8892a4; cursor: pointer; font-size: 0.85rem; padding: 2px 5px; border-radius: 0.35rem; transition: background 0.15s, color 0.15s; } .ds-dismiss:hover { background: #22253a; color: #e2e8f0; } .ds-headline { font-size: 0.95rem; font-weight: 650; line-height: 1.35; margin-bottom: 0.3rem; } .ds-bullets { list-style: disc; padding-left: 1.15rem; margin: 0 0 0.35rem; } .ds-bullets li { font-size: 0.85rem; line-height: 1.45; margin-bottom: 0.15rem; } .ds-say { display: flex; align-items: center; gap: 0.5rem; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 0.35rem; padding: 0.4rem 0.6rem; margin: 0.35rem 0; } .ds-say-label { flex: none; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; color: #3b82f6; } .ds-say-text { flex: 1; font-size: 0.85rem; font-style: italic; } .ds-say-copy { flex: none; background: transparent; border: 1px solid rgba(59,130,246,0.4); color: #3b82f6; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 0.35rem; cursor: pointer; transition: background 0.15s; } .ds-say-copy:hover { background: rgba(59,130,246,0.15); } .ds-meta { font-size: 0.7rem; color: #8892a4; }"
+    },
+    {
+      "name": "Speaker Tags",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "ME / THEM attribution pills from the live transcript strip.",
+      "html": "<span class=\"ds-spk ds-spk-me\">ME</span> <span class=\"ds-spk ds-spk-them\">THEM</span>",
+      "css": ".ds-spk { display: inline-block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; padding: 0.05rem 0.4rem; border-radius: 999px; } .ds-spk-me { background: rgba(59,130,246,0.18); color: #3b82f6; } .ds-spk-them { background: rgba(20,184,166,0.18); color: #14b8a6; }"
+    },
+    {
+      "name": "Ask Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The freeform Ask field with Radar Blue focus treatment.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Ask anything about the conversation…\" />",
+      "css": ".ds-input { width: 100%; max-width: 28rem; padding: 0.55rem 0.9rem; background: #22253a; border: 1px solid #2e3347; border-radius: 0.35rem; color: #e2e8f0; font-size: 0.88rem; min-height: 2.4rem; transition: border-color 0.15s; } .ds-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); } .ds-input::placeholder { color: #8892a4; }"
+    },
+    {
+      "name": "Persona Toggle",
+      "kind": "nav",
+      "refersTo": "chip",
+      "description": "Segmented pill in the header; active segment tinted Radar Blue.",
+      "html": "<div class=\"ds-persona\"><button class=\"ds-persona-btn\">General</button><button class=\"ds-persona-btn ds-active\">Sales</button><button class=\"ds-persona-btn\">Technical</button></div>",
+      "css": ".ds-persona { display: inline-flex; border: 1px solid #2e3347; border-radius: 999px; overflow: hidden; } .ds-persona-btn { background: transparent; border: none; color: #8892a4; font-size: 0.72rem; font-weight: 600; padding: 0.3rem 0.7rem; cursor: pointer; transition: background 0.15s, color 0.15s; } .ds-persona-btn:hover { color: #e2e8f0; } .ds-persona-btn.ds-active { background: rgba(59,130,246,0.2); color: #3b82f6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Heads-Up Display",
+    "overview": "Darin is a fighter-pilot HUD for a live conversation: information overlaid on reality, glanceable in under a second, never the mission itself. The operator's attention belongs to the human on the call; Darin's job is to project the one line worth saying onto the glass and then get out of the way. The aesthetic is a dark console: a Deep Space canvas, flat panels drawn with hairline borders, and a strict semantic color vocabulary where every hue is a signal, never a decoration. Light itself is a status: things glow only when they are live.",
+    "keyCharacteristics": [
+      "Dark, flat, border-structured console surfaces",
+      "Semantic color as a strict signal vocabulary (six accents, each with one meaning)",
+      "Glow and pulse reserved for live state; static UI never glows",
+      "Dense, crisp, instrument-panel typography in a single family",
+      "Glance-first hierarchy: headline → say-this line → everything else subordinate"
+    ],
+    "rules": [
+      { "name": "The One Meaning Rule", "body": "Each accent has exactly one semantic meaning and is prohibited elsewhere. If a color appears without its meaning attached, it is a bug, not a style choice.", "section": "colors" },
+      { "name": "The Tint Rule", "body": "Accents touch the dark hull as translucent tints (8–35% alpha) with a matching tinted 1px border; full-saturation fills are reserved for the few solid command buttons (start, stop, save).", "section": "colors" },
+      { "name": "The Three-Second Rule", "body": "Any text element the operator meets mid-call must land in under three seconds of split attention. Card headlines stay ≤60 characters; bullets stay ≤3 lines; if it needs study, it must be restructured or demoted to post-meeting output.", "section": "typography" },
+      { "name": "The Glow-Means-Alive Rule", "body": "Light is reserved for things that are live, armed, or urgent right now. Static UI never glows, never pulses, never casts. If an element shines while nothing is happening, the signal vocabulary is corrupted.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep every accent on its one meaning: blue = interactive/ME, teal = THEM/proactive, amber = urgent, green = go/live, red = record/stop, purple = post-meeting.",
+      "Do apply accents as translucent tints (8–35% alpha) with matching tinted borders; save solid fills for start/stop/save commands.",
+      "Do reserve glow and pulse for live state — armed watcher, active recording, urgent arrival — and let it end (the attention ring pulses exactly twice).",
+      "Do keep the copilot card's glance order intact: chip → headline → bullets → say-this → meta. The say-this line is the payload.",
+      "Do hold WCAG AA: 4.5:1 body text, 3:1 large text, visible Radar Blue focus rings, and prefers-reduced-motion alternatives for pulse and card-in animations."
+    ],
+    "donts": [
+      "Don't build anything that reads as chatbot UI — no message bubbles, no avatar with personality, no conversational back-and-forth framing.",
+      "Don't build anything that reads as a SaaS dashboard — no KPI-widget grids, no hero metrics, no analytics chrome.",
+      "Don't let static elements glow, pulse, or animate while nothing is happening; ambient motion competes with the call.",
+      "Don't introduce a second font family, cast material shadows on panels, or use an accent color outside its assigned meaning.",
+      "Don't exceed the Three-Second Rule on any live-surface text: headlines ≤60 characters, ≤3 bullets, no paragraphs in cards."
+    ]
+  }
+}

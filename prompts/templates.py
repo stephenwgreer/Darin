@@ -107,20 +107,19 @@ propose: headline names the step, bullets say why now and what it unblocks,
 and say_this is the proposal sentence ME could say verbatim."""
 
 ASK_THIS_INSTRUCTION = """\
-Given the conversation and my context (role: technical sales / systems
-engineer), find the GAPS — what has NOT been addressed that matters (pricing,
-packaging, architecture fit, migration path, impact on our existing platform,
-security/compliance, support model...). Emit ONE card of type "next_step" that
-arms ME with up to 3 sharp questions I could ask right now: each bullet = the
-gap + why it matters, say_this = the single best question phrased naturally out
-loud, cues = the gap keywords. If nothing is genuinely missing, emit
-{"cards": []}."""
+Given the conversation, my persona, and the context pack, find the GAPS — what
+has NOT been addressed that matters (pricing, packaging, architecture fit,
+migration path, impact on our existing platform, security/compliance, support
+model...). Emit ONE card of type "question" that arms ME with up to 3 sharp
+questions I could ask right now: each bullet = the gap + why it matters,
+say_this = the single best question phrased naturally out loud, cues = the gap
+keywords. If nothing is genuinely missing, emit {"cards": []}."""
 
 DEEP_DIVE_INSTRUCTION = """\
 Identify the current technical topic under discussion and give ME the 3 most
-useful concrete facts/specifics a systems engineer should inject beyond what the
-transcript already covers — versions, limits, costs, known issues,
-compatibility. Emit ONE card of type "heads_up": bullets are the specifics,
+useful concrete facts/specifics I should inject beyond what the transcript
+already covers — versions, limits, costs, known issues, compatibility. Emit
+ONE card of type "deep_dive": bullets are the specifics,
 cues are the sharpest keywords, say_this is optional. Use web search when it
 sharpens the facts, and label source honestly ("knowledge" for search/general,
 "kb" for the context pack, "transcript" when grounded in what was said)."""

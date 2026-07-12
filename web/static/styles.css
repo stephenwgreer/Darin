@@ -14,6 +14,10 @@
   --text-muted:  #8892a4;
   --accent-blue:   #3b82f6;
   --accent-blue-h: #2563eb;
+  /* Text-on-tint step of the Radar Blue ramp: #3b82f6 lands ~3.6-3.8:1 on the
+     15-18% blue tints (below WCAG AA 4.5:1); #60a5fa clears 5:1 on all of them. */
+  --accent-blue-lt: #60a5fa;
+  --accent-purple-lt: #c084fc;
   --accent-green:  #22c55e;
   --accent-red:    #ef4444;
   --accent-amber:  #f59e0b;
@@ -32,6 +36,24 @@ html, body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
 }
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
+/* Thin, theme-matched scrollbars on every scroll container. Modern Chrome and
+   Firefox use the standard properties; the ::-webkit-* rules cover Safari. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #3d445e; background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* ── Background themes ───────────────────────────────────────────────── */
 html.bg-darin {
@@ -104,7 +126,7 @@ main {
   align-items: start;
 }
 .layout.with-sidebar {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
 }
 
 .main-col {
@@ -276,7 +298,7 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
 .persona-btn:hover { color: var(--text); }
 .persona-btn.active {
   background: rgba(59, 130, 246, 0.2);
-  color: var(--accent-blue);
+  color: var(--accent-blue-lt);
 }
 
 /* ── Session bar ─────────────────────────────────────────────────────── */
@@ -342,7 +364,7 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
 }
-.spk-me   { background: rgba(59,130,246,.18);  color: var(--accent-blue); }
+.spk-me   { background: rgba(59,130,246,.18);  color: var(--accent-blue-lt); }
 .spk-them { background: rgba(20,184,166,.18);  color: var(--accent-teal); }
 
 /* ── Action bar (5 reactive buttons + custom + Ask) ──────────────────── */
@@ -362,7 +384,7 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
 
 .btn-action {
   background: rgba(59,130,246,.15);
-  color: var(--accent-blue);
+  color: var(--accent-blue-lt);
   border: 1px solid rgba(59,130,246,.35);
   padding: 0.42rem 0.9rem;
   font-size: 0.82rem;
@@ -427,7 +449,7 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
 
 #btn-ask {
   border-color: rgba(59, 130, 246, 0.4);
-  color: var(--accent-blue);
+  color: var(--accent-blue-lt);
   min-height: 2.4rem;
 }
 #btn-ask:hover:not(:disabled) {
@@ -456,10 +478,12 @@ html.bg-darin .card { background: rgba(26, 29, 39, 0.82); }
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }
+/* Lane is encoded in the card's full 1px tinted border (blue = reactive,
+   teal = proactive). Urgency is conveyed by the NOW chip and amber cue
+   badges only — it never recolors the card border. No side stripes. */
 .copilot-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem 0.9rem;
   opacity: 1;
@@ -473,19 +497,8 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   to   { opacity: 1; transform: none; }
 }
 
-.copilot-card.lane-reactive  { border-left-color: var(--accent-blue); }
-.copilot-card.lane-proactive { border-left-color: var(--accent-teal); }
-
-/* urgency=now: accent border + a brief attention pulse */
-.copilot-card.urgency-now {
-  border-color: rgba(245, 158, 11, 0.55);
-  border-left-color: var(--accent-amber);
-  animation: card-in 0.25s ease-out, attention 1.2s ease-in-out 2;
-}
-@keyframes attention {
-  0%, 100% { box-shadow: none; }
-  50%      { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
-}
+.copilot-card.lane-reactive  { border-color: rgba(59, 130, 246, 0.30); }
+.copilot-card.lane-proactive { border-color: rgba(20, 184, 166, 0.30); }
 
 /* Proactive cards fade out at expires_in_s, then are removed by JS */
 .copilot-card.expiring { opacity: 0; transform: translateY(-4px); }
@@ -507,15 +520,17 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   background: rgba(107,114,128,.2);
   color: var(--text-muted);
 }
-.chip-answer     { background: rgba(59,130,246,.18);  color: var(--accent-blue); }
+.chip-answer     { background: rgba(59,130,246,.18);  color: var(--accent-blue-lt); }
 .chip-fact_check { background: rgba(245,158,11,.18);  color: var(--accent-amber); }
-.chip-reframe    { background: rgba(168,85,247,.18);  color: var(--accent-purple); }
+.chip-reframe    { background: rgba(168,85,247,.18);  color: var(--accent-purple-lt); }
 .chip-status     { background: rgba(107,114,128,.25); color: var(--text); }
 .chip-next_step  { background: rgba(34,197,94,.18);   color: var(--accent-green); }
+.chip-question   { background: rgba(236,72,153,.18);  color: #f472b6; }
+.chip-deep_dive  { background: rgba(99,102,241,.18);  color: #a5b4fc; }
 .chip-heads_up   { background: rgba(20,184,166,.18);  color: var(--accent-teal); }
 
 .card-urgent-chip {
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   padding: 0.12rem 0.45rem;
@@ -548,9 +563,13 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   font-size: 0.95rem;
   font-weight: 650;
   line-height: 1.35;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.35rem;
+  max-width: 60ch;
+  text-wrap: balance;
 }
 
+/* Bullets are the "why" — subordinate to the say-this payload above them:
+   capped at a readable measure, slightly muted. */
 .card-bullets {
   list-style: disc;
   padding-left: 1.15rem;
@@ -560,24 +579,27 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   font-size: 0.85rem;
   line-height: 1.45;
   margin-bottom: 0.15rem;
+  max-width: 72ch;
+  color: #c5cbd8;
 }
 
+/* The payload strip — sits directly under the headline, above the bullets. */
 .say-this {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(59,130,246,.08);
-  border: 1px solid rgba(59,130,246,.25);
+  background: rgba(59,130,246,.1);
+  border: 1px solid rgba(59,130,246,.3);
   border-radius: var(--radius-sm);
-  padding: 0.4rem 0.6rem;
-  margin: 0.35rem 0;
+  padding: 0.5rem 0.65rem;
+  margin: 0.15rem 0 0.5rem;
 }
 .say-this-label {
   flex: none;
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: var(--accent-blue);
+  color: var(--accent-blue-lt);
 }
 .say-this-text {
   flex: 1;
@@ -589,7 +611,7 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   flex: none;
   background: transparent;
   border: 1px solid rgba(59,130,246,.4);
-  color: var(--accent-blue);
+  color: var(--accent-blue-lt);
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.15rem 0.55rem;
@@ -611,15 +633,23 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
   gap: 0.3rem;
   margin: 0.4rem 0;
 }
+/* Cue badges are neutral by default; amber is reserved for urgency, so cues
+   only go amber when the card itself is urgent (One Meaning Rule). */
 .card-cue {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   padding: 0.16rem 0.55rem;
   border-radius: 999px;
+  background: var(--bg-card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.urgency-soon .card-cue,
+.urgency-now  .card-cue {
   background: rgba(245,158,11,.16);
   color: var(--accent-amber);
-  border: 1px solid rgba(245,158,11,.4);
+  border-color: rgba(245,158,11,.4);
 }
 
 /* ── Aged / compact retention (F4) ────────────────────────────────────── */
@@ -628,7 +658,7 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
 .copilot-card.aged {
   opacity: 0.6;
   cursor: pointer;
-  border-left-color: var(--accent-grey);
+  border-color: var(--border);
   padding-top: 0.55rem;
   padding-bottom: 0.55rem;
 }
@@ -1107,3 +1137,21 @@ html.bg-darin .copilot-card { background: rgba(26, 29, 39, 0.85); }
 .btn-save:hover { background: var(--accent-blue-h); }
 .btn-delete-prompt { background: rgba(239,68,68,.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,.3); }
 .btn-delete-prompt:hover { background: rgba(239,68,68,.25); }
+
+/* ── Focus visibility ────────────────────────────────────────────────── */
+/* One consistent Radar Blue ring on keyboard focus, replacing the UA default. */
+:is(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+/* Pulse/arrival animations stop; state is still conveyed by color and the
+   NOW chip. Card expiry is timer-driven (app.js), so dropping the fade
+   transition is safe — expired cards are removed at the same moment. */
+@media (prefers-reduced-motion: reduce) {
+  .copilot-card { animation: none; transition: none; }
+  .pulse-dot,
+  .watcher-thinking { animation: none; }
+  .toast { transition: opacity 0.2s ease; transform: translate(-50%, 0); }
+}

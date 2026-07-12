@@ -392,6 +392,8 @@ const CARD_TYPE_LABELS = {
   reframe: 'Reframe',
   status: 'Where we are',
   next_step: 'Next step',
+  question: 'Good question',
+  deep_dive: 'Deep dive',
   heads_up: 'Heads up',
 };
 
@@ -463,23 +465,9 @@ function buildCardElement(card) {
   headline.textContent = card.headline;
   article.appendChild(headline);
 
-  if (Array.isArray(card.bullets) && card.bullets.length > 0) {
-    const ul = document.createElement('ul');
-    ul.className = 'card-bullets';
-    for (const bullet of card.bullets.slice(0, 3)) {
-      const li = document.createElement('li');
-      li.textContent = bullet;
-      ul.appendChild(li);
-    }
-    article.appendChild(ul);
-  }
-
-  // F4: instant-glance cue badges between bullets and say_this.
-  if (Array.isArray(card.cues) && card.cues.length > 0) {
-    const cueRow = buildCardCues(card.cues);
-    if (cueRow) article.appendChild(cueRow);
-  }
-
+  // Say-this renders directly under the headline: the actionable line is the
+  // payload (PRODUCT.md — "say-this first"); bullets and cues are supporting
+  // context below it.
   if (card.say_this) {
     const say = document.createElement('div');
     say.className = 'say-this';
@@ -506,6 +494,23 @@ function buildCardElement(card) {
     say.appendChild(text);
     say.appendChild(copyBtn);
     article.appendChild(say);
+  }
+
+  if (Array.isArray(card.bullets) && card.bullets.length > 0) {
+    const ul = document.createElement('ul');
+    ul.className = 'card-bullets';
+    for (const bullet of card.bullets.slice(0, 3)) {
+      const li = document.createElement('li');
+      li.textContent = bullet;
+      ul.appendChild(li);
+    }
+    article.appendChild(ul);
+  }
+
+  // F4: instant-glance cue badges after the supporting bullets.
+  if (Array.isArray(card.cues) && card.cues.length > 0) {
+    const cueRow = buildCardCues(card.cues);
+    if (cueRow) article.appendChild(cueRow);
   }
 
   const meta = document.createElement('div');

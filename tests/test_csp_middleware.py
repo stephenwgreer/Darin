@@ -47,17 +47,38 @@ def test_csp_allows_self_connect() -> None:
     assert "'self'" in csp
 
 
-def test_csp_script_src_disallows_unsafe_inline() -> None:
+def test_csp_script_src_disallows_unsafe_inline(monkeypatch) -> None:
     """LLM output renders in the page — inline script execution must stay blocked.
 
     The APP_TOKEN bootstrap moved to a static .js file, so script-src is
     'self' only. style-src keeps 'unsafe-inline' (current CSS needs it).
+    DARIN_LIVE_DESIGN is cleared: load_dotenv() may have set it from .env.
     """
+    monkeypatch.delenv("DARIN_LIVE_DESIGN", raising=False)
     client = TestClient(_make_app(), raise_server_exceptions=True)
     csp = client.get("/").headers["content-security-policy"]
     directives = {d.strip().split(" ")[0]: d.strip() for d in csp.split(";") if d.strip()}
     assert directives["script-src"] == "script-src 'self'"
     assert "'unsafe-inline'" not in directives["script-src"]
+
+
+def test_csp_live_design_flag_allows_helper_origin(monkeypatch) -> None:
+    """DARIN_LIVE_DESIGN=1 admits the live-design helper origin in dev only."""
+    monkeypatch.setenv("DARIN_LIVE_DESIGN", "1")
+    client = TestClient(_make_app(), raise_server_exceptions=True)
+    csp = client.get("/").headers["content-security-policy"]
+    directives = {d.strip().split(" ")[0]: d.strip() for d in csp.split(";") if d.strip()}
+    assert directives["script-src"] == "script-src 'self' http://localhost:8400"
+    assert "http://localhost:8400" in directives["connect-src"]
+    assert "'unsafe-inline'" not in directives["script-src"]
+
+
+def test_csp_live_design_flag_off_by_default(monkeypatch) -> None:
+    """Without the flag, the helper origin must never appear (DAR2-34 posture)."""
+    monkeypatch.delenv("DARIN_LIVE_DESIGN", raising=False)
+    client = TestClient(_make_app(), raise_server_exceptions=True)
+    csp = client.get("/").headers["content-security-policy"]
+    assert "8400" not in csp
 
 
 def test_csp_applied_to_all_responses() -> None:

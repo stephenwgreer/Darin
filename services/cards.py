@@ -4,7 +4,8 @@ A card is the atomic unit the copilot renders:
 
     {
       id: str, lane: "proactive"|"reactive",
-      type: "answer"|"fact_check"|"reframe"|"status"|"next_step"|"heads_up",
+      type: "answer"|"fact_check"|"reframe"|"status"|"next_step"|"question"|
+            "deep_dive"|"heads_up",
       trigger: str|null, headline: str (<=60 chars),
       bullets: [str] (<=3, each <=140 chars),
       cues: [str] (<=3, each <=3 words) — instant-glance keywords,
@@ -30,7 +31,16 @@ from loguru import logger
 
 
 CARD_LANES = ("proactive", "reactive")
-CARD_TYPES = ("answer", "fact_check", "reframe", "status", "next_step", "heads_up")
+CARD_TYPES = (
+    "answer",
+    "fact_check",
+    "reframe",
+    "status",
+    "next_step",
+    "question",
+    "deep_dive",
+    "heads_up",
+)
 CARD_CONFIDENCES = ("high", "medium")
 CARD_URGENCIES = ("now", "soon", "fyi")
 CARD_SOURCES = ("transcript", "kb", "knowledge")
