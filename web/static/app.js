@@ -1246,6 +1246,16 @@ async function openSettings() {
 
 el.btnSettings.addEventListener('click', openSettings);
 
+// ── Material toggle: Desk (light) ⇄ After Hours (dark) ──────────────────────
+// boot.js sets the initial data-theme pre-paint (localStorage, else OS
+// preference); this button flips it and persists the choice.
+$('btn-theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const next = root.dataset.theme === 'night' ? 'desk' : 'night';
+  root.dataset.theme = next;
+  try { localStorage.setItem('darin-theme', next); } catch { /* private mode */ }
+});
+
 // ── Knowledge Base / SAS Corpus (Settings) ──────────────────────────────────
 // A local RAG corpus over a folder of SAS Viya PDFs. Enable-toggle and
 // folder-scan post immediately (out-of-band from the batched Save button);

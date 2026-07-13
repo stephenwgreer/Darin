@@ -1,55 +1,88 @@
 ---
 name: Darin
-description: Dark HUD design system for a real-time meeting copilot
+description: Civic Evidence Desk design system — one identity, two materials (Desk paper / After Hours dark), stamp-ink signals, docket typography
 colors:
-  deep-space: "#0f1117"
-  console-panel: "#1a1d27"
-  console-raised: "#22253a"
-  hull-line: "#2e3347"
-  signal-white: "#e2e8f0"
-  dim-signal: "#8892a4"
-  radar-blue: "#3b82f6"
-  radar-blue-deep: "#2563eb"
-  radar-blue-text: "#60a5fa"
-  analysis-purple-text: "#c084fc"
-  go-green: "#22c55e"
-  alert-red: "#ef4444"
-  caution-amber: "#f59e0b"
-  analysis-purple: "#a855f7"
-  contact-teal: "#14b8a6"
-  standby-grey: "#6b7280"
+  record-paper: "#F4EADB"
+  fresh-sheet: "#FBF6EC"
+  blotter: "#EFE3CC"
+  manila: "#DFCAA8"
+  rule-line: "#D6C8AB"
+  rule-strong: "#C4B491"
+  sheet-white: "#FFFDF7"
+  navy-ink: "#17213A"
+  second-ink: "#34415F"
+  faded-ink: "#566074"
+  federal-blue: "#4F78A6"
+  federal-blue-ink: "#33507A"
+  ledger-teal: "#366B62"
+  ochre-seal: "#8A6320"
+  ochre-seal-ink: "#755416"
+  approval-green: "#3F7249"
+  approval-green-ink: "#335C3B"
+  inspection-red: "#B83A2E"
+  inspection-red-ink: "#9E2F24"
+  notary-violet: "#6B4E8E"
+  brass: "#C8AA6A"
+  night-canvas: "#131926"
+  night-sheet: "#1A2233"
+  night-well: "#10151F"
+  night-raised: "#232D42"
+  night-input: "#161D2C"
+  night-rule: "#2C3650"
+  night-rule-strong: "#3A4763"
+  lamplight-paper: "#EDE4D3"
+  night-second-ink: "#C9CFDC"
+  night-faded-ink: "#9AA3B5"
+  night-federal-blue: "#7FA5CC"
+  night-federal-blue-ink: "#8FB2D6"
+  night-ledger-teal: "#72B4A5"
+  night-ochre-seal: "#CE9E45"
+  night-approval-green: "#7CBF8E"
+  night-inspection-red: "#E08273"
+  night-notary-violet: "#B195D2"
 typography:
-  headline:
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
+  display:
+    fontFamily: "'Fraunces', Georgia, 'Times New Roman', serif"
     fontSize: "1.25rem"
-    fontWeight: 700
-    letterSpacing: "0.15em"
+    fontWeight: 600
+    letterSpacing: "0.12em"
   title:
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
+    fontFamily: "'Fraunces', Georgia, 'Times New Roman', serif"
+    fontSize: "1rem"
+    fontWeight: 600
+    lineHeight: 1.3
+  say:
+    fontFamily: "'Fraunces', Georgia, 'Times New Roman', serif"
     fontSize: "0.95rem"
-    fontWeight: 650
-    lineHeight: 1.35
+    fontStyle: italic
+    fontWeight: 500
+    lineHeight: 1.45
   body:
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
-    fontSize: "0.85rem"
-    lineHeight: 1.5
+    fontFamily: "'Libre Franklin', 'Segoe UI', system-ui, sans-serif"
+    fontSize: "0.875rem"
+    lineHeight: 1.55
+  longform:
+    fontFamily: "'Libre Franklin', 'Segoe UI', system-ui, sans-serif"
+    fontSize: "1rem"
+    lineHeight: 1.65
   label:
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
+    fontFamily: "'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace"
     fontSize: "0.7rem"
-    fontWeight: 700
+    fontWeight: 600
     letterSpacing: "0.08em"
   micro:
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif"
-    fontSize: "0.62rem"
-    fontWeight: 700
+    fontFamily: "'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace"
+    fontSize: "0.65rem"
+    fontWeight: 600
     letterSpacing: "0.06em"
   mono:
-    fontFamily: "'Cascadia Mono', ui-monospace, monospace"
-    fontSize: "0.8rem"
+    fontFamily: "'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace"
+    fontSize: "0.78rem"
+    lineHeight: 1.55
 rounded:
-  sm: "0.35rem"
-  md: "0.5rem"
-  pill: "999px"
+  sm: "2px"
+  md: "3px"
+  none: "0"
 spacing:
   xs: "0.3rem"
   sm: "0.5rem"
@@ -58,174 +91,184 @@ spacing:
   xl: "1.5rem"
 components:
   button-primary:
-    backgroundColor: "{colors.radar-blue}"
-    textColor: "#ffffff"
+    backgroundColor: "{colors.navy-ink}"
+    textColor: "{colors.fresh-sheet}"
     rounded: "{rounded.sm}"
     padding: "0.45rem 1rem"
-  button-primary-hover:
-    backgroundColor: "{colors.radar-blue-deep}"
   button-go:
-    backgroundColor: "{colors.go-green}"
-    textColor: "#000000"
+    backgroundColor: "{colors.approval-green}"
+    textColor: "{colors.fresh-sheet}"
     rounded: "{rounded.sm}"
     padding: "0.45rem 1rem"
   button-stop:
-    backgroundColor: "{colors.alert-red}"
-    textColor: "#ffffff"
+    backgroundColor: "{colors.inspection-red}"
+    textColor: "{colors.fresh-sheet}"
     rounded: "{rounded.sm}"
     padding: "0.45rem 1rem"
   button-outline:
     backgroundColor: "transparent"
-    textColor: "{colors.signal-white}"
+    textColor: "{colors.navy-ink}"
     rounded: "{rounded.sm}"
     padding: "0.45rem 1rem"
   button-action:
-    backgroundColor: "#3b82f626"
-    textColor: "{colors.radar-blue}"
+    backgroundColor: "#4F78A624"
+    textColor: "{colors.federal-blue-ink}"
     rounded: "{rounded.sm}"
     padding: "0.42rem 0.9rem"
   card:
-    backgroundColor: "{colors.console-panel}"
+    backgroundColor: "{colors.fresh-sheet}"
     rounded: "{rounded.md}"
     padding: "0.75rem 0.9rem"
   input:
-    backgroundColor: "{colors.console-raised}"
-    textColor: "{colors.signal-white}"
+    backgroundColor: "{colors.sheet-white}"
+    textColor: "{colors.navy-ink}"
     rounded: "{rounded.sm}"
     padding: "0.55rem 0.9rem"
   chip:
-    backgroundColor: "#6b728033"
-    textColor: "{colors.dim-signal}"
-    rounded: "{rounded.pill}"
-    padding: "0.12rem 0.5rem"
+    backgroundColor: "transparent"
+    textColor: "{colors.faded-ink}"
+    rounded: "{rounded.sm}"
+    padding: "0.12rem 0.45rem"
 ---
 
-# Design System: Darin
+# Design System: Darin — Civic Evidence Desk
 
 ## 1. Overview
 
-**Creative North Star: "The Heads-Up Display"**
+**Creative North Star: "The Inspection Desk"**
 
-Darin is a fighter-pilot HUD for a live conversation: information overlaid on reality, glanceable in under a second, never the mission itself. The operator's attention belongs to the human on the call; Darin's job is to project the one line worth saying onto the glass and then get out of the way. Everything in the system serves split attention — short line lengths, loud state coding, quiet chrome.
+Darin is a public-records inspection desk for a live conversation. The call is the case under review; every card the copilot produces is a stamped record slid across the desk — case-labeled, dated, sourced, and legible in a single glance. The operator's attention still belongs to the human on the call; Darin's job is to lay the one line worth saying on the desk and keep the desk quiet.
 
-The aesthetic is a dark console: a Deep Space canvas, flat panels drawn with hairline borders, and a strict semantic color vocabulary where every hue is a signal, never a decoration. Blue means interactive or reactive, teal means the other party or proactive insight, amber means urgency, green means go, red means recording or stop, purple means post-meeting analysis. Light itself is a status: things glow only when they are live.
+**One identity, two materials.** The system ships as a single design language rendered in two materials, toggled from the masthead (◐) and persisted per user: **Desk** — warm record paper, navy ink, daylight — and **After Hours** — the same records office at night: near-black navy surfaces, lamplight-paper text, the same inks brightened to stay legible in the dark. Typography, shapes, spacing, component anatomy, and the signal vocabulary are identical in both; only the material tokens change. The OS color-scheme preference picks the starting material.
 
-This system explicitly rejects chatbot UI — no bubbles, no avatar personality, no conversational framing — and SaaS dashboard chrome — no KPI widgets, no hero metrics, no analytics grid. It is an instrument, and it reads like one.
+Color arrives the way it does on real paperwork — as stamp ink. Each ink is a signal with exactly one meaning, never a decoration: federal blue is interactive, ledger teal is the other party, ochre is urgency, approval green is live, inspection red is recording and stopping, notary violet is post-meeting analysis. Brass is the one non-signal — pure furniture (the masthead rule, fittings), never a message.
+
+Everything that made Darin a HUD survives the change of material: glance-first hierarchy, the three-second ceiling on live text, split-attention density, strict signal semantics. This system still explicitly rejects chatbot UI — no bubbles, no avatar personality, no conversational framing — and SaaS dashboard chrome — no KPI widgets, no hero metrics, no analytics grid. It also rejects the AI-default look: no gradients, no glassmorphism, no neon or glow, no pill-shaped everything.
 
 **Key Characteristics:**
-- Dark, flat, border-structured console surfaces
-- Semantic color as a strict signal vocabulary (six accents, each with one meaning)
-- Glow and pulse reserved for live state; static UI never glows
-- Dense, crisp, instrument-panel typography in a single family
+- Warm paper (or lamplit navy) surfaces structured by hairline rules — flat, printed, physical
+- Stamp-ink color as a strict signal vocabulary (six inks, each with one meaning; brass is furniture)
+- Motion reserved for live state; paper never animates while nothing is happening
+- Three-voice typography: Fraunces speaks (headlines, say-this), Libre Franklin explains (body), IBM Plex Mono files (labels, meta, transcript)
 - Glance-first hierarchy: headline → say-this line → everything else subordinate
 
-## 2. Colors: The Deep Space Palette
+## 2. Colors: The Record Room Palette
 
-A near-black blue-violet canvas with one interactive accent and a six-signal semantic set, all applied as translucent tints over the dark hull.
+A warm paper ground with navy ink and a fixed drawer of stamp inks — and its after-hours negative. Accents are used the way a records clerk uses them: sparingly, deliberately, always meaning the same thing.
 
-### Primary
-- **Radar Blue** (#3b82f6): The interactive channel. Primary buttons, focus rings, reactive-lane accents, and the wordmark. Hover deepens to **Radar Blue Deep** (#2563eb). At 8–35% alpha it tints action buttons, chips, and the say-this callout. **Text sitting ON a tint uses Radar Blue Text** (#60a5fa) — the base blue lands under 4.5:1 on tinted fills; the ramp step clears it. Same pattern for purple chip text (**#c084fc**).
+### Ground & Ink — Desk
+- **Record Paper** (#F4EADB): the page canvas. **Fresh Sheet** (#FBF6EC): cards, panels, modals. **Blotter** (#EFE3CC): recessed wells (transcript, output). **Manila** (#DFCAA8): hover fills, active folder tabs. **Sheet White** (#FFFDF7): inputs.
+- **Rule Line** (#D6C8AB): every hairline border, 1px always; **Rule Strong** (#C4B491) for emphasis.
+- **Navy Ink** (#17213A): primary text (13.4:1 on paper). **Second Ink** (#34415F): bullets. **Faded Ink** (#566074): meta, hints, timestamps (5.9:1 on fresh sheet).
 
-### Secondary
-- **Contact Teal** (#14b8a6): The other side of the call — THEM speaker tags — and the proactive lane (watcher cards, custom actions).
-- **Caution Amber** (#f59e0b): Urgency. `urgency=now` cards, cue badges, over-budget warnings, the watcher's "thinking" state.
-- **Go Green** (#22c55e): Session-live signals. Start button, active badge, watcher-armed dot, completion checks.
-- **Alert Red** (#ef4444): Recording indicator, stop/end actions, destructive buttons.
-- **Analysis Purple** (#a855f7): The post-meeting register — analysis buttons and the post-meeting badge.
+### Ground & Ink — After Hours
+- **Night Canvas** (#131926), **Night Sheet** (#1A2233), **Night Well** (#10151F), **Night Raised** (#232D42), **Night Input** (#161D2C), rules #2C3650 / #3A4763.
+- **Lamplight Paper** (#EDE4D3): primary text (12.6:1 on night sheet). **Night Second Ink** (#C9CFDC), **Night Faded Ink** (#9AA3B5).
 
-### Neutral
-- **Deep Space** (#0f1117): The page canvas and recessed wells (output panels, path inputs).
-- **Console Panel** (#1a1d27): The standard surface — header, cards, modals.
-- **Console Raised** (#22253a): The interaction layer — inputs, hover fills, active tabs.
-- **Hull Line** (#2e3347): Every border and divider. 1px, always.
-- **Signal White** (#e2e8f0): Primary text.
-- **Dim Signal** (#8892a4): Secondary text, labels, hints, timestamps.
-- **Standby Grey** (#6b7280): Idle/neutral states — stopped watcher, aged cards, neutral chips.
+### Stamp Inks (the signal vocabulary — Desk / After Hours)
+- **Federal Blue** (#4F78A6 / #7FA5CC): the interactive channel — actions, focus rings, links, the reactive lane, ME. **Text uses the ink step** (#33507A / #8FB2D6) — the Desk base blue is 3.9:1 on paper and fails AA; marks and borders use the base.
+- **Ledger Teal** (#366B62 / #72B4A5): the other side of the call — THEM tags — and the proactive lane. Text-safe as-is.
+- **Ochre Seal** (#8A6320 / #CE9E45): urgency only. Desk text-on-tint uses **#755416**. Distinct from Brass, which carries no meaning.
+- **Approval Green** (#3F7249 / #7CBF8E): session-live — start stamp, active badge, armed dot. Desk text-on-tint uses **#335C3B**.
+- **Inspection Red** (#B83A2E / #E08273): recording, stop/end, destructive. Desk text on manila/blotter uses **#9E2F24**.
+- **Notary Violet** (#6B4E8E / #B195D2): the post-meeting register. Text-safe as-is.
+
+### Furniture
+- **Brass** (#C8AA6A, both materials): the masthead rule and fittings. **Never text on paper** (1.9:1) and never a signal. Brass text is allowed only on the navy masthead (7.2:1).
+- **The Masthead** (#17213A with #EDE4D3 text, both materials): the desk's navy nameplate — the one surface the toggle does not change.
 
 ### Named Rules
-**The One Meaning Rule.** Each accent has exactly one semantic meaning and is prohibited elsewhere. If a color appears without its meaning attached, it is a bug, not a style choice.
+**The One Meaning Rule.** Each stamp ink has exactly one semantic meaning and is prohibited elsewhere. If an ink appears without its meaning attached, it is a bug, not a style choice. Brass is exempt because brass means nothing — and must never be pressed into meaning something.
 
-**The Tint Rule.** Accents touch the dark hull as translucent tints (8–35% alpha) with a matching tinted 1px border; full-saturation fills are reserved for the few solid command buttons (start, stop, save).
+**The Stamp Rule.** Inks touch paper as tints (10–26% via `color-mix`) with a matching 1px tinted border, or as small solid marks (dots, seals, chips). Full-saturation fills are reserved for the three command buttons. No gradients, ever — ink doesn't fade mid-impression.
+
+**The Ink-Step Rule.** Any accent used as text must use its designated `-text` token, verified ≥4.5:1 on its actual surface (all pairs machine-checked in both materials). Base hues are for marks; ink steps are for words.
+
+**The Two-Materials Rule.** Components reference only semantic tokens (`--ink-*`, `--bg-*`, `--text*`); the theme switch swaps token values and nothing else. A component that hard-codes a material color, or that changes shape/typography/meaning between materials, is a bug.
 
 ## 3. Typography
 
-**UI Font:** Segoe UI (with system-ui, -apple-system, sans-serif fallbacks)
-**Mono Font:** Cascadia Mono (with ui-monospace fallback) — streaming output, paths, prompt templates
+**Display:** Fraunces (Georgia fallback) · **Body:** Libre Franklin (Segoe UI fallback) · **Docket:** IBM Plex Mono (Cascadia Mono fallback)
 
-**Character:** One instrument face at high density. A single familiar sans carries everything; hierarchy comes from weight, size, case, and letterspacing — never from a second family. The root is 14px, and most UI text sits between 0.7rem and 0.95rem: compact, crisp, readable at a glance.
+All three families are self-hosted woff2 under `web/static/fonts/` — the CSP (`font-src 'self'`) stays untouched; no CDNs. Fraunces and Franklin ship as variable fonts.
+
+**Character:** Three voices with strict jobs. Fraunces *speaks* — only lines meant for a human ear: card headlines, the say-this line (italic — it is literally a quotation), modal titles, the wordmark. Libre Franklin *explains* — bullets, hints, buttons, settings. IBM Plex Mono *files* — everything that is a record: chips, timestamps, speaker tags, meta lines, the live transcript, streaming output, paths. The pairing sits on a contrast axis (soft serif + grotesque sans + typewriter mono); no two families compete for a job.
 
 ### Hierarchy
-- **Headline** (700, 1.25rem, 0.15em tracking): The wordmark only.
-- **Title** (650, 0.95rem, 1.35): Card headlines — the one line the operator reads mid-call.
-- **Body** (400, 0.85rem, 1.5): Card bullets, hints, list rows, general UI text.
-- **Label** (700, 0.7rem, 0.08em tracking, UPPERCASE): Section titles, output titles, the SAY label.
-- **Micro** (700, 0.62rem, 0.06em tracking, UPPERCASE): Speaker tags and card-type chips.
-- **Mono** (400, 0.8rem): Streaming LLM output, file paths, prompt template editors.
+- **Display** (Fraunces 600, 1.25rem, tracked): the wordmark on the masthead; modal titles at 1.1rem.
+- **Title** (Fraunces 600, 1rem, 1.3): card headlines — the one line read mid-call.
+- **Say** (Fraunces 500 italic, 0.95rem, 1.45): the say-this line only. The quotation voice.
+- **Body** (Franklin 400, 0.875rem, 1.55): bullets, hints, rows, general UI.
+- **Longform** (Franklin 400, 1rem, 1.65, ≤70ch): post-meeting outputs only — the one surface read like an article, so it gets editorial sizing and measure.
+- **Label** (Plex Mono 600, 0.7rem, 0.08em, UPPERCASE): section titles, the SAY label, docket entries.
+- **Micro** (Plex Mono 600, 0.65rem, 0.06em, UPPERCASE): speaker tags and card-type chips.
+- **Mono** (Plex Mono 400, 0.78rem, 1.55): live transcript, streaming output, paths, prompt templates.
 
 ### Named Rules
-**The Three-Second Rule.** Any text element the operator meets mid-call must land in under three seconds of split attention. Card headlines stay ≤60 characters; bullets stay ≤3 lines; if it needs study, it must be restructured or demoted to post-meeting output.
+**The Three-Second Rule.** Any text the operator meets mid-call must land in under three seconds of split attention: headlines ≤60 characters, ≤3 bullets, no paragraphs in cards. Editorial sizing belongs only where the operator is off the call.
+
+**The Voice Rule.** Fraunces only for what could be said aloud; Plex Mono only for what belongs in the record; Libre Franklin for everything between. A serif label or a mono headline is a bug.
 
 ## 4. Elevation
 
-The system is flat. Depth is drawn, not cast: 1px Hull Line borders define every surface, and the three-step neutral ladder (Deep Space → Console Panel → Console Raised) encodes recession and elevation tonally. Box shadows as material depth do not exist — with one pragmatic exception (the toast, which floats over everything and carries a soft dark shadow to separate from the page).
+The system is flat — paper is flat, by day or by lamplight. Depth is drawn, not cast: 1px rules define every surface, and each material's tonal ladder (paper → sheet → blotter/manila; canvas → sheet → well/raised) encodes recession and elevation. Box shadows as material depth do not exist, with one exception: the toast, which floats over everything on a soft shadow (`--shadow-toast`, navy-tinted by day, black at night).
 
-Glow is the only other light in the system, and it is a status signal, not decoration: the watcher dot glows green when armed and pulses amber when thinking; `urgency=now` cards pulse a brief amber ring twice on arrival; the REC dot pulses red while capturing.
+There is no glow anywhere — glow is projected light, and this system is ink. Liveness is a fresh stamp.
 
-### Shadow Vocabulary
-- **Live glow** (`box-shadow: 0 0 6px rgba(34,197,94,0.7)` green / `rgba(245,158,11,0.7)` amber): 9px status dots only — armed and thinking states.
-- **Attention ring** (`box-shadow: 0 0 0 3px rgba(245,158,11,0.25)`, pulsed twice): urgent card arrival, then never again.
-- **Toast float** (`box-shadow: 0 6px 24px rgba(0,0,0,0.45)`): the single floating surface.
+### Mark Vocabulary
+- **Live dot** (9px solid disc, bright approval green in both materials — it sits on the navy masthead): watcher armed. Thinking swaps to the ochre seal with a slow opacity pulse.
+- **REC stamp** (solid inspection-red disc, opacity pulse): recording in progress — the only permanently moving element during a session.
+- **Attention seal** (`box-shadow` ring in inspection red at ≤30%, pulsed exactly twice via `attention-seal` keyframes): urgent `now` card arrival, then never again.
+- **Toast float**: the single floating surface.
 
 ### Named Rules
-**The Glow-Means-Alive Rule.** Light is reserved for things that are live, armed, or urgent right now. Static UI never glows, never pulses, never casts. If an element shines while nothing is happening, the signal vocabulary is corrupted.
+**The Ink-Means-Alive Rule.** Motion and fresh marks are reserved for things that are live, armed, or urgent right now. Static paper never pulses, never animates, never shines. If something moves while nothing is happening, the signal vocabulary is corrupted.
 
 ## 5. Components
 
-Crisp and instrumental: hard 1px edges, compact padding, terse labels, every state color-coded to the signal vocabulary. Transitions are utilitarian — 150ms on background and color, nothing choreographed.
+Crisp and clerical: hard 1px edges, stamped corners (2–3px, never pills), compact padding, terse mono labels, every state coded to the stamp-ink vocabulary. Transitions are utilitarian — 150ms on background/color/border. Every control has a real hover state and a visible 2px federal-blue focus ring (`outline-offset: 2px`; paper-colored on the masthead); every animation has a `prefers-reduced-motion` alternative.
 
 ### Buttons
-- **Shape:** Tight corners (0.35rem radius), 600 weight, 0.85rem text, no text wrap.
-- **Command buttons** (solid fills): Start = Go Green with black text; Stop = Alert Red; Save = Radar Blue. Hover shifts one step darker. These are the only full-saturation surfaces in the UI.
-- **Action buttons** (tinted): Radar Blue at 15% alpha with a 35%-alpha border for the five reactive prompts; Contact Teal tints for custom prompts; Analysis Purple tints for post-meeting prompts. Hover doubles the tint.
-- **Outline buttons:** Transparent with a Hull Line border; hover fills Console Raised.
-- **Busy state:** An in-button spinner (0.8em, currentColor ring) replaces nothing — the label stays, the button disables at 45% opacity. No global lock.
+- **Shape:** 2px radius, Franklin 600, 0.85rem, no wrap.
+- **Command buttons** (solid stamps): Start = approval green; Stop/End = inspection red; Save = navy ink. On Desk they carry fresh-sheet labels; **After Hours inverts them** — bright ink fills (green #7CBF8E, red #E08273, blue #7FA5CC for Save) with near-black labels, because a dark navy fill on a dark page is invisible. Hover shifts one step (darker by day, brighter by night) via the `--btn-*-hover` tokens.
+- **Action buttons** (tinted): federal blue at 14% with ink-step text and 35% border — the five reactive prompts. Ledger teal tints for custom prompts; notary violet for post-meeting.
+- **Outline buttons:** transparent, 1px rule border; hover fills toward manila/raised. On the masthead they use paper-on-navy.
+- **Busy state:** in-button spinner (0.8em, currentColor); label stays, button disables at 50%.
 
-### Chips
-- **Style:** Pill-shaped (999px), Micro type, translucent tint + matching text color per card type: answer = blue, fact check = amber, reframe = purple, next step = green, heads-up = teal, status = grey.
-- **Speaker tags:** ME = Radar Blue tint, THEM = Contact Teal tint; pill, 0.62rem, bold.
-- **Cue badges:** Neutral by default (Console Raised fill, Hull Line border) — instant-glance keywords without stealing the urgency channel. They turn Caution Amber only on urgent cards, keeping amber's one meaning intact.
+### Chips & Tags (docket stamps)
+- **Card-type chips:** stamped rectangles (2px radius) — Micro mono, uppercase, 12% tint fill, 45% tinted border, ink-step text: answer = federal blue, fact check = ochre, reframe/deep dive = violet, next step = green, question/heads-up = teal, status = faded ink.
+- **Speaker tags:** ME = federal blue, THEM = ledger teal; same stamped shape, Micro mono.
+- **Cue badges:** neutral by default (blotter fill, rule border, ink text); they take the ochre seal only on urgent cards (One Meaning Rule).
+- **State badge** (masthead): stamped mono tag with bright After-Hours ink text in both materials — it lives on navy.
 
-### Cards / Containers
-- **Corner Style:** 0.5rem radius.
-- **Background:** Console Panel on 1px Hull Line borders; recessed wells (output, transcript bodies) drop to Deep Space.
-- **Shadow Strategy:** None — flat per the Glow-Means-Alive Rule.
-- **Internal Padding:** 1rem panels; 0.75rem 0.9rem copilot cards.
+### Cards / Containers (case pockets)
+- 3px radius, fresh-sheet fill on 1px rule hairlines; recessed wells drop to blotter. No shadows.
+- Internal padding: 1rem panels; 0.75rem 0.9rem copilot cards.
 
 ### Inputs / Fields
-- **Style:** Console Raised fill (forms drop to Deep Space in modals), 1px Hull Line border, 0.35rem radius, Signal White text.
-- **Focus:** Border shifts to Radar Blue with a 2px blue ring at 15% alpha.
-- **Disabled:** 45% opacity, not-allowed cursor.
-- **Mono contexts:** Paths and prompt templates render in the mono face.
+- Sheet-white fill (night: #161D2C), 1px rule border, 2px radius, ink text, faded-ink placeholders (≥4.5:1).
+- Focus: border shifts federal blue with an 18% ring. Mono contexts (paths, templates, transcript) use the docket face.
 
-### Navigation
-- **Style:** A single sticky header on Console Panel: round logo, tracked wordmark in Radar Blue, state badge (pill, tinted per state: idle grey / active green / post-meeting purple), watcher dot, persona segmented pill, icon buttons (38px square, outline style).
-- **Persona toggle:** A segmented pill; the active segment fills with a Radar Blue tint.
+### Navigation (the docket strip)
+- **Masthead:** navy in both materials, closed by a 2px brass rule. Wordmark in Fraunces lamplight-paper; state badge, watcher dot, persona tabs, icon buttons (38px, paper-on-navy outline style), and the material toggle (◐).
+- **Persona toggle:** a folder-tab strip, not a pill; the active tab fills manila with navy ink — the front folder in the drawer — in both materials.
+- **Editor/context/history tabs (`ptabs`):** folder tabs sharing a baseline rule; active tab lifts to manila/raised and breaks the rule.
 
-### The Copilot Card (signature component)
-The core HUD element. Reads top-down in glance order: type chip + lane tag + dismiss → headline (Title, ≤60 chars, balanced wrap) → the **say-this callout** — the payload, directly under the headline: a blue-tinted strip with the SAY label, the suggested line in italics, and a copy button — → up to 3 supporting bullets (72ch measure, one step muted) → cue badges → meta line. Lane is encoded in the card's full 1px tinted border (blue = reactive, teal = proactive); urgency escalates the border to amber (35% alpha for soon, 55% for now). No side stripes — ever. Urgent NOW cards pulse the amber attention ring twice on arrival. Expired proactive cards fade over 0.7s; aged cards dim to 60% on a neutral border, collapse to headline + cue badges, and re-expand on click.
+### The Copilot Card (signature component — the case pocket)
+Reads top-down in glance order: type stamp + lane tag + dismiss → headline (Title, Fraunces, ≤60 chars, balanced) → the **say-this callout** — the payload, directly under the headline: federal-blue tinted strip, mono SAY label, the line in Fraunces italic, copy button → up to 3 bullets (Franklin, 72ch, second ink) → cue badges → the docket line (mono meta: source · age). Lane is the card's full 1px tinted border (federal blue 45% = reactive, ledger teal 45% = proactive); urgency escalates it to the ochre seal (55% soon, 80% now) and `now` pulses the red attention seal exactly twice on arrival. No side stripes — ever. Expired proactive cards fade over 0.7s; aged cards dim to 60% on a plain rule border, collapse to headline + cues, re-expand on click.
 
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep every accent on its one meaning: blue = interactive/ME, teal = THEM/proactive, amber = urgent, green = go/live, red = record/stop, purple = post-meeting. Cite the One Meaning Rule.
-- **Do** apply accents as translucent tints (8–35% alpha) with matching tinted borders; save solid fills for start/stop/save commands.
-- **Do** reserve glow and pulse for live state — armed watcher, active recording, urgent arrival — and let it end (the attention ring pulses exactly twice).
-- **Do** keep the copilot card's glance order intact: chip → headline → bullets → say-this → meta. The say-this line is the payload; it must survive any redesign.
-- **Do** hold WCAG AA: 4.5:1 for body text, 3:1 for large text, visible Radar Blue focus rings, and `prefers-reduced-motion` alternatives for pulse and card-in animations.
+- **Do** keep every stamp ink on its one meaning: federal blue = interactive/ME, ledger teal = THEM/proactive, ochre = urgent, approval green = go/live, inspection red = record/stop, notary violet = post-meeting. Brass means nothing and must stay meaningless.
+- **Do** route every component color through the semantic tokens so both materials stay correct; verify new pairs ≥4.5:1 (text) / 3:1 (marks) in **both** materials before shipping.
+- **Do** use the `-text` ink steps whenever an accent becomes text; base hues are for borders, seals, and tints.
+- **Do** keep the case pocket's glance order intact: stamp → headline → say-this → bullets → cues → docket line. The say-this line is the payload and alone earns the italic serif.
+- **Do** hold WCAG AA in both materials: visible focus rings, real hover states, `prefers-reduced-motion` alternatives for every pulse and card-in animation.
 
 ### Don't:
-- **Don't** build anything that reads as **chatbot UI** — no message bubbles, no avatar with personality, no conversational back-and-forth framing. Darin is an instrument, not an interlocutor.
-- **Don't** build anything that reads as a **SaaS dashboard** — no KPI-widget grids, no hero metrics, no analytics chrome. The feed is a stream of moments, not a report.
-- **Don't** let static elements glow, pulse, or animate while nothing is happening; ambient motion competes with the call.
-- **Don't** introduce a second font family, cast material shadows on panels, or use an accent color outside its assigned meaning.
-- **Don't** exceed the Three-Second Rule on any live-surface text: headlines ≤60 characters, ≤3 bullets, no paragraphs in cards.
+- **Don't** build anything that reads as **chatbot UI** — no bubbles, no avatar personality, no conversational framing. Darin is a records desk, not an interlocutor.
+- **Don't** build anything that reads as a **SaaS dashboard** — no KPI grids, no hero metrics, no analytics chrome. The feed is a docket of moments, not a report.
+- **Don't** use gradients, glassmorphism, neon, or glow — ink doesn't glow. Depth is drawn with rules, never cast (toast excepted).
+- **Don't** make anything pill-shaped (≤3px radius everywhere), decorate with emoji, fake a control, or let the two materials drift apart in shape, type, or meaning.
+- **Don't** cross the voices (no serif labels, no mono headlines) or exceed the Three-Second Rule on live surfaces: headlines ≤60 characters, ≤3 bullets, no paragraphs in cards.
