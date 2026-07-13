@@ -1,0 +1,3168 @@
+openapi: 3.0.3
+info:
+  version: "9"
+  title: Files
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  description: >
+    The File Service API is a versatile solution for storing, retrieving, and managing different types of files such as documents, attachments, and reports. Each file requires a specified name and  content type and can optionally be linked to a parentUri, which associates the file with another identifiable object. This feature allows users to organize and retrieve files either individually by their  unique file ID or in groups based on the associated parentUri. Each file includes a content stream to ensure that the file’s data is preserved and accessible. Once a file is created, users can update its  metadata or replace the file content entirely. The API also supports file versioning, enabling multiple versions of the same file to be maintained over time by including version-specific parameters during  creation. Deletion options are provided as well, allowing users to delete individual files by ID or remove all files associated with a specific parentUri. Overall, the File Service API offers a comprehensive and adaptable platform for persistent file management across various application use cases.
+tags:
+  - name: Root
+    description: The operations for the Root resource.
+  - name: Files
+    description: The CRUD (Create, Read, Update, Delete) operations for files.
+  - name: Index
+    description: The operations to obtain a generic indexable representation of files.
+  - name: Summary
+    description: The operations to obtain a generic summary representation of files.
+  - name: Security
+    description: The operations to unquarantine the file.
+  - name: Settings
+    description: The operations to return configuration settings information.
+paths:
+  /:
+    get:
+      summary: Get top-level resource links
+      description: Returns a list of links to the top-level resources that are available through the API. These top-level links include create and retrieve operations for /files.
+      tags:
+        - Root
+      operationId: root
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                api:
+                  $ref: "#/components/examples/getTopLevelResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                api:
+                  $ref: "#/components/examples/getTopLevelResponse"
+        "503":
+          description: Service Temporarily Unavailable The service is not available.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                serviceUnavailableErrResp:
+                  $ref: "#/components/examples/serviceUnavailableErrResp"
+    head:
+      summary: Check the state of the service
+      description: Indicates whether the service is available.
+      tags:
+        - Root
+      operationId: headersForRoot
+      responses:
+        "200":
+          description: The request succeeded. The service is available.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+        "503":
+          description: Service Temporarily Unavailable The service is not available.
+  /files:
+    get:
+      summary: Get file resources
+      description: Retrieves file resources for the specified criteria. Standard paging, filtering, and sorting options are available.
+      tags:
+        - Files
+      operationId: getFileResourceForFilterQuery
+      parameters:
+        - name: Accept-Item
+          in: header
+          description: The file resource media type value. If this is not specified, the API returns the latest version.
+          required: false
+          schema:
+            type: string
+        - name: parentUri
+          in: query
+          description: The URI of the associated object or parent object.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The offset of the first member to return. The default value is 0.
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of members to return. The default value is 10.
+          schema:
+            type: integer
+            format: int64
+        - name: filter
+          in: query
+          description: The filter criteria to apply to the returned member collection.
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The sort criteria  applies to the returned member collection.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, they are returned in a collection. If no files are found, an empty collection is returned.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+        "404":
+          description: file not found.
+          content:
+            application/vnd.sas.error+json:
+              examples:
+                collectionErrResp:
+                  $ref: "#/components/examples/headFileNotFoundErrResp"
+    delete:
+      summary: Delete file resources
+      description: Deletes file resources for the specified parentUri. If the user is not authorized to delete all matching files, no files are deleted.
+      tags:
+        - Files
+      operationId: deleteFileResourceForGivenParentUri
+      parameters:
+        - name: parentUri
+          in: query
+          description: The parent URI that is associated with the file resources to be deleted.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The file resources for the specified parentUri were successfully deleted.
+        "404":
+          description: No file resources exist for the specified parentUri.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/noFileFoundErrResp"
+  /files#schema:
+    get:
+      summary: Get schema for indexing
+      description: This endpoint returns schema field to be indexed by search service.
+      tags:
+        - Files
+      operationId: getfileindexschema
+      parameters:
+        - name: Accept
+          in: header
+          description: The type specific schema representation media type application/vnd.sas.search.type.schema+json.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The schema representation of file service fields to be indexed.
+          content:
+            application/vnd.sas.search.type.schema+json:
+              schema:
+                $ref: "#/components/schemas/schema"
+              examples:
+                schemaResp:
+                  $ref: "#/components/examples/getFilesSchemaResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/schema"
+              examples:
+                schemaResp:
+                  $ref: "#/components/examples/getFilesSchemaResp"
+  /files#rawUpload:
+    post:
+      summary: Create new file resource
+      description: Creates a new file resource by passing file content in the request body.
+      tags:
+        - Files
+      operationId: createNewFile
+      parameters:
+        - name: Content-Type
+          in: header
+          description: The actual MIME type of the file.
+          schema:
+            type: string
+        - name: Content-Disposition
+          in: header
+          description: The content disposition. It indicates whether the content is expected to be displayed inline in a browser (as a web page or part of a web page) or as an attachment that is downloaded and saved locally. If a filename is specified in the header, it is used as the default name of the file.
+          schema:
+            type: string
+        - name: expirationTimeStamp
+          in: query
+          description: A timestamp that indicates when a file expires. If this is not specified, the file never expires.
+          required: false
+          schema:
+            type: string
+        - name: parentFolderUri
+          in: query
+          description: The URI of the folder in which the file should be made a member.
+          schema:
+            type: string
+        - name: searchable
+          in: query
+          description: An indicator specifying if a file is searchable or not. Defaulted to 'true' indicating file is searchable.
+          schema:
+            type: string
+        - name: typeDefName
+          in: query
+          description: The type definition name of the file. If the file is associated with a folder and the client does not provide the value of this parameter, the file-service tries to find the best possible value using type-registry service. If it fails to find a default value, it defaults to "file".
+          schema:
+            type: string
+        - name: versioned
+          in: query
+          description: An indicator specifying if a file is a version control file or not. If set to true, the endpoint will return first version of the file.
+          schema:
+            type: boolean
+      requestBody:
+        content:
+          "*/*":
+            schema:
+              $ref: "#/components/schemas/file"
+            examples:
+              file:
+                value: File content to be uploaded
+        description: The contents of the file to be passed in raw format in the request body.
+      responses:
+        "201":
+          description: The file resource was created and returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+            Location:
+              description: The URI of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: "The request was not valid. A validation error occurred, and the file cannot be created. Check the response for more information. Here are common reasons for this issue: The file is larger than the permitted size, or the file type is not supported."
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                uploadErrResp:
+                  $ref: "#/components/examples/uploadErrResp"
+        "409":
+          description: The request could not be completed due to a conflict with the current state of the resource. A file with the specified name cannot be created in the folder because the file already exists in that folder.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                uploadConlictErrResp:
+                  $ref: "#/components/examples/postUploadConflictErrResp"
+  /files#multipartUpload:
+    post:
+      summary: Create a new file resource
+      description: Creates a new file resource by passing a file in the form of a multipart request.
+      tags:
+        - Files
+      operationId: createNewFileMultiPart
+      parameters:
+        - name: Content-Type
+          in: header
+          description: The MIME type for the multipart request. You must specify "multipart/form-data; boundary={boundaryString}". You can specify the actual MIME type of the file by using Content-Type as form data in the request body.
+          schema:
+            type: string
+        - name: Content-Disposition
+          in: header
+          description: The content disposition. This indicates whether the content is expected to be displayed inline in a browser (as a web page or part of a web page) or as an attachment that is downloaded and saved locally. If a filename is specified in the header, it is used as the default name of the file.
+          schema:
+            type: string
+        - name: expirationTimeStamp
+          in: query
+          description: A timestamp that indicates when a file expires. If it is not specified, the file never expires.
+          required: false
+          schema:
+            type: string
+        - name: parentFolderUri
+          in: query
+          description: The URI of the folder in which to add the file.
+          schema:
+            type: string
+        - name: searchable
+          in: query
+          description: An indicator specifying if a file is searchable or not. Defaulted to 'true' indicating file is searchable.
+          schema:
+            type: string
+        - name: typeDefName
+          in: query
+          description: The type definition name of the file. If the file is associated with folder and the client does not provide the value of this parameter, the  file-service tries to find the best possible value using type-registry service. If it fails to find a default value, it defaults to "file".
+          schema:
+            type: string
+        - name: versioned
+          in: query
+          description: An indicator specifying if a file is a version control file or not. If set to true, the endpoint will return first version of the file.
+          schema:
+            type: boolean
+        - name: recoverable
+          in: query
+          description: An indicator specifying if a file is recoverable or not.If a user deleted the file then those files can be recovered.There is a certain retention period till which the file will be retained.
+          schema:
+            type: boolean
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                filename:
+                  description: The name of the file. Clients must specify name of the file as form data in the request body.
+                  type: string
+                file:
+                  description: The actual file content. The content should be listed in the format of standard form data in the request body. Only one file is permitted in a multipart request.
+                  type: string
+                  format: binary
+            examples:
+              file:
+                value:
+                  filename: test_file.txt
+                  file: file content to upload.
+      responses:
+        "201":
+          description: The file was created and returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+            Location:
+              description: The URI of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: "The request was not valid. A validation error occurred, and the file cannot be created. Check the response for more information. Here are common reasons for this issue: The file is larger than the permitted size, the file type is not supported, or the multipart request contains more than one file."
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                uploadErrResp:
+                  $ref: "#/components/examples/postUploadErrResp"
+        "409":
+          description: The request could not be completed due to a conflict with the current state of the resource. A file with the specified name cannot be created in the folder because the file already exists in that folder.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                uploadConlictErrResp:
+                  $ref: "#/components/examples/postUploadConflictErrResp"
+  /files#fetchFilesForMultipleParentUri:
+    post:
+      summary: Get file resources for multiple parentUris
+      description: Retrieves the file resources that are associated with multiple parentUri specifications. Request the parentUri values in the body. The returned collection is grouped by parentUri.
+      tags:
+        - Files
+      operationId: fetchFilesForParentUris
+      parameters:
+        - name: Accept-Item
+          in: header
+          description: The file resource media type value. If this is not specified, the API returns the latest version.
+          schema:
+            type: string
+      requestBody:
+        $ref: "#/components/requestBodies/selection"
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, they are returned in a collection. If no files are found, an empty collection is returned.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+  /files#fetchIndexableRepresentationCollection:
+    post:
+      summary: Get indexable representations for parentUris
+      description: Retrieves indexable representations of files that are associated with multiple parentUri specifications. Request the parentUri values in the body. The returned collection is grouped by parentUri.
+      tags:
+        - Index
+      operationId: fetchFilesIndexableRepForParentUris
+      parameters:
+        - name: Accept-Item
+          in: header
+          description: The value of the file resource media type. You must specify this as "application/vnd.sas.search.indexable.data".
+          required: true
+          schema:
+            type: string
+      requestBody:
+        $ref: "#/components/requestBodies/selection"
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, they are returned in a collection. If no files are found, an empty collection is returned.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                indexableCollectionResp:
+                  $ref: "#/components/examples/getFilesIndexableCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                indexableCollectionResp:
+                  $ref: "#/components/examples/getFilesIndexableCollectionResp"
+        "400":
+          description: "The request was not valid. A validation error occurred, and the file cannot be created. Check the response for more information. Here are common reasons for this issue: The file is larger than the permitted size, the file type is not supported, or the multipart request contains more than one file."
+  /files#getIndexableRepresentationCollection:
+    get:
+      summary: Get indexable representations for files
+      description: Retrieves indexable representations of file resources for the specified criteria. Standard paging is available.
+      tags:
+        - Index
+      operationId: getFilesIndexableResource
+      parameters:
+        - name: Accept-Item
+          in: header
+          description: The value of the file resource media type. You must specify this as "application/vnd.sas.search.indexable.data".
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The offset of the first member to return. The default is 0.
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of members to return. The default value is 10.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, indexable representations are returned in a collection. If no files are found, an empty collection is returned.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceIndexCollection"
+              examples:
+                indexableCollectionResp:
+                  $ref: "#/components/examples/getFilesIndexableCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceIndexCollection"
+              examples:
+                indexableCollectionResp:
+                  $ref: "#/components/examples/getFilesIndexableCollectionResp"
+        "400":
+          description: The request was not valid. The `limit` parameter cannot be less than 0 or greater than 10000.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                limitErrResp:
+                  $ref: "#/components/examples/getFilesCollectionErrResp"
+  /files#getSummaryRepresentationCollection:
+    get:
+      summary: Get summary representations
+      description: Retrieves summary representations of file resources for the specified criteria. Standard paging, filtering, and sorting options are available.
+      tags:
+        - Summary
+      operationId: getFilesSummaryForFilter
+      parameters:
+        - name: Accept-Item
+          in: header
+          description: The value of the file resource media type. You must specify this as "application/vnd.sas.summary".
+          required: true
+          schema:
+            type: string
+        - name: parentUri
+          in: query
+          description: The URI of the associated object or parent object.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The offset of the first member to return. The default value is 0.
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of members to return. The default value is 10.
+          schema:
+            type: integer
+            format: int64
+        - name: filter
+          in: query
+          description: The filter criteria to apply to the returned member collection.
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The sort criteria to apply to the returned member collection.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, summary representations are returned in a collection. If no files are found, an empty collection is returned.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceSummaryCollection"
+              examples:
+                summaryCollectionResp:
+                  $ref: "#/components/examples/getFilesSummaryCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceSummaryCollection"
+              examples:
+                summaryCollectionResp:
+                  $ref: "#/components/examples/getFilesSummaryCollectionResp"
+        "400":
+          description: The request was not valid. The `limit` parameter cannot be less than 0 or greater than 10000.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                limitErrResp:
+                  $ref: "#/components/examples/getFilesCollectionErrResp"
+  "/files/{fileId}":
+    head:
+      summary: Check if a file resource exists
+      description: Determines whether a file resource exists for the specified fileId.
+      tags:
+        - Files
+      operationId: headersForFile
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. The file resource exists.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+        "404":
+          description: No file resource exists for the specified identifier.
+    get:
+      summary: Get a file resource
+      description: Retrieves a file resource by specifying a fileId.
+      tags:
+        - Files
+      operationId: getFile
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. The file was found and returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+    put:
+      summary: Update a file resource
+      description: "Updates the file resource information. The user can change these attributes: `name`, `description`, `parentUri`, `documentType`, `contentDisposition`, `properties`,`expirationTimeStamp`,`typeDefName` and `searchable`"
+      tags:
+        - Files
+      operationId: updateFileResource
+      parameters:
+        - name: If-Match
+          in: header
+          description: The entity tag that was obtained from the most recent `ETag` response header.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The timestamp that was obtained from the most recent `Last-Modified` response header. This is ignored when `If-Match` is specified.
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          description: The identifier of the file resource to update.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        $ref: "#/components/requestBodies/fileToPatch"
+      responses:
+        "200":
+          description: The request succeeded. The updates were applied, and the new object data is returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for current file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: The request was not valid. A validation error occurred. Check the string that was returned in the response for more information. A possible cause is that the filename is not specified in the request body.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                nameNotGivenErrResp:
+                  $ref: "#/components/examples/patchNameNotSpecifiedErrResp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "412":
+          description: The `If-Match` request header did not match the resource's entity tag or the `If-Unmodified-Since` request header did not match the resource's last modified timestamp. Another operation modified the resource. Get an updated representation of the resource before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileAlreadyUpdatedErrResp:
+                  $ref: "#/components/examples/fileUpdatedErrResp"
+        "428":
+          description: The request headers did not include an `If-Match` or `If-Unmodified-Since` precondition. Specify the appropriate values for the `If-Unmodified-Since` and `If-Match` request headers before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                ifMatchErrResp:
+                  $ref: "#/components/examples/ifMatchFoundErrResp"
+    patch:
+      summary: Update a file resource
+      description: "Updates the file resource information. The user can change these attributes: `name`, `description`, `parentUri`, `documentType`, `contentDisposition`, `properties`, `expirationTimeStamp`,`typeDefName` and `searchable`"
+      tags:
+        - Files
+      operationId: patchFileResourceInfo
+      parameters:
+        - name: If-Match
+          in: header
+          description: The entity tag that was obtained from the most recent `ETag` response header.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The timestamp that was obtained from the most recent `Last-Modified` response header. This is ignored when `If-Match` is specified.
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          description: The identifier of the file resource to update.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        $ref: "#/components/requestBodies/fileToPatch"
+      responses:
+        "200":
+          description: The request succeeded. The updates were applied, and the new object data is returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for current resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: The request was not valid. A validation error occurred. Check the string that was returned in the response for more information. A possible cause is that the filename is not specified in the request body.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                nameNotGivenErrResp:
+                  $ref: "#/components/examples/patchNameNotSpecifiedErrResp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "412":
+          description: The `If-Match` request header did not match the resource's entity tag or the `If-Unmodified-Since` request header did not match the resource's last modified timestamp. Another operation modified the resource. Get an updated representation of the resource before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileAlreadyUpdatedErrResp:
+                  $ref: "#/components/examples/fileUpdatedErrResp"
+        "428":
+          description: The request headers did not include a `If-Match` or `If-Unmodified-Since` precondition. Specify the appropriate values for the `If-Unmodified-Since` and `If-Match` request headers before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                ifMatchErrResp:
+                  $ref: "#/components/examples/ifMatchFoundErrResp"
+    delete:
+      summary: Delete a file resource
+      description: Deletes the file resource.
+      tags:
+        - Files
+      operationId: deleteFileResource
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The file resource was deleted.
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+  "/files/{fileId}#getIndexableRepresentation":
+    get:
+      summary: Get a generic indexable representation
+      description: Retrieves a generic indexable representation of file for the specified identifier.
+      tags:
+        - Index
+      operationId: getFileIndexableRep
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. The file was found, and the indexable representation is returned in the response body.
+          content:
+            application/vnd.sas.search.indexable.data+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceIndex"
+              examples:
+                fileIndexableResp:
+                  $ref: "#/components/examples/fileIndexableResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceIndex"
+              examples:
+                fileIndexableResp:
+                  $ref: "#/components/examples/fileIndexableResp"
+        "404":
+          description: No file resource exists for the specified the identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+  "/files/{fileId}#getSummaryRepresentation":
+    get:
+      summary: Get a generic summary representation
+      description: Retrieves a generic summary representation of a file for the specified identifier.
+      tags:
+        - Summary
+      operationId: getfileSummaryRepForGivenId
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "The request succeeded. The file was found, and a summary representation is returned in the response body. "
+          content:
+            application/vnd.sas.search.summary+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceSummary"
+              examples:
+                fileSummaryResp:
+                  $ref: "#/components/examples/fileSummaryResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceSummary"
+              examples:
+                fileSummaryResp:
+                  $ref: "#/components/examples/fileSummaryResp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+  "/files/{fileId}/content":
+    get:
+      summary: Get file resource content
+      description: Retrieves the content of the file resource.
+      tags:
+        - Files
+      operationId: getfileContentForGivenId
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource for which to fetch content.
+          required: true
+          schema:
+            type: string
+        - name: changeContentDisposition
+          in: query
+          description: Specifies whether to use the persisted content-disposition value. If this is specified to true and the word "attachment" appears in the content-disposition, it is changed to "inline". No other changes are made to the content-disposition value.
+          required: false
+          schema:
+            type: boolean
+        - name: If-Range
+          in: header
+          description: "A conditional range request. The client must specify the previously returned `ETag` as the `If-Range` header value. This determines whether the resource has been modified. If it has been modified, the entire file is returned. Otherwise, only partial content is returned using the `Range` header. "
+          required: false
+          schema:
+            type: string
+        - name: Range
+          in: header
+          description: A specific range request. The value specifies the required byte range--for example, bytes=0-100.
+          required: false
+          schema:
+            type: string
+        - name: Access-Quarantine
+          in: header
+          description: If true, administrator can download the quarantine file content for analysis
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: The request succeeded. The stream is returned in the response body.
+        "206":
+          description: The partial content request succeeded. The requested range of data is in the response body.
+        "403":
+          description: Non privilaged user trying to access quarantine file content, will get HTTP Forbidden error
+          content:
+            application/vnd.sas.error+json:
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/permissionDeniedErrResp"
+        "404":
+          description: No content was found for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "416":
+          description: An invalid or non-overlapping range was specified in the `Range` request header.
+    put:
+      summary: Update file resource content
+      description: Updates the content of the file resource.
+      tags:
+        - Files
+      operationId: updatedFileContent
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource for which to fetch content.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The entity tag that was obtained from the most recent `ETag` response header.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The timestamp that was obtained from the most recent `Last-Modified` response header. This is ignored when `If-Match` is specified.
+          schema:
+            type: string
+        - name: Content-Type
+          in: header
+          description: The content type. Specify this as "multipart/form-data" if you are using a multipart request, or specify the actual MIME type of the file if the request is a raw data upload.
+          required: true
+          schema:
+            type: string
+        - name: Content-Disposition
+          in: header
+          description: The content disposition. The previously assigned value can be changed. This indicates whether the content is expected to be displayed inline in a browser (as a web page or part of a web page) or as an attachment that is downloaded and saved locally. If a filename is specified in the header, it is used as the default name of the file.
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  description: The file data. If you are using a raw data upload request, the request body should contain only the file data (the actual file content). If you are using a multipart request, the request body should be in multipart or form-data format, where the file data is listed as `file` in the form data. Only one file is permitted in a multipart request.
+                  type: string
+                  format: binary
+              required:
+                - file
+            examples:
+              file:
+                value:
+                  filename: test_file.txt
+                  file: File content to upload
+      responses:
+        "200":
+          description: The request succeeded. The updates were applied, and the new file data is returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: "The request was not valid. A validation error occurred, and the file cannot be updated. Check the response for more information. Here are common reasons for this issue: The file is larger than the permitted size, the file type is not supported, or the multipart request contains more than one file."
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                nameNotGivenErrResp:
+                  $ref: "#/components/examples/largeFileErrResp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "412":
+          description: The `If-Match` request header did not match the file resource's entity tag, or the `If-Unmodified-Since` request header did not match the file resource's last modified timestamp. Another operation modified the file resource. Get an updated representation of the file resource before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileAlreadyUpdatedErrResp:
+                  $ref: "#/components/examples/fileUpdatedErrResp"
+        "428":
+          description: The request headers did not include an `If-Match` or `If-Unmodified-Since` precondition. Specify the appropriate values for the `If-Unmodified-Since` and `If-Match` request headers before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                ifMatchErrResp:
+                  $ref: "#/components/examples/ifMatchFoundErrResp"
+  "/files/{fileId}/copy":
+    post:
+      summary: Copy an existing file
+      description: Copies the file if the user has Read access to the specified file.
+      tags:
+        - Files
+      operationId: createCopyOfFile
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource for which to fetch content.
+          required: true
+          schema:
+            type: string
+        - name: Content-Disposition
+          in: header
+          description: The content disposition. The previously assigned value can be changed. This indicates whether the content is expected to be displayed inline in a browser (as a web page or part of a web page) or as an attachment that is downloaded and saved locally. If a filename is specified in the header, it is used as the default name of the file.
+          schema:
+            type: string
+        - name: expirationTimeStamp
+          in: query
+          description: The date and time at which a file expires. If not specified, the file never expires.
+          required: false
+          schema:
+            type: string
+        - name: parentFolderUri
+          in: query
+          description: The URI of the folder in which to add the file.
+          schema:
+            type: string
+      responses:
+        "201":
+          description: The file was created and returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+            Location:
+              description: The URI of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "404":
+          description: A file resource does not exist for the specified source file.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "409":
+          description: The request could not be completed due to a conflict with the current state of the resource. A file with the specified name cannot be created in the folder because the file already exists in that folder.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                copyConlictErrResp:
+                  $ref: "#/components/examples/postUploadConflictErrResp"
+  "/files/{fileId}/version/{fileVersion}":
+    head:
+      summary: Check if a file resource exists for given fileVersion
+      description: Determines whether a file resource exists for the specified version of fileId.
+      tags:
+        - Files
+      operationId: headersForfileIdForGivenVersion
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+        - name: fileVersion
+          in: path
+          description: The version of the file resource.
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The request succeeded. The file resource exists.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+        "404":
+          description: No file resource exists for the specified identifier or no file resource version exists for given file identifier.
+    get:
+      summary: Get a file resource for specific version
+      description: Retrieves a file resource by specifying fileVersion of a fileId.
+      tags:
+        - Files
+      operationId: getfileIdForGivenVersion
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource.
+          required: true
+          schema:
+            type: string
+        - name: fileVersion
+          in: path
+          description: The version of the file resource.
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The request succeeded. The file was found and returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for the file resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the file resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=1:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV1Resp:
+                  $ref: "#/components/examples/getFilesV1Resp"
+            application/vnd.sas.file+json;version=2:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV2Resp:
+                  $ref: "#/components/examples/getFilesV2Resp"
+            application/vnd.sas.file+json;version=3:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV3Resp:
+                  $ref: "#/components/examples/getFilesV3Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "404":
+          description: No file resource exists for the specified identifier or no file resource exists for the specified version of identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+  "/files/{fileId}/version/{fileVersion}/content":
+    get:
+      summary: Get the file resource content for a specified version
+      description: Retrieves the content of the file resource for a specified version.
+      tags:
+        - Files
+      operationId: getfileContentForGivenVersion
+      parameters:
+        - name: fileId
+          in: path
+          description: The identifier of the file resource for which to fetch content.
+          required: true
+          schema:
+            type: string
+        - name: fileVersion
+          in: path
+          description: The version of the file resource for which to fetch content.
+          required: true
+          schema:
+            type: string
+        - name: changeContentDisposition
+          in: query
+          description: Specifies whether to use the persisted content-disposition value. If this is specified to true and the word "attachment" appears in the content-disposition, it is changed to "inline". No other changes are made to the content-disposition value.
+          required: false
+          schema:
+            type: boolean
+        - name: If-Range
+          in: header
+          description: "A conditional range request. The client must specify the previously returned `ETag` as the `If-Range` header value. This determines whether the resource has been modified. If it has been modified, the entire file is returned. Otherwise, only partial content is returned using the `Range` header. "
+          required: false
+          schema:
+            type: string
+        - name: Range
+          in: header
+          description: A specific range request. The value specifies the required byte range--for example, bytes=0-100.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded. The stream is returned in the response body.
+        "206":
+          description: The partial content request succeeded. The requested range of data is in the response body.
+        "404":
+          description: No content was found for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "416":
+          description: An invalid or non-overlapping range was specified in the `Range` request header.
+  "/files/{fileId}/versions":
+    get:
+      summary: Get all the versions of a given file id
+      description: Retrieves file resources of all the versions of a given fileId. Standard paging, option is available.
+      tags:
+        - Files
+      operationId: getFileVersionResourceForFilterQuery
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          description: The specific field identifier of the file to return.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The offset of the first member to return. The default value is 0.
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of members to return. The default value is 10.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: The request succeeded. If files are found for the specified criteria, they are returned in a collection. If no files are found, an empty collection is returned.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResourceCollection"
+              examples:
+                collectionResp:
+                  $ref: "#/components/examples/getFilesCollectionResp"
+        "400":
+          description: The request was not valid. The `limit` parameter cannot be less than 0 or greater than 10000.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                limitErrResp:
+                  $ref: "#/components/examples/getFilesCollectionErrResp"
+  "/files/{fileId}/quarantine":
+    patch:
+      summary: Update the quarantine status of file resource
+      description: Updates the quarantine file resource information. The user can change only `quarantine` status. This end-Point is only accessible to SAS Administrators.
+      tags:
+        - Security
+      operationId: patchFileResourceQuarantine
+      parameters:
+        - name: If-Match
+          in: header
+          description: The entity tag that was obtained from the most recent `ETag` response header.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The timestamp that was obtained from the most recent `Last-Modified` response header. This is ignored when `If-Match` is specified.
+          schema:
+            type: string
+        - name: fileId
+          in: path
+          description: The identifier of the file resource to update.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        $ref: "#/components/requestBodies/quarantineFileToPatch"
+      responses:
+        "200":
+          description: The request succeeded. The updates were applied, and the new object data is returned in the response body.
+          headers:
+            ETag:
+              description: The entity tag for current resource.
+              schema:
+                type: string
+            Last-Modified:
+              description: The last modified timestamp of the resource.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/vnd.sas.file+json;version=4:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/fileResource"
+              examples:
+                filesV4Resp:
+                  $ref: "#/components/examples/getFilesV4Resp"
+        "400":
+          description: The request was not valid. A validation error occurred. Check the string that was returned in the response for more information. A possible cause is that the filename is not specified in the request body.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                nameNotGivenErrResp:
+                  $ref: "#/components/examples/fileIdDoNotMatch"
+        "403":
+          description: File is quarantined. User does not have permission to read the content of file.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/quarantinedErrResp"
+        "404":
+          description: No file resource exists for the specified identifier.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileNotFoundErrResp:
+                  $ref: "#/components/examples/fileNotFoundRrrResponse"
+        "412":
+          description: The `If-Match` request header did not match the resource's entity tag or the `If-Unmodified-Since` request header did not match the resource's last modified timestamp. Another operation modified the resource. Get an updated representation of the resource before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                fileAlreadyUpdatedErrResp:
+                  $ref: "#/components/examples/fileUpdatedErrResp"
+        "428":
+          description: The request headers did not include a `If-Match` or `If-Unmodified-Since` precondition. Specify the appropriate values for the `If-Unmodified-Since` and `If-Match` request headers before trying the request again.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                ifMatchErrResp:
+                  $ref: "#/components/examples/ifMatchFoundErrResp"
+  /commons/settings:
+    get:
+      operationId: getSettings
+      summary: Get the API/service configuration settings
+      description: Returns the possible configuration settings that this API/service shares.
+      tags:
+        - Settings
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.attributes+json:
+              schema:
+                $ref: "#/components/schemas/settings"
+              examples:
+                commonsSettingsResp:
+                  $ref: "#/components/examples/getCommonsSettingsResp"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/settings"
+              examples:
+                commonsSettingsResp:
+                  $ref: "#/components/examples/getCommonsSettingsResp"
+servers:
+  - url: http://example.com/files
+    description: This is an example base URL.
+components:
+  requestBodies:
+    selection:
+      content:
+        application/vnd.sas.selection+json:
+          schema:
+            $ref: "#/components/schemas/selection"
+        application/json:
+          schema:
+            $ref: "#/components/schemas/selection"
+      description: Multiple parentUri values that are specified as an array of string values. The file resources that are associated with each parentUri are retrieved.
+      required: true
+    fileToPatch:
+      content:
+        application/vnd.sas.file+json:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+        application/json:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+        application/vnd.sas.file+json;version=1:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV1Resp:
+              $ref: "#/components/examples/getFilesV1Resp"
+        application/vnd.sas.file+json;version=2:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV2Resp:
+              $ref: "#/components/examples/getFilesV2Resp"
+        application/vnd.sas.file+json;version=3:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV3Resp:
+              $ref: "#/components/examples/getFilesV3Resp"
+        application/vnd.sas.file+json;version=4:
+          schema:
+            $ref: "#/components/schemas/fileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+      description: The file resource to update.
+      required: true
+    quarantineFileToPatch:
+      description: The file resource to update for quarantine status.
+      required: true
+      content:
+        application/vnd.sas.file+json:
+          schema:
+            $ref: "#/components/schemas/quarantineFileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+        application/json:
+          schema:
+            $ref: "#/components/schemas/quarantineFileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+        application/vnd.sas.file+json;version=4:
+          schema:
+            $ref: "#/components/schemas/quarantineFileToPatch"
+          examples:
+            filesV4Resp:
+              $ref: "#/components/examples/getFilesV4Resp"
+  schemas:
+    file:
+      title: File
+      type: string
+      description: The file to be uploaded.
+    fileToPatch:
+      title: File to Patch
+      description: File to Patch
+      required:
+        - name
+        - searchable
+      properties:
+        parentUri:
+          type: string
+          description: The URI of the object that is associated with or linked to a file resource.
+        properties:
+          type: object
+          description: 'The properties that are specific to this file. Each property uses a "key" : "value" format. Use a comma to separate properties.'
+          additionalProperties:
+            type: string
+        contentDisposition:
+          type: string
+          description: The value for the Content-Disposition header. This is specified in response when downloading the file.
+        description:
+          type: string
+          description: The description of the file resource.
+        documentType:
+          type: string
+          description: The type of the file resource.
+        name:
+          type: string
+          description: The name of the file resource.
+        searchable:
+          type: boolean
+          description: It indicates if a file is searchable or not.
+        typeDefName:
+          type: string
+          description: The type definition name of the file. If the file is associated with a folder and the client does not provide the value of this parameter, the file-service tries to find the best possible value using the type-registry service. If it fails to find a default value, it defaults to "file".
+    fileResourceCollection:
+      title: File Resource Collection
+      description: A collection of file representations.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/fileResource"
+              description: The array of application/vnd.sas.file representations.
+    fileResource:
+      title: File Resource
+      description: Details of file resource
+      properties:
+        parentUri:
+          type: string
+          description: The URI of the object that is associated with or linked to a file resource.
+        properties:
+          type: object
+          description: 'Properties that are specific to this file. Each property uses a "key" : "value" format. Use a comma to separate  properties.'
+          additionalProperties:
+            type: string
+        contentDisposition:
+          type: string
+          description: Value for the Content-Disposition header. It is specified in response when downloading the file.
+        contentType:
+          type: string
+          description: The type of the content.
+        createdBy:
+          type: string
+          description: The name of the author.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp that indicates when the file resource was created.
+        description:
+          type: string
+          description: The description of the file resource.
+        documentType:
+          type: string
+          description: The type of the file resource.
+        encoding:
+          type: string
+          description: The encoding of the file resource.
+        id:
+          type: string
+          description: The identifier of the file resource.
+        links:
+          type: array
+          description: Links that apply to this file resource. The links are "self", "content", "patch", "update", and "delete".
+          items:
+            $ref: "#/components/schemas/link"
+        modifiedBy:
+          type: string
+          description: The name of the user who modified this file resource.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp when the file resource was modified.
+        name:
+          type: string
+          description: The name of the file resource.
+        size:
+          type: integer
+          description: The byte size of the file resource content.
+        typeDefName:
+          type: string
+          description: The type definition name of the file. If the file is associated with a folder and the client does not provide the value of this parameter, the file-service tries to find the best possible value using the type-registry service. If it fails to find a default value, it defaults to "file".
+        searchable:
+          type: boolean
+          description: It indicates if a file is searchable or not.
+        fileVersion:
+          type: integer
+          description: It indicates the version of the file. In case the file is not versioned then the value will be '0'. If the file is versioned then the file Version will be greater then '0'.
+        fileStatus:
+          type: string
+          description: It indicates the fileStatus whether locked or unlocked.
+        virusDetected:
+          type: boolean
+          description: An indicator specifying if a file contains virus or not.
+        urlDetected:
+          type: boolean
+          description: An indicator specifying if a file of type html, JS or CSS, contains an URL.
+        quarantine:
+          type: boolean
+          description: An indicator that if a file contains vulnerability then the file will be quarantined.
+    fileResourceIndexCollection:
+      title: File Resource Indexable Collection
+      description: A collection of file representations.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/fileResourceIndex"
+              description: The array of file indexable representations.
+    fileResourceIndex:
+      title: File Resource Indexable Data
+      description: Collection of indexable representation of the files.
+      properties:
+        version:
+          type: integer
+          description: The version of the representation.
+        properties:
+          type: array
+          items:
+            $ref: "#/components/schemas/indexableDataElement"
+        resourceUri:
+          type: string
+          description: The URI of the representation.
+        sasType:
+          type: string
+          description: The sasType of the representation.
+    indexableDataElement:
+      title: Indexable Data Element
+      description: INdexable representation of the file.
+      properties:
+        name:
+          type: string
+          description: The name of the field.
+        value:
+          type: string
+          description: The value of the field.
+    fileResourceSummaryCollection:
+      title: File Resource Summary Collection
+      description: A collection of file representations.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/fileResourceSummary"
+              description: The array of file resource summary representations.
+    fileResourceSummary:
+      title: File Resource Summary
+      description: A generic summary representation of a file.
+      properties:
+        createdBy:
+          type: string
+          description: The name of the author.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp that indicates when the file resource was created.
+        description:
+          type: string
+          description: The description of the file resource.
+        id:
+          type: string
+          description: The identifier of the file resource.
+        links:
+          type: array
+          description: The alternate link to fetch the complete representation of the file resource--for example, vnd.sas.file.
+          items:
+            $ref: "#/components/schemas/link"
+        modifiedBy:
+          type: string
+          description: The name of the user who modified the file resource.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp that indicates when the file resource was modified.
+        name:
+          type: string
+          description: The name of the file.
+        expirationTimeStamp:
+          type: string
+          description: The timestamp that indicates when the file expires.
+        typeDefName:
+          type: string
+          description: The type definition name of the fileIf the file is associated with a folder and the client does not provide the value of this parameter, the  file-service tries to find the best possible value using type-registry service. If it fails to find a default value, it defaults to "file".
+        version:
+          type: integer
+          description: The version of the media type.
+    api:
+      description: The list of links to top-level resources and operations available from the root of the API.
+      properties:
+        links:
+          description: The API's top-level links.
+          items:
+            $ref: "#/components/schemas/link"
+          type: array
+        version:
+          description: The version number of the API representation. This is version 1.
+          minimum: 1
+          type: integer
+    error2:
+      description: Standard media type for error response.
+      properties:
+        details:
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+          type: array
+        errorCode:
+          description: The numeric ID for the error.
+          type: integer
+        errors:
+          description: Any additional errors that occurred.
+          items:
+            $ref: "#/components/schemas/error2"
+          type: array
+        httpStatusCode:
+          description: The HTTP status code for the error.
+          type: integer
+        id:
+          description: The string ID for the error.
+          type: string
+        links:
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+          type: array
+        message:
+          description: The message for the error.
+          type: string
+        remediation:
+          description: A message that describes how to resolve the error.
+          type: string
+        version:
+          description: The version number of the error representation. This representation is version 2.
+          type: integer
+    selection:
+      description: Multiple parentUri values that are specified as an array of string values.
+      properties:
+        links:
+          description: An array of links to related resources and actions.
+          type: array
+          items:
+            $ref: "#/components/schemas/link"
+        resources:
+          description: An array of resource IDs or URIs
+          type: array
+          items:
+            type: string
+        template:
+          description: 'A URI template in which the {id} parameter can be replaced with a value from the "resources" array in order to yield the URI of the identified resource. '
+          format: uri
+          type: string
+        type:
+          description: >-
+            Specifies whether the resources array contains IDs, URIs, or both.
+
+            <dl>
+
+            <dt>"id"</dt><dd>the array contains resource identifiers only. This is the default if "type" is omitted.</dd>
+
+            <dt>"uri"</dt><dd>the array contains resource URIs</dd>
+
+            <dt>"mixed"</dt><dd>the array contains a mixture of identifiers and URIs.</dd>
+
+            </dl>
+          enum:
+            - id
+            - uri
+            - mixed
+          type: string
+        version:
+          description: The schema version number of this media type. This representation is version 1.
+          type: integer
+    baseCollection2:
+      description: This is a base schema used to define paginated collections of resources. This base schema is extended by other schemas in APIs by adding an 'items' array property. These extensions define the application/vnd.sas.collection media type (version 2)
+      properties:
+        accept:
+          description: A space-delimited list of media types from which an `Accept` header may be constructed.
+          type: string
+        count:
+          description: If populated indicates the number of items in the collection.
+          format: int64
+          type: integer
+        limit:
+          description: The number of items that were requested for the collection.
+          type: integer
+        links:
+          description: The links that apply to the collection.
+          items:
+            $ref: "#/components/schemas/link"
+          type: array
+        name:
+          description: The name of the collection.
+          type: string
+        start:
+          description: The zero-based index of the first item in the collection.
+          format: int64
+          type: integer
+        version:
+          description: The version number of the collection representation. This representation is version 2.
+          type: integer
+    link:
+      description: A link to a related operation or resource.
+      properties:
+        href:
+          description: The URL for the link.
+          type: string
+        itemType:
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+          type: string
+        method:
+          description: The HTTP method for the link.
+          type: string
+        rel:
+          description: The relationship of the link to the resource.
+          type: string
+        responseItemType:
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+          type: string
+        responseType:
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+          type: string
+        title:
+          description: The title for the link.
+          type: string
+        type:
+          description: The media type or link type for the link.
+          type: string
+        uri:
+          description: The relative URI for the link.
+          type: string
+    schema:
+      description: The schema representation of file service fields to be indexed.
+      properties:
+        fields:
+          description: The collection of schema fields.
+          items:
+            $ref: "#/components/schemas/field"
+          type: array
+        version:
+          type: integer
+          description: The version of the representation.
+    field:
+      description: The file service field to be indexed.
+      properties:
+        primaryKey:
+          description: The boolean value to represent if the field is primary key.
+          type: boolean
+        name:
+          description: The name of the field.
+          type: string
+        type:
+          description: The type of the field.
+          type: string
+        label:
+          description: The label given to the field.
+          type: string
+        facetable:
+          description: It indicates if the field is facetable.
+          type: boolean
+        searchable:
+          description: It indicates if the field is searchable.
+          type: boolean
+        defaultFacet:
+          description: It indicates if the field is default facet.
+          type: boolean
+        multiValued:
+          description: It indicates if the field is multivalued.
+          type: boolean
+        displayableFacet:
+          description: It indicates if the field should be displayed.
+          type: boolean
+      x-examples:
+        example-1:
+          value:
+            primaryKey: true
+            name: string
+            type: string
+            label: string
+            facetable: true
+            searchable: true
+            defaultFacet: true
+            multiValued: true
+            displayableFacet: true
+    quarantineFileToPatch:
+      title: Quarantine file to Patch
+      description: File to Patch for quarantine status
+      required:
+        - quarantine
+      properties:
+        quarantine:
+          type: boolean
+          description: An indicator that if a file contains vulnerability then the file will be quarantined.
+    settings:
+      title: File Service Configuration Settings
+      description: The configuration settings exposed for commons usage.
+      x-sas-media-type:
+        name: application/vnd.sas.attributes
+        version: 1
+      required:
+        - version
+        - links
+        - attributes
+      properties:
+        version:
+          type: integer
+          description: Version information for this attribute list.
+        links:
+          type: array
+          description: The navigable links relative to this media type.
+          items:
+            $ref: "#/components/schemas/link"
+        attributes:
+          $ref: "#/components/schemas/attributesMap"
+    attributesMap:
+      title: Attributes Map
+      description: The configuration settings for this service.
+      properties:
+        blockedTypes:
+          type: array
+          description: The comma seperated list of blocked media type.
+          items:
+            type: string
+        maxFileSizeMB:
+          type: integer
+          description: The max files size which can be uploaded in the file service.
+        allowedFileNameCharactersRegex:
+          type: string
+          description: A regular expression used to validate allowed characters in filename.
+  examples:
+    noFileFoundErrResp:
+      summary: error response
+      description: error reponse when No files were found.
+      value:
+        errorCode: 0
+        message: No files were found.
+        details:
+          - "traceId: 3327c4e6cd1f7387"
+          - "path: /files/files"
+        links: []
+        version: 2
+        httpStatusCode: 404
+    serviceUnavailableErrResp:
+      summary: service unavailable error response
+      description: error response when the service is temporarily unavailable.
+      value:
+        errorCode: 0
+        message: Service Temporarily Unavailable. The service is not available.
+        details:
+          - "traceId: a1b2c3d4e5f67890"
+          - "path: /files/files"
+        links: []
+        version: 2
+        httpStatusCode: 503
+    largeFileErrResp:
+      summary: error response
+      description: error reponse when file name is not given while updating
+      value:
+        errorCode: 124009
+        message: The file "ex030728.log" cannot be uploaded because it is larger than 100 megabytes.
+        details:
+          - "traceId: f2f8671e81d4b01c"
+          - "path: /files/files/"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    permissionDeniedErrResp:
+      summary: error response.
+      description: error response when non admin is trying to access the content of quarantined file.
+      value:
+        errorCode: 124023
+        message: File could not be read. User does not have permission.
+        details:
+          - "traceId: a2d229de104546b9"
+          - "path: /files/files/39b37e23-cba7-4fbd-9475-2946cd19ce93/content"
+        links: []
+        version: 2
+        httpStatusCode: 403
+    fileUpdatedErrResp:
+      summary: file already updated by other user.
+      description: error response indicating that file is already modifed by someone else
+      value:
+        errorCode: 0
+        message: The values for the request header field "If-Match" ("lvp4um7v") and the resource's entity tag ("lvp5niyn") are not the same.
+        details:
+          - "traceId: cec997d709371be1"
+          - "path: /files/files/fb95b185-f223-4a58-803e-e2fde9a79145"
+        remediation: Get the latest representation of the resource, and apply the desired changes. Retry the operation with the modified representation and the entity tag from the response header field "ETag".
+        links: []
+        version: 2
+        httpStatusCode: 412
+    uploadErrResp:
+      summary: Error response in uploading of file.
+      description: Here is error response when partcular file-type is not supported while uploading of the file.
+      value:
+        errorCode: 124006
+        message: The file type "application/x-msdownload" is blocked.
+        details:
+          - "traceId: 15910d08202f67f1"
+          - "path: /files/files"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    fileNotFoundRrrResponse:
+      summary: error response.
+      description: error response when specifed file is not present in the system.
+      value:
+        errorCode: 124010
+        message: The file could not be found.
+        details:
+          - "traceId: f3b531793fdb7e81"
+          - "path: /files/files/123"
+        links: []
+        version: 2
+        httpStatusCode: 404
+    ifMatchFoundErrResp:
+      summary: error response.
+      description: 'One of the following request header fields is required: "If-Match" or "If-Unmodified-Since".'
+      value:
+        errorCode: 42801
+        message: 'One of the following request header fields is required: "If-Match" or "If-Unmodified-Since".'
+        details:
+          - "traceId: 1bb27cfcc5711dda"
+          - "path:  /files/files/fb95b185-f223-4a58-803e-e2fde9a79145"
+        remediation: "In the request header, include one of the following: the resource's entity tag for the field \"If-Match\", or the resource's last-modified timestamp for the field \"If-Unmodified-Since\"."
+        links: []
+        version: 2
+        httpStatusCode: 428
+    getTopLevelResponse:
+      summary: Response for top level end precondition.
+      description: Here is an example of using the GET request to retrieve the application/vnd.sas.api+json representation of the APIs top-level links.
+      value:
+        version: 1
+        links:
+          - method: HEAD
+            rel: checkState
+            href: /files/files
+            uri: /files/files
+            type: application/json
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+          - method: GET
+            rel: files
+            href: /files/files
+            uri: /files/files
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: bulkFiles
+            href: /files/files
+            uri: /files/files
+            type: application/vnd.sas.selection
+            responseType: application/vnd.sas.collection
+    getFilesCollectionResp:
+      summary: Response for file collection endpoint.
+      description: Here is example of GET request to retrve the application/vnd.sas.collection+json representation representation of collection endpoint.
+      value:
+        links:
+          - method: GET
+            rel: self
+            href: /files/files?sortBy=name&start=0&limit=2
+            uri: /files/files?sortBy=name&start=0&limit=2
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: next
+            href: /files/files?sortBy=name&start=2&limit=2
+            uri: /files/files?sortBy=name&start=2&limit=2
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: last
+            href: /files/files?sortBy=name&start=544&limit=2
+            uri: /files/files?sortBy=name&start=544&limit=2
+            type: application/vnd.sas.collection
+        name: files
+        accept: application/vnd.sas.file
+        start: 0
+        count: 546
+        items:
+          - creationTimeStamp: 2022-03-31T20:00:03.609Z
+            modifiedTimeStamp: 2022-03-31T20:00:03.826Z
+            createdBy: sas.audit
+            modifiedBy: sas.audit
+            id: cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            parentUri: /jobExecution/jobs/b9fe292d-2a4e-434c-8154-5f490b4b9257
+            properties:
+              LastState: running
+              JobRequest: ""
+              Job: b9fe292d-2a4e-434c-8154-5f490b4b9257
+              Provider: casl
+            contentDisposition: text/plain
+            contentType: text/plain
+            description: Log File for Job b9fe292d-2a4e-434c-8154-5f490b4b9257
+            documentType: log
+            encoding: UTF-8
+            links:
+              - method: GET
+                rel: self
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                type: application/vnd.sas.file
+              - method: GET
+                rel: alternate
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                type: application/vnd.sas.summary
+              - method: PATCH
+                rel: patch
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                type: application/vnd.sas.file
+                responseType: application/vnd.sas.file
+              - method: PUT
+                rel: update
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                type: application/vnd.sas.file
+                responseType: application/vnd.sas.file
+              - method: DELETE
+                rel: delete
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+              - method: GET
+                rel: content
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+                type: text/plain
+              - method: PUT
+                rel: updateContent
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+                type: "*/*"
+                responseType: application/vnd.sas.file
+              - method: POST
+                rel: copyFile
+                href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+                uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+                responseType: application/vnd.sas.file
+              - method: POST
+                rel: create
+                href: /files/files
+                uri: /files/files
+                type: "*/*"
+                responseType: application/vnd.sas.file
+            name: 2022-03-31T20:00:03Z-results.log
+            size: 742
+            searchable: false
+            fileStatus: unlocked
+            fileVersion: 0
+            expirationTimeStamp: 2022-04-07T20:00:03.651Z
+            virusDetected: false
+            urlDetected: false
+            quarantine: false
+            version: 4
+          - creationTimeStamp: 2022-03-31T20:01:12.657Z
+            modifiedTimeStamp: 2022-03-31T20:01:12.941Z
+            createdBy: sas.audit
+            modifiedBy: sas.audit
+            id: bed8ac75-2c21-4355-ab8a-0e595049c246
+            parentUri: /jobExecution/jobs/2c08ebfd-bd82-4970-8cf0-cc9858f5dc6e
+            properties:
+              LastState: running
+              JobRequest: ""
+              Job: 2c08ebfd-bd82-4970-8cf0-cc9858f5dc6e
+              Provider: casl
+            contentDisposition: text/plain
+            contentType: text/plain
+            description: Log File for Job 2c08ebfd-bd82-4970-8cf0-cc9858f5dc6e
+            documentType: log
+            encoding: UTF-8
+            links:
+              - method: GET
+                rel: self
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                type: application/vnd.sas.file
+              - method: GET
+                rel: alternate
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                type: application/vnd.sas.summary
+              - method: PATCH
+                rel: patch
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                type: application/vnd.sas.file
+                responseType: application/vnd.sas.file
+              - method: PUT
+                rel: update
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                type: application/vnd.sas.file
+                responseType: application/vnd.sas.file
+              - method: DELETE
+                rel: delete
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246
+              - method: GET
+                rel: content
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/content
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/content
+                type: text/plain
+              - method: PUT
+                rel: updateContent
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/content
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/content
+                type: "*/*"
+                responseType: application/vnd.sas.file
+              - method: POST
+                rel: copyFile
+                href: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/copy
+                uri: /files/files/bed8ac75-2c21-4355-ab8a-0e595049c246/copy
+                responseType: application/vnd.sas.file
+              - method: POST
+                rel: create
+                href: /files/files
+                uri: /files/files
+                type: "*/*"
+                responseType: application/vnd.sas.file
+            name: 2022-03-31T20:01:12Z-results.log
+            size: 742
+            searchable: false
+            fileStatus: unlocked
+            fileVersion: 0
+            expirationTimeStamp: 2022-04-07T20:01:12.678Z
+            virusDetected: false
+            urlDetected: false
+            quarantine: false
+            version: 4
+        limit: 2
+        version: 2
+    getFilesCollectionErrResp:
+      summary: Error response for invalid limit.
+      description: Here is response when an invalid limit is specified in the GET request to fetch collection using representation application/vnd.sas.collection+json
+      value:
+        errorCode: 12016
+        message: The limit is not valid.
+        details:
+          - "traceId: 967013a71ad1bc6b"
+          - "path: /files/files"
+        remediation: The limit must be between 0 and 10,000.
+        links: []
+        version: 2
+        httpStatusCode: 400
+    getFilesSchemaResp:
+      summary: Schema response for search service.
+      description: Here is schema response for GET request for representation application/vnd.sas.search.type.schema+json
+      value:
+        fields:
+          - primaryKey: false
+            name: typeDefName
+            type: string
+            label: typeDefName
+            facetable: true
+            searchable: true
+            defaultFacet: true
+            multiValued: false
+            displayableFacet: true
+        version: 2
+    getFilesV1Resp:
+      summary: File resource version 1
+      description: Here is the response for file resource version1
+      value:
+        creationTimeStamp: 2022-03-31T20:00:03.609Z
+        modifiedTimeStamp: 2022-03-31T20:00:03.826Z
+        createdBy: sas.audit
+        modifiedBy: sas.audit
+        id: cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+        parentUri: /jobExecution/jobs/b9fe292d-2a4e-434c-8154-5f490b4b9257
+        properties:
+          LastState: running
+          JobRequest: ""
+          Job: b9fe292d-2a4e-434c-8154-5f490b4b9257
+          Provider: casl
+        contentDisposition: text/plain
+        contentType: text/plain
+        description: Log File for Job b9fe292d-2a4e-434c-8154-5f490b4b9257
+        documentType: log
+        encoding: UTF-8
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.summary
+          - method: PATCH
+            rel: patch
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: PUT
+            rel: update
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: DELETE
+            rel: delete
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+          - method: GET
+            rel: content
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: text/plain
+          - method: PUT
+            rel: updateContent
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: "*/*"
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: copyFile
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+        name: 2022-03-31T20:00:03Z-results.log
+        size: 742
+        searchable: true
+        fileVersion: 0
+        version: 1
+    getFilesV2Resp:
+      summary: File resource version 2
+      description: Here is the response for file resource version 2
+      value:
+        creationTimeStamp: 2022-03-31T20:00:03.609Z
+        modifiedTimeStamp: 2022-03-31T20:00:03.826Z
+        createdBy: sas.audit
+        modifiedBy: sas.audit
+        id: cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+        parentUri: /jobExecution/jobs/b9fe292d-2a4e-434c-8154-5f490b4b9257
+        properties:
+          LastState: running
+          JobRequest: ""
+          Job: b9fe292d-2a4e-434c-8154-5f490b4b9257
+          Provider: casl
+        contentDisposition: text/plain
+        contentType: text/plain
+        description: Log File for Job b9fe292d-2a4e-434c-8154-5f490b4b9257
+        documentType: log
+        encoding: UTF-8
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.summary
+          - method: PATCH
+            rel: patch
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: PUT
+            rel: update
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: DELETE
+            rel: delete
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+          - method: GET
+            rel: content
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: text/plain
+          - method: PUT
+            rel: updateContent
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: "*/*"
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: copyFile
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+        name: 2022-03-31T20:00:03Z-results.log
+        size: 742
+        searchable: true
+        fileVersion: 0
+        expirationTimeStamp: 2022-04-07T20:00:03.651Z
+        version: 2
+    getFilesV3Resp:
+      summary: File resource version 3
+      description: Here is the response for file resource version 3
+      value:
+        creationTimeStamp: 2022-03-31T20:00:03.609Z
+        modifiedTimeStamp: 2022-03-31T20:00:03.826Z
+        createdBy: sas.audit
+        modifiedBy: sas.audit
+        id: cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+        parentUri: /jobExecution/jobs/b9fe292d-2a4e-434c-8154-5f490b4b9257
+        properties:
+          LastState: running
+          JobRequest: ""
+          Job: b9fe292d-2a4e-434c-8154-5f490b4b9257
+          Provider: casl
+        contentDisposition: text/plain
+        contentType: text/plain
+        description: Log File for Job b9fe292d-2a4e-434c-8154-5f490b4b9257
+        documentType: log
+        encoding: UTF-8
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.summary
+          - method: PATCH
+            rel: patch
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: PUT
+            rel: update
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: DELETE
+            rel: delete
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+          - method: GET
+            rel: content
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: text/plain
+          - method: PUT
+            rel: updateContent
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: "*/*"
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: copyFile
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+        name: 2022-03-31T20:00:03Z-results.log
+        size: 742
+        searchable: false
+        fileVersion: 0
+        expirationTimeStamp: 2022-04-07T20:00:03.651Z
+        version: 3
+    getFilesV4Resp:
+      summary: File resource version 4
+      description: Here is the response for file resource version 4
+      value:
+        creationTimeStamp: 2022-03-31T20:00:03.609Z
+        modifiedTimeStamp: 2022-03-31T20:00:03.826Z
+        createdBy: sas.audit
+        modifiedBy: sas.audit
+        id: cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+        parentUri: /jobExecution/jobs/b9fe292d-2a4e-434c-8154-5f490b4b9257
+        properties:
+          LastState: running
+          JobRequest: ""
+          Job: b9fe292d-2a4e-434c-8154-5f490b4b9257
+          Provider: casl
+        contentDisposition: text/plain
+        contentType: text/plain
+        description: Log File for Job b9fe292d-2a4e-434c-8154-5f490b4b9257
+        documentType: log
+        encoding: UTF-8
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.summary
+          - method: PATCH
+            rel: patch
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: PUT
+            rel: update
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: DELETE
+            rel: delete
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7
+          - method: GET
+            rel: content
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: text/plain
+          - method: PUT
+            rel: updateContent
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/content
+            type: "*/*"
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: copyFile
+            href: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            uri: /files/files/cddc7f5d-9b30-4bf1-bb2f-6d5e40728cb7/copy
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+        name: 2022-03-31T20:00:03Z-results.log
+        size: 742
+        searchable: false
+        fileStatus: unlocked
+        fileVersion: 0
+        expirationTimeStamp: 2022-04-07T20:00:03.651Z
+        virusDetected: false
+        urlDetected: false
+        quarantine: false
+        version: 4
+    postUploadErrResp:
+      summary: Error response in uploading of file.
+      description: Here is error response when partcular file-type is not supported while uploading of the file.
+      value:
+        errorCode: 124007
+        message: The file "Attributes.csv" has a file type of "application/x-msdownload", which is blocked.
+        details:
+          - "traceId: 62365735e5c58599"
+          - "path: /files/files"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    postUploadConflictErrResp:
+      summary: Conflict error response.
+      description: Here is conflict error response when file name conflict occurs in the upload folder
+      value:
+        errorCode: 0
+        message: File with name "Attributes.csv" already exists in folder "a70b784d-2b80-4b6a-8be9-c2f47f8ab636".
+        details:
+          - "traceId: 3da2bd0e90707f57"
+          - "path: /files/files"
+        links: []
+        version: 2
+        httpStatusCode: 409
+    getFilesIndexableCollectionResp:
+      summary: Indexable response collection.
+      description: Here is the collection of indexable reprsentation response for files.
+      value:
+        links:
+          - method: GET
+            rel: self
+            href: /files/files?start=0&limit=10
+            uri: /files/files?start=0&limit=10
+            type: application/vnd.sas.collection
+        name: files
+        accept: application/vnd.sas.search.indexable.data
+        start: 0
+        count: 3
+        items:
+          - version: 1
+            properties-:
+              - name: title
+                value: Attributes.csv
+              - name: createdBy
+                value: SysUser
+              - name: creationTimeStamp
+                value: 2022-04-13T17:53:51.710Z
+              - name: modifiedBy
+                value: SysUser
+              - name: modifiedTimeStamp
+                value: 2022-04-13T17:53:51.710Z
+              - name: attachmentContent
+                value: You should see extracted content file over here
+              - name: textStore
+                value: text/plain
+            resourceUri: /files/files/bccd30ff-8603-4770-bfa3-b771f6713ffb
+            sasType: file
+          - version: 1
+            properties-:
+              - name: title
+                value: Attributes.csv
+              - name: createdBy
+                value: SysUser
+              - name: creationTimeStamp
+                value: 2022-04-13T17:53:55.567Z
+              - name: modifiedBy
+                value: SysUser
+              - name: modifiedTimeStamp
+                value: 2022-04-13T17:53:55.567Z
+              - name: attachmentContent
+                value: You should see extracted content file over here
+              - name: textStore
+                value: text/plain
+            resourceUri: /files/files/acd5718a-c0ec-46b1-a0c0-de4a42db584a
+            sasType: file
+          - version: 1
+            properties-:
+              - name: title
+                value: Attributes.csv
+              - name: createdBy
+                value: SysUser
+              - name: creationTimeStamp
+                value: 2022-04-13T17:53:57.219Z
+              - name: modifiedBy
+                value: SysUser
+              - name: modifiedTimeStamp
+                value: 2022-04-13T17:53:57.219Z
+              - name: attachmentContent
+                value: You should see extracted content file over here
+              - name: textStore
+                value: text/plain
+            resourceUri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+            sasType: file
+        limit: 10
+        version: 2
+    getFilesSummaryCollectionResp:
+      summary: file summary response collection.
+      description: Here is the summary collection response of file
+      value:
+        links:
+          - method: GET
+            rel: self
+            href: /files/files?sortBy=name&start=0&limit=3
+            uri: /files/files?sortBy=name&start=0&limit=3
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: next
+            href: /files/files?sortBy=name&start=3&limit=3
+            uri: /files/files?sortBy=name&start=3&limit=3
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: last
+            href: /files/files?sortBy=name&start=3&limit=3
+            uri: /files/files?sortBy=name&start=3&limit=3
+            type: application/vnd.sas.collection
+        name: files
+        accept: application/vnd.sas.summary
+        start: 0
+        count: 6
+        items:
+          - creationTimeStamp: 2022-04-13T17:53:51.710Z
+            modifiedTimeStamp: 2022-04-13T17:53:51.710Z
+            createdBy: SysUser
+            modifiedBy: SysUser
+            id: bccd30ff-8603-4770-bfa3-b771f6713ffb
+            type: file
+            name: Attributes.csv
+            links:
+              - method: GET
+                rel: self
+                href: /files/files/bccd30ff-8603-4770-bfa3-b771f6713ffb
+                uri: /files/files/bccd30ff-8603-4770-bfa3-b771f6713ffb
+                type: application/vnd.sas.file
+              - method: GET
+                rel: alternate
+                href: /files/files/bccd30ff-8603-4770-bfa3-b771f6713ffb
+                uri: /files/files/bccd30ff-8603-4770-bfa3-b771f6713ffb
+                type: application/vnd.sas.summary
+            version: 2
+          - creationTimeStamp: 2022-04-13T17:53:55.567Z
+            modifiedTimeStamp: 2022-04-13T17:53:55.567Z
+            createdBy: SysUser
+            modifiedBy: SysUser
+            id: acd5718a-c0ec-46b1-a0c0-de4a42db584a
+            type: file
+            name: Attributes.csv
+            links:
+              - method: GET
+                rel: self
+                href: /files/files/acd5718a-c0ec-46b1-a0c0-de4a42db584a
+                uri: /files/files/acd5718a-c0ec-46b1-a0c0-de4a42db584a
+                type: application/vnd.sas.file
+              - method: GET
+                rel: alternate
+                href: /files/files/acd5718a-c0ec-46b1-a0c0-de4a42db584a
+                uri: /files/files/acd5718a-c0ec-46b1-a0c0-de4a42db584a
+                type: application/vnd.sas.summary
+            version: 2
+          - creationTimeStamp: 2022-04-13T17:53:57.219Z
+            modifiedTimeStamp: 2022-04-13T17:53:57.219Z
+            createdBy: SysUser
+            modifiedBy: SysUser
+            id: 335f6597-96f8-4851-a76a-9672af8c6c62
+            type: file
+            name: Attributes.csv
+            links:
+              - method: GET
+                rel: self
+                href: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+                uri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+                type: application/vnd.sas.file
+              - method: GET
+                rel: alternate
+                href: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+                uri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+                type: application/vnd.sas.summary
+            version: 2
+        limit: 3
+        version: 2
+    headFileNotFoundErrResp:
+      summary: error response.
+      description: error response when specifed file is not present in the system.
+      value:
+        errorCode: 0
+        message: The file could not be found.
+        details:
+          - "traceId: f3b531793fdb7e81"
+          - "path: /files/files/123"
+        links: []
+        version: 2
+        httpStatusCode: 404
+    fileAlreadyUpdatedErrResp:
+      summary: file already updated by other user.
+      description: error response indicating that file is already modifed by someone else
+      value:
+        errorCode: 0
+        message: The file has been updated since you last retrieved it.
+        details:
+          - "traceId: 6bad5bb8a57678ee"
+          - "path: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62"
+        links: []
+        version: 2
+        httpStatusCode: 412
+    patchNameNotSpecifiedErrResp:
+      summary: error response
+      description: error reponse when file name is not given while updating
+      value:
+        errorCode: 124018
+        message: You must specify a filename.
+        details:
+          - "traceId: 3f7de1e7093407c4"
+          - "path: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    fileIdDoNotMatch:
+      summary: error response
+      description: error reponse when file Id in the path and file Id from the request body do not match
+      value:
+        errorCode: 124017
+        message: The ID parameter in the path and the ID of the file does not match.
+        details:
+          - "traceId: 745cbe49b4fe235f"
+          - "path: /files/files/fde5c033-f35f-4728-abef-297fbaaaa781%20/quarantine"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    ifMatchErrResp:
+      summary: error response.
+      description: error response when If-match or If-Unmodified-since is nto specified.
+      value:
+        errorCode: 42801
+        message: 'You must include at least one of the following headers: "if-unmodified-since", "if-match".'
+        details:
+          - "traceId: 1bb27cfcc5711dda"
+          - "path: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62"
+        links: []
+        version: 2
+        httpStatusCode: 428
+    fileSummaryResp:
+      summary: file summary representations.
+      description: Here is the response for file summary representation
+      value:
+        creationTimeStamp: 2022-04-13T17:53:57.219Z
+        modifiedTimeStamp: 2022-04-13T17:53:57.219Z
+        createdBy: SysUser
+        modifiedBy: SysUser
+        id: 335f6597-96f8-4851-a76a-9672af8c6c62
+        type: file
+        name: Attributes.csv
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+            uri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+            uri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+            type: application/vnd.sas.summary
+        version: 2
+    fileIndexableResp:
+      summary: files indexable representations.
+      description: Here is the response for indexable representation of file.
+      value:
+        version: 1
+        properties:
+          - name: title
+            value: Attributes.csv
+          - name: createdBy
+            value: SysUser
+          - name: creationTimeStamp
+            value: 2022-04-13T17:53:57.219Z
+          - name: modifiedBy
+            value: SysUser
+          - name: modifiedTimeStamp
+            value: 2022-04-13T17:53:57.219Z
+          - name: attachmentContent
+            value: Here you should see the extracted content of your file
+          - name: textStore
+            value: text/plain
+        resourceUri: /files/files/335f6597-96f8-4851-a76a-9672af8c6c62
+        sasType: file
+    quarantinedErrResp:
+      summary: error response.
+      description: error response when non admin is trying to access the content of quarantined file.
+      value:
+        errorCode: 124023
+        message: File is quarantined. User does not have permission to read the content of file. Please contact your system administrator.
+        details:
+          - "path: /files/files/9120fa35-36d1-43fb-8771-3733aae8842e/content"
+        links: []
+        version: 2
+        httpStatusCode: 403
+    getCommonsSettingsResp:
+      summary: commons settings response.
+      description: sample response for the exposed configuration properties
+      value:
+        version: 1
+        links:
+          - method: GET
+            rel: self
+            href: /files/commons/settings
+            uri: /files//commons/settings
+            responseType: application/vnd.sas.attributes
+        attributes:
+          blockedTypes:
+            - application/x-msdownload, application/x-ms-installer
+          maxFileSizeMB: 100
+          allowedFileNameCharactersRegex: If file name contains bad characters then files service will return bad request.

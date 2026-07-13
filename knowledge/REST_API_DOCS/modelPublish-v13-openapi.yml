@@ -1,0 +1,2817 @@
+openapi: 3.0.3
+info:
+  title: Model Publish
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  description: The Model Publish API provides support for publishing objects to a predefined destination.
+  version: "12"
+servers:
+  - url: https://example.com/modelPublish
+    description: This is an example of a base URL.
+tags:
+  - name: Publish
+    description: Contains the operations for publishing models.
+  - name: Destinations
+    description: Contains the operations for publishing destinations.
+paths:
+  /:
+    get:
+      tags:
+        - Publish
+      summary: Get a list of top-level resource links
+      description: Returns a list of links to the top-level resources that are surfaced through this API.
+      operationId: root
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+    head:
+      tags:
+        - Publish
+      summary: Check API availability
+      description: Returns header information and a status of whether the Model Publish service is available.
+      operationId: headersForRoot
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+  /models:
+    head:
+      tags:
+        - Publish
+      summary: Check if published models exist
+      description: Returns header information for the list of published models.
+      operationId: headersForPublishModelsUsingGET_1
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first published model to return.
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of published models to return.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+        - name: filter
+          in: query
+          description: The criteria for filtering the publishing destinations. See [Filtering in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#filtering).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the publishing destinations. See [Sorting in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#sorting).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/publishModelCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/publishModelCollection"
+    get:
+      tags:
+        - Publish
+      summary: Get a list of published models
+      description: Returns a list of published models.
+      operationId: getPublishModelsUsingGET_1
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first published model to return.
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of published models to return.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+        - name: filter
+          in: query
+          description: The criteria for filtering the publishing destinations. See [Filtering in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#filtering).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the publishing destinations. See [Sorting in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#sorting).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            X-Items-Count:
+              description: The total number of published models that are available. This is used for pagination.
+              schema:
+                type: integer
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/publishModelCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/publishModelCollection"
+    post:
+      tags:
+        - Publish
+      summary: Publish models
+      description: Publish one or more models to a CAS server, Hadoop, SAS Micro Analytic Service, or Teradata, as well as Azure Machine Learning (AML), and container destinations such as Amazon Web Services (AWS), Azure, Google Cloud Platform (GCP), and Private Docker.
+      operationId: createPublishModels
+      parameters:
+        - name: reuseExistingModules
+          in: query
+          description: Reuse the published modules.
+          required: false
+          schema:
+            type: boolean
+        - name: promoteModelTable
+          in: query
+          description: Indicates whether to promote the destination table.
+          required: false
+          schema:
+            type: boolean
+        - name: Authorization
+          in: header
+          description: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.models.publishing.request:
+            schema:
+              $ref: "#/components/schemas/publishRequest"
+          application/vnd.sas.models.publishing.request.asynchronous:
+            schema:
+              $ref: "#/components/schemas/publishRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/publishRequest"
+        description: The representation of a publish request.
+        required: true
+      responses:
+        "201":
+          description: The models were published.
+          headers:
+            Location:
+              description: /modelPublish/models/{publishId}
+              schema:
+                type: string
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/baseCollection2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/baseCollection2"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+  "/models/{publishId}":
+    head:
+      tags:
+        - Publish
+      summary: Check if a published model exists
+      description: Returns header information for a published model.
+      operationId: headersForPublishedModel
+      parameters:
+        - name: publishId
+          in: path
+          description: publishId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Etag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/publishModel"
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/publishModel"
+        "404":
+          description: No published model exists at the requested path.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+    get:
+      tags:
+        - Publish
+      summary: Get published models
+      description: Returns published models.
+      operationId: getPublishedModel
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier for the published models.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Etag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/publishModel"
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/publishModel"
+            application/vnd.sas.summary+json:
+              schema:
+                $ref: "#/components/schemas/publishModel"
+        "404":
+          description: No published models exist at the requested path.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.model+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.summary+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+    delete:
+      tags:
+        - Publish
+      summary: Delete a published model
+      description: Deletes a published model by ID.
+      operationId: deletePublishModel
+      parameters:
+        - name: publishId
+          in: path
+          description: The published model ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The published model was deleted.
+  "/models/{publishId}/mappedCode":
+    post:
+      summary: Get the mapped code for a model
+      description: Returns the code to be able to run the model based on the provided data and mapping information in request.
+      operationId: generateMappedModelCode
+      tags:
+        - Publish
+      parameters:
+        - name: publishId
+          in: path
+          required: true
+          description: The ID of the published model.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.score.code.generation.request+json:
+            schema:
+              $ref: "#/components/schemas/scoreCodeGenerationRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/scoreCodeGenerationRequest"
+        description: The information for `scoreDefinitionId` and hints.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/mappedCode"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/mappedCode"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+        "500":
+          description: The request could not be fulfilled because of an unexpected server error.
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+  "/models/{publishId}/dockerfile":
+    get:
+      tags:
+        - Publish
+      summary: Get Dockerfile metadata for a published model
+      description: Returns the Dockerfile metadata for a model that was published to a container.
+      operationId: getPublishedModelDockerfile
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published model.
+          required: true
+          schema:
+            type: string
+          examples:
+            publishId:
+              $ref: "#/components/examples/publishId"
+        - in: header
+          name: Accept
+          description: The original media type of the resource.
+          schema:
+            type: string
+          example: application/vnd.sas.file+json
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp for when the resource was last modified.
+              schema:
+                type: string
+              example: Tue, 12 Oct 2021 11:05:54 GMT
+            Content-Type:
+              description: The actual content type of the returned content.
+              schema:
+                type: string
+              example: application/vnd.sas.file+json
+          content:
+            application/vnd.sas.file+json:
+              schema:
+                $ref: "#/components/schemas/dockerfile"
+              examples:
+                dockerfileResource:
+                  $ref: "#/components/examples/dockerfileResource"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/dockerfile"
+              examples:
+                dockerfileResource:
+                  $ref: "#/components/examples/dockerfileResource"
+        "404":
+          description: The Dockerfile resource for the published model could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/dockerfileNotFound"
+  "/models/{publishId}/dockerfile/content":
+    get:
+      tags:
+        - Publish
+      summary: Get Dockerfile content for a published model
+      description: Returns the Dockerfile content for a model that was published to a container.
+      operationId: getPublishedModelDockerfileContent
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published model.
+          required: true
+          schema:
+            type: string
+          examples:
+            publishId:
+              $ref: "#/components/examples/publishId"
+        - in: header
+          name: Accept
+          description: The original media type of the resource.
+          schema:
+            type: string
+          example: text/plain
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              description: The actual content type of the returned content.
+              schema:
+                type: string
+              example: text/plain
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/dockerfileContent"
+              examples:
+                dockerfileContent:
+                  $ref: "#/components/examples/dockerfileContent"
+        "404":
+          description: The Dockerfile resource for the published model could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/dockerfileNotFound"
+  "/models/{publishId}/log":
+    get:
+      tags:
+        - Publish
+      summary: Get a published model log
+      description: Returns a published model log.
+      operationId: getPublishedModelLog
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published model log.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/log"
+            plain/text:
+              schema:
+                $ref: "#/components/schemas/log"
+  "/models/{publishId}/modelManifest":
+    get:
+      tags:
+        - Publish
+      summary: Get manifest for a published object
+      description: Returns the manifest for the object (model, decision, or rule set)  that was published to a container.
+      operationId: getPublishedModelManifest
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published object.
+          required: true
+          schema:
+            type: string
+          examples:
+            publishId:
+              $ref: "#/components/examples/publishId"
+        - in: header
+          name: Accept
+          description: The media type of the resource.
+          schema:
+            type: string
+          example: application/vnd.sas.models.publishing.model.manifest+json
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp for when the resource was last modified.
+              schema:
+                type: string
+              example: Tue, 12 Oct 2021 11:05:54 GMT
+            Content-Type:
+              description: The actual content type of the returned content.
+              schema:
+                type: string
+              example: application/vnd.sas.models.publishing.model.manifest+json
+          content:
+            application/vnd.sas.models.publishing.model.manifest+json:
+              schema:
+                $ref: "#/components/schemas/modelManifest"
+              examples:
+                default:
+                  $ref: "#/components/examples/modelManifest"
+        "404":
+          description: The model manifest for the published object could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/modelManifestNotFound"
+  "/models/{publishId}/deploymentDescriptor":
+    get:
+      tags:
+        - Publish
+      summary: Get deployment descriptor for a published object
+      description: Returns the deployment descriptor for the object (model, decision, or rule set) that was published to a container.
+      operationId: getPublishedModelDeploymentDescriptor
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published object.
+          required: true
+          schema:
+            type: string
+          examples:
+            publishId:
+              $ref: "#/components/examples/publishId"
+        - in: header
+          name: Accept
+          description: The media type of the resource.
+          schema:
+            type: string
+          example: application/json
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp for when the resource was last modified.
+              schema:
+                type: string
+              example: Tue, 12 Oct 2021 11:05:54 GMT
+            Content-Type:
+              description: The actual content type of the returned content.
+              schema:
+                type: string
+              example: application/json
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/deploymentDescriptor"
+              examples:
+                default:
+                  $ref: "#/components/examples/deploymentDescriptor"
+        "404":
+          description: The deployment descriptor for the published object could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/deploymentDescriptorNotFound"
+  "/models/{publishId}/deploymentDescriptor/{descriptorName}":
+    get:
+      tags:
+        - Publish
+      summary: Get deployment descriptor file content for a published object
+      description: Returns the deployment descriptor content for a published object that was published to a container.
+      operationId: getPublishedModelDeploymentDescriptorContent
+      parameters:
+        - name: publishId
+          in: path
+          description: The identifier of the published object.
+          required: true
+          schema:
+            type: string
+          example: 094078e7-278a-4719-a704-6e5e65af29e
+        - name: descriptorName
+          in: path
+          description: The file name of the deployment descriptor.
+          required: true
+          schema:
+            type: string
+          example: service.yaml
+        - in: header
+          name: Accept
+          description: The original media type of the resource.
+          schema:
+            type: string
+          example: text/plain
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              description: The actual content type of the returned content.
+              schema:
+                type: string
+              example: text/plain
+          content:
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/deploymentDescriptorContent"
+              examples:
+                descriptorContent:
+                  $ref: "#/components/examples/deploymentDescriptorContent"
+        "404":
+          description: The deployment descriptor content for the published object could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/deploymentDescriptorNotFound"
+  /destinations:
+    head:
+      tags:
+        - Destinations
+      summary: Check publishing destinations availability
+      description: Returns header information for a list of publishing destinations.
+      operationId: headersForDestinationsUsingGET_1
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first publishing destination to return.
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of publishing destinations to return.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 100
+        - name: filter
+          in: query
+          description: The criteria for filtering the publishing destinations. See [Filtering in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#filtering).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the publishing destinations. See [Sorting in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#sorting).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/destinationCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destinationCollection"
+    get:
+      tags:
+        - Destinations
+      summary: Get a list of publishing destinations
+      description: Returns a list of publishing destinations.
+      operationId: getDestinationsUsingGET_1
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first publishing destination to return.
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: The maximum number of publishing destinations to return.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 100
+        - name: filter
+          in: query
+          description: The criteria for filtering the publishing destinations. See [Filtering in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#filtering).
+          required: false
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the publishing destinations. See [Sorting in REST APIs](https://developer.sas.com/rest-apis/modelPublish/docs/getting-started/usage-notes#sorting).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/destinationCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destinationCollection"
+    post:
+      tags:
+        - Destinations
+      summary: Create a publishing destination
+      description: Creates a publishing destination.
+      operationId: createDestination
+      requestBody:
+        content:
+          application/vnd.sas.models.publishing.destination:
+            schema:
+              $ref: "#/components/schemas/destination"
+          application/vnd.sas.models.publishing.destination.cas:
+            schema:
+              $ref: "#/components/schemas/destinationCas"
+          application/vnd.sas.models.publishing.destination.mas:
+            schema:
+              $ref: "#/components/schemas/destinationMas"
+          application/vnd.sas.models.publishing.destination.teradata:
+            schema:
+              $ref: "#/components/schemas/destinationTeradata"
+          application/vnd.sas.models.publishing.destination.hadoop:
+            schema:
+              $ref: "#/components/schemas/destinationHadoop"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/destination"
+        description: Creates a publishing destination.
+        required: true
+      responses:
+        "201":
+          description: The publishing destination was created.
+          headers:
+            Location:
+              description: /modelPublish/destinations/{destinationName}
+              schema:
+                type: string
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/destination"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/destinationCas"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/destinationMas"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/destinationTeradata"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/destinationHadoop"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destination"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+  "/destinations/{destinationName}":
+    head:
+      tags:
+        - Destinations
+      summary: Check publishing destination by name
+      description: Returns the header information for a publishing destination by name.
+      operationId: headersForDestinationUsingGET_1
+      parameters:
+        - name: destinationName
+          in: path
+          description: destinationName
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/destination"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/destinationCas"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/destinationMas"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/destinationTeradata"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/destinationHadoop"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destination"
+    get:
+      tags:
+        - Destinations
+      summary: Get a publishing destination by name
+      description: Returns a publishing destination by name.
+      operationId: getDestinationUsingGET_1
+      parameters:
+        - name: destinationName
+          in: path
+          description: destinationName
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/destination"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/destinationCas"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/destinationMas"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/destinationTeradata"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/destinationHadoop"
+            application/vnd.sas.summary+json:
+              schema:
+                $ref: "#/components/schemas/destination"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destination"
+    put:
+      tags:
+        - Destinations
+      summary: Update a publishing destination
+      description: Updates a publishing destination.
+      operationId: updateDestination
+      parameters:
+        - name: If-Match
+          in: header
+          description: If-Match
+          required: true
+          schema:
+            type: string
+        - name: destinationName
+          in: path
+          description: destinationName
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.models.publishing.destination:
+            schema:
+              $ref: "#/components/schemas/destination"
+          application/vnd.sas.models.publishing.destination.cas:
+            schema:
+              $ref: "#/components/schemas/destinationCas"
+          application/vnd.sas.models.publishing.destination.mas:
+            schema:
+              $ref: "#/components/schemas/destinationMas"
+          application/vnd.sas.models.publishing.destination.teradata:
+            schema:
+              $ref: "#/components/schemas/destinationTeradata"
+          application/vnd.sas.models.publishing.destination.hadoop:
+            schema:
+              $ref: "#/components/schemas/destinationHadoop"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/destination"
+        description: The representation of a publish request.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Etag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/destination"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/destinationCas"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/destinationMas"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/destinationTeradata"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/destinationHadoop"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destination"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+        "412":
+          description: ETag is not matched.
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+        "428":
+          description: The request headers did not include a 'If-Match' or 'If-Unmodified-Since' precondition.
+          content:
+            application/vnd.sas.models.publishing.destination+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.cas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.mas+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.teradata+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/vnd.sas.models.publishing.destination.hadoop+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+    delete:
+      tags:
+        - Destinations
+      summary: Delete a publishing destination
+      description: Deletes a publishing destination by name.
+      operationId: deleteDestination
+      parameters:
+        - name: destinationName
+          in: path
+          description: The destination name.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The publishing destination was deleted.
+  "/destinations/{destinationName}/gitFolders":
+    get:
+      tags:
+        - Destinations
+      summary: Get a list of Git repository folders
+      description: Returns a list of Git repository folders for the specified destination.
+      operationId: getGitRepoFolders
+      parameters:
+        - name: destinationName
+          in: path
+          description: The name of the destination.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/gitResourceCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderList"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/gitResourceCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderList"
+    post:
+      tags:
+        - Destinations
+      summary: Create a Git repository folder
+      description: Creates a Git repository folder within the specified destination.
+      operationId: createGitRepoFolder
+      parameters:
+        - name: destinationName
+          in: path
+          description: The name of the destination.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.models.publishing.destination.git.folder+json:
+            schema:
+              $ref: "#/components/schemas/destinationGitFolderRequest"
+            examples:
+              default:
+                $ref: "#/components/examples/newGitFolderShort"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/destinationGitFolderRequest"
+            examples:
+              default:
+                $ref: "#/components/examples/newGitFolderShort"
+      responses:
+        "201":
+          description: The Git repository folder was created.
+          headers:
+            Location:
+              description: /modelPublish/destinations/{destinationName}/gitFolders
+              schema:
+                type: string
+                format: uri
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination.git.folder+json:
+              schema:
+                $ref: "#/components/schemas/destinationGitFolderResponse"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderFull"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destinationGitFolderResponse"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderFull"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.models.publishing.destination.git.folder+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+    put:
+      tags:
+        - Destinations
+      summary: Rename a Git repository folder
+      description: Rename a Git repository folder.
+      operationId: renameGitRepoFolder
+      parameters:
+        - name: destinationName
+          in: path
+          description: The name of the destination.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.models.publishing.destination.git.folder+json:
+            schema:
+              $ref: "#/components/schemas/destinationRenameGitFolder"
+            examples:
+              default:
+                $ref: "#/components/examples/renameGitFolderShort"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/destinationRenameGitFolder"
+            examples:
+              default:
+                $ref: "#/components/examples/renameGitFolderShort"
+      responses:
+        "201":
+          description: The Git repository folder was renamed.
+          headers:
+            Location:
+              description: /modelPublish/destinations/{destinationName}/gitFolders
+              schema:
+                type: string
+                format: uri
+            ETag:
+              description: A tag that identifies the revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.models.publishing.destination.git.folder+json:
+              schema:
+                $ref: "#/components/schemas/destinationGitFolderResponse"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderFull"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/destinationGitFolderResponse"
+              examples:
+                default:
+                  $ref: "#/components/examples/gitFolderFull"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.models.publishing.destination.git.folder+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+  "/destinations/{destinationName}/gitFolders/{gitFolderName}":
+    delete:
+      tags:
+        - Destinations
+      summary: Delete a Git repository folder
+      description: Delete the specified Git repository folder.
+      operationId: deleteGitRepoFolder
+      parameters:
+        - name: destinationName
+          in: path
+          description: The name of the destination.
+          required: true
+          schema:
+            type: string
+        - name: gitFolderName
+          in: path
+          description: The name of the Git folder.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The Git repository folder was deleted.
+components:
+  schemas:
+    destinationCollection:
+      title: Destination Resource Collection
+      description: A collection of destination representations.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/destination"
+              description: The array of application/vnd.sas.models.publishing.destination representations.
+    destinationProperty:
+      title: Destination Property
+      description: Contains information about a destination property.
+      properties:
+        name:
+          type: string
+          description: The name of the property.
+        value:
+          type: string
+          description: The value for the property.
+    destination:
+      title: Publishing Destination
+      description: Contains information about a publishing destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        casServerName:
+          type: string
+          description: The name of the CAS server.
+        casLibrary:
+          type: string
+          description: The name of the CAS library.
+        description:
+          type: string
+          description: The description of the publishing destination server.
+        destinationTable:
+          type: string
+          description: The name of the publishing destination table.
+        destinationType:
+          type: string
+          description: The destination type can be "cas", "microAnalyticServer", "teradata", "hadoop", "aws", "azure", "aml", "git", and "privateDocker".
+        databaseCasLibrary:
+          type: string
+          description: The pre-defined CAS library that was used by Teradata.
+        user:
+          type: string
+          description: The user name of Hadoop.
+        hdfsDirectory:
+          type: string
+          description: The root HDFS folder where the model directory is to be created.
+        configurationDirectory:
+          type: string
+          description: "The class path for Hadoop JAR files. For example: /opt/hadoopjars"
+        authenticationDomain:
+          type: string
+          description: "The name of the authentication domain that contains the remote login information for publishing users to gain access to the remote environment for the SAS Micro Analytic Service. For example: remoteAuthDomain"
+        masUri:
+          type: string
+          description: "The base URI that contains the host, the protocol, and an optional port, which addresses the remote SAS Micro Analytic Service that this destination publishes to for this destination. For example: http://hostA.com"
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - name
+    destinationCas:
+      title: CAS Destination
+      description: Contains information about a CAS destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        casServerName:
+          type: string
+          description: The name of the CAS server.
+        casLibrary:
+          type: string
+          description: The name of the CAS library.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        destinationTable:
+          type: string
+          description: The name of the publishing destination table.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - name
+        - casServerName
+        - casLibrary
+        - destinationTable
+    destinationTeradata:
+      title: Teradata Destination
+      description: Contains information about a Teradata destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        casServerName:
+          type: string
+          description: The name of the CAS server.
+        casLibrary:
+          type: string
+          description: The name of the CAS library.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        destinationTable:
+          type: string
+          description: The name of the publishing destination table.
+        databaseCasLibrary:
+          type: string
+          description: The pre-defined CAS library that was used by Teradata.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - name
+        - casServerName
+        - databaseCasLibrary
+    destinationHadoop:
+      title: Hadoop Destination
+      description: Contains information about a Hadoop destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        casServerName:
+          type: string
+          description: The name of the CAS server.
+        casLibrary:
+          type: string
+          description: The name of the CAS library.
+        description:
+          type: string
+          description: The description of the publishing destination server.
+        destinationTable:
+          type: string
+          description: The name of the publishing destination table.
+        user:
+          type: string
+          description: The user name for Hadoop.
+        hdfsDirectory:
+          type: string
+          description: The root HDFS folder where the model directory is to be created.
+        configurationDirectory:
+          type: string
+          description: "The class path for Hadoop JAR files. For example: /opt/hadoopjars"
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - name
+        - casServerName
+        - casLibrary
+        - user
+        - hdfsDirectory
+        - configurationDirectory
+    destinationMas:
+      title: SAS Micro Analytic Service Destination
+      description: Contains information about a SAS Micro Analytic Service destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - name
+    destinationAws:
+      title: Amazon Web Services Destination
+      description: Contains information about an Amazon Web Services (AWS) destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+        properties:
+          type: array
+          description: Name-value pairs define the AWS properties, such as credDomainId, region, and kubernetesCluster.
+          items:
+            $ref: "#/components/schemas/destinationProperty"
+          default: 1
+      required:
+        - name
+    destinationPrivateDocker:
+      title: Private Docker Destination
+      description: Contains information about a private Docker destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+        properties:
+          type: array
+          description: Name-value pairs define the private Docker properties, such as credDomainId, baseRepoUrl, dockerHost
+          items:
+            $ref: "#/components/schemas/destinationProperty"
+          default: 1
+      required:
+        - name
+    destinationAzure:
+      title: Azure Destination
+      description: Contains information about an Azure destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+        properties:
+          type: array
+          description: Name-value pairs define the Azure properties, such as credDomainId, baseRepoUrl, tenantId, subscriptionId, resourceGroupName, kubernetesCluster, and externalIP
+          items:
+            $ref: "#/components/schemas/destinationProperty"
+          default: 1
+      required:
+        - name
+    destinationAml:
+      title: Azure Machine Learning Destination
+      description: Contains information about an Azure Machine Learning destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+        properties:
+          type: array
+          description: Name-value pairs define the Azure Machine Learning properties, such as credDomainId, baseRepoUrl, and subscriptionId
+          items:
+            $ref: "#/components/schemas/destinationProperty"
+          default: 1
+      required:
+        - name
+    destinationGit:
+      title: Git Repository Destination
+      description: Contains information about a Git repository destination.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the publishing destination server.
+        description:
+          type: string
+          description: The description for the publishing destination server.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+        properties:
+          type: array
+          description: Name-value pairs define the Git properties, such as credDomainId, remoteRepositoryURL, localRepositoryLocation, and userEmail.
+          items:
+            $ref: "#/components/schemas/destinationProperty"
+          default: 1
+      required:
+        - name
+    destinationGitFolderRequest:
+      title: Git Repository Folder
+      description: Contains information about a Git repository folder request.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the Git repository folder.
+        name:
+          type: string
+          description: The name of the Git repository folder.
+        parentFolder:
+          type: string
+          description: The name of the parent Git repository folder.
+      required:
+        - id
+        - name
+    destinationGitFolderResponse:
+      title: Git Repository Folder
+      description: Contains information about a Git repository folder.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the Git repository folder.
+        name:
+          type: string
+          description: The name of the Git repository folder.
+        parentFolder:
+          type: string
+          description: The name of the parent Git repository folder.
+        links:
+          type: array
+          description: links
+          items:
+            $ref: "#/components/schemas/link"
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+    destinationRenameGitFolder:
+      title: Git Repository Folder
+      description: Contains information about a Git repository folder.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the Git repository folder.
+        name:
+          type: string
+          description: The name of the Git repository folder.
+        newName:
+          type: string
+          description: The new name of the Git repository folder.
+        parentFolder:
+          type: string
+          description: The name of the parent Git repository folder.
+      required:
+        - id
+        - name
+        - newName
+    gitResourceCollection:
+      title: Git Repository Resource Collection
+      description: A collection of Git repository resources.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/destinationGitFolderResponse"
+              description: The array of application/vnd.sas.models.publishing.destination.git.folder representations.
+    publishModelCollection:
+      title: Published Model Resource Collection
+      description: A collection of published model representations.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/publishModel"
+              description: The array of application/vnd.sas.models.publishing.model representations.
+    publishModel:
+      title: Published Model
+      description: Contains information about a published model.
+      type: object
+      properties:
+        analyticStoreUri:
+          type: array
+          items:
+            type: string
+          description: A list of CAS table URIs for each analytic store.
+        codeType:
+          type: string
+          description: The score code type for the model.
+        id:
+          type: string
+          description: The ID of the published model.
+        modelId:
+          type: string
+          description: The model ID from source application.
+        name:
+          type: string
+          description: The published name for a model.
+        note:
+          type: string
+          description: The description of the published model.
+        type:
+          type: string
+          description: "Publish type can be one of the following: cas, microAnalyticServer, teradata, hadoop"
+        sourceUri:
+          type: string
+          description: The URI of the source reference.
+        destination:
+          $ref: "#/components/schemas/destination"
+        state:
+          type: string
+          description: The state of the published model (pending, running, completed, failed).
+        verified:
+          type: boolean
+          example: false
+          description: Indicates whether the model has been is verified.
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+    modelManifest:
+      title: Published Model Manifest
+      description: Contains information about a published model manifest.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the published model.
+        name:
+          type: string
+          description: The published name for a model.
+        sourceUri:
+          type: string
+          description: The URI of the source reference.
+        destination:
+          $ref: "#/components/schemas/destination"
+        destinationName:
+          type: string
+          description: The name of the publishing destination.
+        content:
+          $ref: "#/components/schemas/publishContent"
+        properties:
+          $ref: "#/components/schemas/destinationProperty"
+        resources:
+          $ref: "#/components/schemas/uriReference"
+        inputVariables:
+          type: array
+          description: A list of input variables.
+          items:
+            $ref: "#/components/schemas/modelVariable"
+        outputVariables:
+          type: array
+          description: A list of output variables.
+          items:
+            $ref: "#/components/schemas/modelVariable"
+        component:
+          $ref: "#/components/schemas/resourceVersion"
+        product:
+          $ref: "#/components/schemas/resourceVersion"
+        service:
+          $ref: "#/components/schemas/resourceVersion"
+        baseImage:
+          $ref: "#/components/schemas/resourceVersion"
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+    deploymentDescriptor:
+      title: Published Object Deployment Descriptor
+      description: Returns the deployment descriptors for an object that was published to a container.
+      type: object
+      properties:
+        createdBy:
+          type: string
+          description: The name of the author.
+        creationTimeStamp:
+          type: string
+          description: The timestamp that indicates when the resource was created.
+        id:
+          type: string
+          description: The identifier of the deployment descriptor.
+        links:
+          type: array
+          description: Links that apply to deployment descriptor.
+          items:
+            $ref: "#/components/schemas/link"
+        modifiedBy:
+          type: string
+          description: The name of the user who modified this deployment descriptor.
+        modifiedTimeStamp:
+          type: string
+          description: The timestamp when the deployment descriptor was modified.
+        name:
+          type: string
+          description: The name of the deployment descriptor.
+        version:
+          type: number
+          description: The version of the file resource.
+          default: 4
+    deploymentDescriptorContent:
+      title: Published Object Deployment Descriptor Content
+      description: Returns the deployment descriptor content for an object that was published to a container.
+      type: string
+    uriReference:
+      title: URI Reference
+      description: Contains information about an URI reference.
+      properties:
+        name:
+          type: string
+          description: The name of the URI reference.
+        uri:
+          type: string
+          description: A unique sequence of characters that identifies a logical or physical resource.
+        mediaType:
+          type: string
+          description: Represents an internet media type.
+        contentType:
+          type: string
+          description: The indication the original media type of the resource.
+        key:
+          type: string
+          description: The key of analytic store.
+        location:
+          type: string
+          description: The location of the resource.
+    resourceVersion:
+      title: Resource Version
+      description: Contains information about the resource version.
+      properties:
+        majorVersion:
+          type: integer
+          description: The major version of the resource.
+        minorVersion:
+          type: integer
+          description: The minor version of the resource.
+        versionName:
+          type: string
+          description: The version of the resource.
+        name:
+          type: string
+          description: The name of the resource version.
+        reference:
+          type: array
+          description: A list of resource that related to this resource version.
+          items:
+            $ref: "#/components/schemas/uriReference"
+        location:
+          type: string
+          description: The location of the resource.
+    modelVariable:
+      title: Model Variable
+      description: Contains information about a model variable.
+      properties:
+        name:
+          type: string
+          description: The name of the variable.
+        description:
+          type: string
+          description: The description of this variable.
+        role:
+          type: string
+          description: The role of this variable.
+        type:
+          type: string
+          description: The type of this variable.
+        level:
+          type: string
+          description: The level of this variable.
+        format:
+          type: string
+          description: The format of this variable.
+        aggregation:
+          type: string
+          description: The collection of related items.
+        length:
+          type: integer
+          description: The length of this variable.
+        generateDataGridColumns:
+          type: boolean
+          description: The indication of generate data grid columns.
+    log:
+      title: Published Model Log
+      description: Returns the published model log.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the publish log.
+        modelId:
+          type: string
+          description: The ID of the model.
+        modelName:
+          type: string
+          description: The name of the model.
+        publishName:
+          type: string
+          description: The published name for the model
+        note:
+          type: string
+          description: The description of the published model.
+        destinationName:
+          type: string
+          description: The name of the publishing destination.
+        log:
+          type: string
+          description: The log for this published model.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+    dockerfile:
+      title: Published Model Dockerfile
+      description: Returns the Dockerfile metadata for a model that was published to a container.
+      type: object
+      properties:
+        contentDisposition:
+          type: string
+          description: Value for the Content-Disposition header.
+        contentType:
+          type: string
+          description: The type of content.
+        createdBy:
+          type: string
+          description: The name of the author.
+        creationTimeStamp:
+          type: string
+          description: The timestamp that indicates when the file resource was created.
+        encoding:
+          type: string
+          description: The encoding of the file resource.
+        id:
+          type: string
+          description: The identifier of the file resource.
+        links:
+          type: array
+          description: Links that apply to this file resource. The links are "self", "content", "patch", "update", and "delete".
+          items:
+            $ref: "#/components/schemas/link"
+        modifiedBy:
+          type: string
+          description: The name of the user who modified this file resource.
+        modifiedTimeStamp:
+          type: string
+          description: The timestamp when the file resource was modified.
+        name:
+          type: string
+          description: The name of the file resource.
+        searchable:
+          type: boolean
+          description: Indicates whether a file is searchable.
+        size:
+          type: number
+          description: The byte size of the file resource content.
+        version:
+          type: number
+          description: The version of the file resource.
+          default: 4
+    dockerfileContent:
+      title: Published Model Dockerfile Content
+      description: Returns the Dockerfile content for a model that was published to a container.
+      type: string
+    mappedCode:
+      title: Mapped Code
+      description: Executable code generated by a score object using a score definition and input data. This represents application/vnd.sas.score.mapped.code media type (version 1).
+      x-sas-media-type:
+        name: application/vnd.sas.score.mapped.code
+        version: 1
+      required:
+        - code
+        - codeType
+        - outputTableName
+        - outputLibraryName
+      properties:
+        code:
+          type: string
+          description: The executable code generated by a score object.
+        codeType:
+          type: string
+          format: media-type
+          description: The type of code.
+        outputTableName:
+          type: string
+          description: The name of the table that is generated when the code is executed.
+        outputLibraryName:
+          type: string
+          description: The name of the library where the table is generated when the code is executed.
+        version:
+          type: integer
+          description: This media type's schema version number. This representation is version 1.
+      example:
+        code: /* DS2 code of an object, which generates an XYZ output table */
+        codeType: text/vnd.sas.source.ds2
+        outputTableName: XYZ
+        outputLibraryName: HPS
+    baseCollection2:
+      title: Base Collection
+      description: This is a base schema used to define paginated collections of resources. This base schema is extended by other schemas in APIs by adding an 'items' array property. These extensions define the application/vnd.sas.collection media type (version 2)
+      properties:
+        name:
+          type: string
+          description: The name of the collection.
+        start:
+          type: integer
+          description: The zero-based index of the first item in the collection.
+          format: int64
+        limit:
+          type: integer
+          description: The number of items that were requested for the collection.
+        count:
+          type: integer
+          description: If populated indicates the number of items in the collection.
+          format: int64
+        accept:
+          type: string
+          description: A space-delimited list of media types from which an `Accept` header may be constructed.
+        links:
+          type: array
+          description: The links that apply to the collection.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the collection representation. This representation is version 2.
+    link:
+      title: Link
+      type: object
+      description: A link to a related operation or resource.
+      required:
+        - rel
+      properties:
+        method:
+          type: string
+          description: The HTTP method for the link.
+        rel:
+          type: string
+          description: The relationship of the link to the resource.
+        uri:
+          type: string
+          description: The relative URI for the link.
+        href:
+          type: string
+          description: The URL for the link.
+        title:
+          type: string
+          description: The title for the link.
+        type:
+          type: string
+          description: The media type or link type for the link.
+        itemType:
+          type: string
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+        responseType:
+          type: string
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+        responseItemType:
+          type: string
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+    publishContent:
+      title: Publishing Model Content
+      description: Contains information about publishing model content.
+      type: object
+      properties:
+        analyticStoreUri:
+          type: array
+          items:
+            type: string
+          description: The URI that points to the analytic store in the CAS library.
+        code:
+          type: string
+          description: The model score code.
+        codeMediaType:
+          type: string
+          description: The code media type indicates the format of the code when it is downloaded.
+        codeType:
+          type: string
+          description: The code type can be `datastep` or `ds2`.
+        codeURI:
+          type: string
+          description: The URI for the model score code that points to the score code.
+        createdBy:
+          type: string
+          description: The user who created the object.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was created, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        format:
+          type: string
+          description: The format used to determine how the values of a variable should be written or displayed.
+        formatURI:
+          type: string
+          description: The URI for the variable format.
+        modelName:
+          type: string
+          description: The name of the model.
+        modelID:
+          type: string
+          description: The model ID that can be used by the client to find their published model.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the object.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp for when the object was last modified, in the format of `YYYY-MM-DDThh:mm:ss.sssZ`.
+        principalID:
+          description: The principal ID.
+          type: string
+        projectID:
+          description: The project ID.
+          type: string
+        publishLevel:
+          description: The publish level.
+          type: string
+        publishNotes:
+          description: The publishing notes.
+          type: string
+        sasDatasets:
+          type: array
+          items:
+            $ref: "#/components/schemas/publishURIReference"
+          description: A list of resources that reference the data sets in a CAS library or the Files service.
+        sourceURI:
+          type: string
+          description: This URI represents where the model came from.
+        variableXml:
+          description: The variables in XML format.
+          type: string
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - modelName
+        - code
+        - codeType
+    error2:
+      title: Error
+      type: object
+      description: The representation of an error.
+      x-sas-media-type:
+        name: application/vnd.sas.error
+        version: 2
+      required:
+        - httpStatusCode
+        - version
+      properties:
+        message:
+          type: string
+          description: The message for the error.
+        id:
+          type: string
+          description: The string ID for the error.
+        errorCode:
+          type: integer
+          description: The numeric ID for the error.
+        httpStatusCode:
+          type: integer
+          description: The HTTP status code for the error.
+        details:
+          type: array
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+        remediation:
+          type: string
+          description: A message that describes how to resolve the error.
+        errors:
+          type: array
+          description: Any additional errors that occurred.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the error representation. This representation is version 2.
+    scoreCodeGenerationRequest:
+      title: Score Code Generation Request
+      description: Request containing hints to generate mapped code using the Scoring Definition by Score Object.
+      x-sas-media-type:
+        name: application/vnd.sas.score.code.generation.request
+        version: 1
+      required:
+        - scoreDefinitionId
+      properties:
+        scoreDefinitionId:
+          type: string
+          description: The score definition ID that is used for generating mapped code. This property should be used only if `scoreDefinition` is not used.
+        hints:
+          type: object
+          description: Hints for generating mapped code. The mapped code request is forwarded to the score object of the score definition. The score object should understand these hints.
+          additionalProperties:
+            type: string
+        version:
+          type: integer
+          description: This media type's schema version number. This representation is version 1.
+      example:
+        scoreDefinitionId: 9f0c13ae-6a27-11e6-8b77-86f30ca893d3
+        hints:
+          outputLibraryName: PUBLIC
+    publishRequest:
+      title: Publishing Model Request
+      description: Contains information about a publishing model request.
+      type: object
+      properties:
+        description:
+          type: string
+          description: The description for the published model.
+        modelContents:
+          type: array
+          description: A list of models.
+          items:
+            $ref: "#/components/schemas/publishContent"
+        name:
+          type: string
+          description: The published name of a model.
+        note:
+          type: string
+          description: The description for the published model.
+        destinationName:
+          type: string
+          description: The name of the publishing destination.
+        properties:
+          type: object
+          description: >
+            Additional properties for the published model.
+
+
+            Here is a list of the additional properties that are supported:
+
+
+            - gitRemotePath: Indicates the directory path within the Git repository to publish the selected items to.
+
+            - AMLWorkspaceName: Indicates the workspace in the Azure Machine Learning environment to publish the selected items to.
+
+            - containerRegistryName: Indicates the name of the container registry for a local Azure container destination.
+        skipVersioning:
+          type: boolean
+          description: Indicates whether the model version will be incremented when a model is published.
+        tags:
+          type: array
+          description: A list of tags associated with the model.
+          items:
+            type: string
+        verified:
+          type: boolean
+          example: false
+          description: Indicates whether the model is verified.
+        version:
+          type: integer
+          description: The API representation version.
+          default: 1
+      required:
+        - destinationName
+        - modelContents
+        - name
+    api:
+      title: API
+      description: The list of links to top-level resources and operations available from the root of the API.
+      x-sas-media-type:
+        name: application/vnd.sas.api
+        version: 1
+      required:
+        - version
+        - links
+      properties:
+        version:
+          type: integer
+          description: The version number of the API representation. This is version 1.
+          minimum: 1
+        links:
+          description: The API's top-level links.
+          type: array
+          items:
+            $ref: "#/components/schemas/link"
+    publishURIReference:
+      title: URI Reference
+      description: Contains information about an URI reference.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the URI reference.
+        uri:
+          type: string
+          description: A unique sequence of characters that identifies a logical or physical resource.
+        mediaType:
+          type: string
+          description: The media type of this URI. Represents an internet media type.
+        contentType:
+          type: string
+          description: The content type that the URI points to. Indicates the original media type of the resource.
+        key:
+          type: string
+          description: The key of the analytic store.
+        location:
+          type: string
+          description: The location of the resource.
+      required:
+        - uri
+  examples:
+    gitFolderList:
+      description: List of Git repository folders.
+      value:
+        accept: application/vnd.sas.collection
+        limit: 100
+        name: GitFolders,
+        items:
+          - creationTimeStamp: 0001-01-01T00:00:00Z,
+            modifiedTimeStamp: 2024-07-29T17:48:00Z
+            id: 20231222,
+            name: 20231222,
+            links:
+              - method: GET,
+                rel: up,
+                href: /modelPublish/destinations/gitDestNew/gitFolders,
+                uri: /modelPublish/destinations/gitDestNew/gitFolders,
+                type: application/vnd.sas.collection
+              - method: GET,
+                rel: self,
+                href: /modelPublish/destinations/gitDestNew/gitFolders/20231222,
+                uri: /modelPublish/destinations/gitDestNew/gitFolders/20231222,
+                type: application/vnd.sas.models.publishing.destination.folder
+              - method: GET,
+                rel: getGitSubFolders,
+                href: /modelPublish/destinations/gitDestNew/gitFolders?parentFolder=20231222,
+                uri: /modelPublish/destinations/gitDestNew/gitFolders?parentFolder=20231222,
+                type: application/vnd.sas.collection
+              - method: POST,
+                rel: createGitFolder,
+                href: /modelPublish/destinations/gitDestNew/gitFolders?parentFolder=20231222,
+                uri: /modelPublish/destinations/gitDestNew/gitFolders?parentFolder=20231222,
+                type: application/vnd.sas.models.publishing.destination.folder
+        links:
+          - method: GET,
+            rel: collection,
+            href: /modelPublish/destinations/gitDestNew/gitFolders,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders,
+            type: application/vnd.sas.collection,
+            itemType: application/vnd.sas.models.publishing.destination.folder
+          - method: GET,
+            rel: up,
+            href: /modelPublish/destinations/gitDestNew,
+            uri: /modelPublish/destinations/gitDestNew,
+            type: application/vnd.sas.models.publishing.destination
+          - method: GET,
+            rel: self,
+            href: /modelPublish/destinations/gitDestNew/gitFolders?start=0&limit=100,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders?start=0&limit=100,
+            type: application/vnd.sas.collection,
+            itemType: application/vnd.sas.models.publishing.destination.folder
+          - method: POST,
+            rel: createGitFolder,
+            href: /modelPublish/destinations/gitDestNew/gitFolders,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders,
+            type: application/vnd.sas.models.publishing.destination.folder,
+            responseType: application/vnd.sas.models.publishing.destination.folder
+    dockerfileNotFound:
+      description: The Dockerfile could not be found.
+      value:
+        details:
+          - The Dockerfile resource for the published model with the publish ID of "ab9cca23-587e-4a93-b5db-4351f12977a1" could not be found.
+          - "path: /modelPublish/models/ab9cca23-587e-4a93-b5db-4351f12977a1/dockerfile"
+          - "correlator: 6199374f-9f25-473e-9f0b-0a49a79bc4ad"
+        httpStatusCode: 404
+        version: 2
+    modelManifestNotFound:
+      description: Not found.
+      value:
+        httpStatusCode: 404
+        version: 2
+    publishId:
+      description: An identifier for a published model.
+      value: a970c254-8ac4-463a-b167-e627c02bac75
+    gitFolderFull:
+      description: The properties of the Git repository folder.
+      value:
+        creationTimeStamp: 0001-01-01T00:00:00Z,
+        modifiedTimeStamp: 2024-07-29T17:38:21Z
+        id: example_folder,
+        name: example_folder,
+        links:
+          - method: GET
+            rel: up
+            href: /modelPublish/destinations/gitDestNew/gitFolders,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders,
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /modelPublish/destinations/gitDestNew/gitFolders/example_folder,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders/example_folder,
+            type: application/vnd.sas.models.publishing.destination.folder
+          - method: POST,
+            rel: createGitFolder,
+            href: /modelPublish/destinations/gitDestNew/gitFolders/example_folder,
+            uri: /modelPublish/destinations/gitDestNew/gitFolders/example_folder,
+            type: application/vnd.sas.models.publishing.destination.folder
+    dockerfileResource:
+      description: The metadata for the Dockerfile.
+      value:
+        contentDisposition: attachment; filename="Dockerfile"
+        contentType: application/octet-stream
+        createdBy: sasdemo
+        creationTimeStamp: 2021-09-19T16:05:14.754Z
+        encoding: UTF-8
+        id: 509cfb90-eeb2-4852-be8e-b570986eacb2
+        links:
+          - method: GET
+            rel: self
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            type: application/vnd.sas.file
+          - method: GET
+            rel: alternate
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            type: application/vnd.sas.summary
+          - method: PATCH
+            rel: patch
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: PUT
+            rel: update
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: DELETE
+            rel: delete
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2
+          - method: GET
+            rel: content
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/content
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/content
+            type: application/vnd.sas.file
+            responseType: application/octet-stream
+          - method: PUT
+            rel: updateContent
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/content
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/content
+            type: application/vnd.sas.file
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: copyFile
+            href: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/copy
+            uri: /files/files/509cfb90-eeb2-4852-be8e-b570986eacb2/copy
+            responseType: application/vnd.sas.file
+          - method: POST
+            rel: create
+            href: /files/files
+            uri: /files/files
+            type: "*/*"
+            responseType: application/vnd.sas.file
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2021-09-19T16:05:14.754Z
+        name: Dockerfile
+        searchable: true
+        size: 271
+        version: 4
+    dockerfileContent:
+      description: The content of the Dockerfile.
+      value: >
+        FROM cr.sas.com/viya-4-x64_oci_linux_2-docker-testready/sas-decisions-runtime-base:1.8.27-20210918.1631949968732
+
+        LABEL model container image
+
+        USER root
+
+        RUN chown sas:sas /modules
+
+        USER sas
+
+
+        ENV SAS_SCR_APP_PATH=/qs_reg1
+
+        COPY --chown=sas:sas unzipped/* /modules/
+    deploymentDescriptor:
+      description: Deployment descriptor for a published object.
+      value:
+        createdBy: sasdemo
+        creationTimeStamp: 2022-01-25T19:23:50.2118Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-01-25T19:26:05.290428Z
+        name: Logistic_Regression_0125
+        links:
+          - method: GET
+            rel: up
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f
+            type: application/vnd.sas.models.publishing.publish
+          - method: GET
+            rel: self
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor
+            type: application/json
+          - method: GET
+            rel: getDeploymentDescriptor
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/deployment.yaml
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/deployment.yaml
+            type: text/plain
+          - method: GET
+            rel: getDeploymentDescriptor
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/hpa.yaml
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/hpa.yaml
+            type: text/plain
+          - method: GET
+            rel: getDeploymentDescriptor
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/ingress.yaml
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/ingress.yaml
+            type: text/plain
+          - method: GET
+            rel: getDeploymentDescriptor
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/kustomization.yaml
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/kustomization.yaml
+            type: text/plain
+          - method: GET
+            rel: getDeploymentDescriptor
+            href: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/service.yaml
+            uri: /modelPublish/models/2dd3621d-d073-4bf4-8a07-fb2e4336102f/deploymentDescriptor/service.yaml
+            type: text/plain
+    deploymentDescriptorNotFound:
+      description: Not found.
+      value:
+        httpStatusCode: 404
+        version: 2
+    newGitFolderShort:
+      description: The properties of the Git repostory folder request.
+      value:
+        id: example_folder,
+        name: example_folder
+    deploymentDescriptorContent:
+      description: Deployment descriptor content for a published object.
+      value: >-
+        apiVersion: v1
+
+        kind: Service
+
+        metadata:
+          annotations:
+            sas.com/component-name: sas-scr-PLACEHOLDER
+            sas.com/tls-enabled-ports: all
+          labels:
+            sas.com/deployment: sas-scr-PLACEHOLDER
+          name: Logistic_Regression_0125
+          namespace: default
+        spec:
+          ports:
+          - name: apiserver
+            port: 443
+            protocol: TCP
+            targetPort: 8080
+          selector:
+            app: sas-scr-PLACEHOLDER
+          sessionAffinity: None
+          type: ClusterIP
+        status:
+          loadBalancer: {}
+    badRequest:
+      description: Bad request.
+      value:
+        httpStatusCode: 400
+        version: 2
+    renameGitFolderShort:
+      description: The properties of the Git repostory folder to be renamed.
+      value:
+        id: example_folder,
+        name: example_folder,
+        newName: new_example_folder
+    modelManifest:
+      description: Model manifest for a published object.
+      value:
+        baseImage:
+          name: baseImageName
+        component:
+          name: component name
+        content:
+          creationTimeStamp: 0001-01-01T00:00:00Z
+          modifiedTimeStamp: 0001-01-01T00:00:00Z
+          modelName: Logistic_Regression_0110_1
+          principalID: c801e3c5-9ecf-43bf-bd30-c7581eae34f2
+          codeType: ds1
+          code: ds2 code here
+          sourceURI: /modelRepository/models/c801e3c5-9ecf-43bf-bd30-c7581eae34f2
+          modelID: c801e3c5-9ecf-43bf-bd30-c7581eae34f2
+          modelVersionID: 4
+          publishLevel: model
+          variableXML: variable xml
+        creationTimeStamp: 0001-01-01T00:00:00Z
+        destination:
+          creationTimeStamp: 2022-01-10T22:01:24.902934Z
+          createdBy: sasdemo
+          modifiedTimeStamp: 2022-01-10T22:01:24.902934Z
+          modifiedBy: sasdemo
+          version: 2
+          id: 9342f107-d0be-49ef-be8c-decd26f0698a
+          name: pdgit
+          description: Test for private Docker and remote Git repository.
+          destinationType: privateDocker
+          destinationProperties:
+            - name: baseRepoUrl
+              value: hostname/mmtest
+            - name: kubeUrl
+              value: https://hostname:6443
+            - name: UserEmail
+              value: mm.test@sas.com
+            - name: credDomainId
+              value: pdgit
+            - name: RemoteRepositoryURL
+              value: https://hostname/userid/repositoryprojectname.git
+          links:
+            - method: GET
+              rel: up
+              href: /modelPublish/destinations
+              uri: /modelPublish/destinations
+              type: application/vnd.sas.collection
+            - method: GET
+              rel: self
+              href: /modelPublish/destinations/pdgit
+              uri: /modelPublish/destinations/pdgit
+              type: application/vnd.sas.models.publishing.destination
+            - method: DELETE
+              rel: delete
+              href: /modelPublish/destinations/pdgit
+              uri: /modelPublish/destinations/pdgit
+            - method: PUT
+              rel: update
+              href: /modelPublish/destinations/pdgit
+              uri: /modelPublish/destinations/pdgit
+              type: application/vnd.sas.models.publishing.destination
+        destinationName: pdgit
+        id: 7a1127ca-e575-4020-b41b-23518462fec0
+        inputVariables:
+          - name: inputVarName
+        modifiedTimeStamp: 0001-01-01T00:00:00Z
+        outputVariables:
+          - name: outputVarName
+        product:
+          name: product name
+        properties:
+          - containerKey: sha256:d3dd5473dab0727f3efff84373b0f8d9fd0721bae35e6d3a50b86bb5dccc4fb5
+          - dockerFileUri: /files/files/f10d5773-f648-4ff6-86c2-036fa035afdf
+          - imageUrl: hostname/mmtest/logistic_regression_0110_1:1
+        service:
+          name: Model Publish service
+        sourceURI: /modelRepository/models/c801e3c5-9ecf-43bf-bd30-c7581eae34f2
+        tags: latest

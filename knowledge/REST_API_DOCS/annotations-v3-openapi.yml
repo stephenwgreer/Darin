@@ -1,0 +1,2464 @@
+openapi: 3.0.3
+info:
+  version: "3"
+  title: Annotations
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  description: The Annotations API allows users to associate annotations with resources that other decoupled API manage.  An annotation augments a target resource, which is typically a column or table, with information that extends beyond its physical properties.  This information might include categorization (such as `email` and `address`), role (such as `categorical` and `primary key`), or other descriptive information.
+tags:
+  - name: Root
+    description: Contains the operations for the root resource of this API.
+  - name: Annotations
+    description: Contains the operations to support annotations.
+  - name: Members
+    description: Contains the operations to support members.
+paths:
+  /:
+    get:
+      summary: Get a list of top-level links
+      description: Returns a list of links at the top-level collections that this API provides.
+      operationId: root
+      tags:
+        - Root
+      responses:
+        "200":
+          description: The API link list is available.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotationsroot"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotationsroot"
+    head:
+      summary: Check API availability
+      description: Checks whether the Annotations API is available.
+      operationId: headersForRoot
+      tags:
+        - Root
+      responses:
+        "200":
+          description: The API is available.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+  /annotations:
+    get:
+      summary: Get all annotations
+      description: Returns a collection of annotations.  Standard paging, filtering, and sorting options are provided.
+      operationId: getAnnotations
+      tags:
+        - Annotations
+      parameters:
+        - name: start
+          in: query
+          description: The starting index of the first annotation in a page.  The default is 0.
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: The maximum number of annotations to return in this page of results.  The actual number of returned annotations might be less if the collection has been exhausted.  The default is 10.
+          schema:
+            type: integer
+        - name: filter
+          in: query
+          description: The filtering criteria for returned annotations.
+          schema:
+            type: string
+            format: filter-criteria
+        - name: sortBy
+          in: query
+          description: "The sort returned annotations.  The only valid sorting option is the name field.  Ascending is the default sort order on the name field.  Here is a sample sort: <p> `/annotations/annotations?sortBy=name:descending`</li> </p>"
+          schema:
+            type: string
+            format: sort-criteria
+        - name: resourceUri
+          in: query
+          description: The resourceUri of the object from which annotations are to be retrieved.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The collection of annotations is available.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/annotationCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotationCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/annotationCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotationCollection"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/getAnnotationsBadRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/getAnnotationsBadRequest"
+    post:
+      summary: Create an annotation
+      description: Creates an annotation from the specified request.
+      operationId: createAnnotation
+      tags:
+        - Annotations
+      requestBody:
+        content:
+          application/vnd.sas.annotation+json:
+            schema:
+              $ref: "#/components/schemas/createAnnotation"
+            examples:
+              json:
+                $ref: "#/components/examples/createAnnotation"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/createAnnotation"
+            examples:
+              json:
+                $ref: "#/components/examples/createAnnotation"
+        description: The annotation to create.  Valid fields are name, label, domain, and description.  All other fields are ignored.
+        required: true
+      responses:
+        "201":
+          description: The annotation was successfully created.
+          headers:
+            Location:
+              description: The URI was created for the new annotation.
+              schema:
+                type: string
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this object.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation+json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/createAnnotationResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/createAnnotationResponse"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/postAnnotationsBadRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/postAnnotationsBadRequest"
+  /annotations#multi:
+    post:
+      summary: Find annotations by resourceUris
+      description: Find all annotations that are associated with the provided resourceUris.  Returns an application/vnd.sas.collection of application/vnd.sas.annotation objects.
+      operationId: getAnnotationsByResourceUris
+      tags:
+        - Annotations
+      requestBody:
+        content:
+          application/vnd.sas.selection+json:
+            schema:
+              $ref: "#/components/schemas/selection"
+            examples:
+              json:
+                $ref: "#/components/examples/getByResourceURIs"
+        description: Selects resourceUris for which associated annotations are to be found.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/annotationCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/getByResourceURIsResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/annotationCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/getByResourceURIsResponse"
+        "400":
+          description: The request was invalid.  This can occur when no matching annotations are found or when the user provides an invalid limit, start, sortBy, or filter.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/postMultiAnnotationsBadRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/postMultiAnnotationsBadRequest"
+  /annotations#batchCreate:
+    post:
+      summary: Create multiple annotations
+      description: Multi-POST. This operation is used to add multiple annotation that do not exists. All successfully created annotations will be returned in the response body in the same order that they were provided in the request body. For any annotation that failed to be created, the collection returned will contain an application/vnd.sas.error object in place of application/vnd.sas.annotation object.
+      operationId: createMultipleAnnotations
+      tags:
+        - Annotations
+      requestBody:
+        content:
+          application/vnd.sas.collection+json:
+            schema:
+              $ref: "#/components/schemas/batchCreateAnnotations"
+            examples:
+              json:
+                $ref: "#/components/examples/batchCreateAnnotations"
+        description: List of annotations to be created.
+        required: true
+      responses:
+        "200":
+          description: At least one annotation was created. If individual resource creation fails, the corresponding item in the response collection will be an application/vnd.sas.error object that describes why/how that operation failed. The httpStatusCode member of the nested error item will indicate the failure (401, 403, etc.).
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/annotationCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/batchCreateAnnotationsResponse"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/postAnnotationsBadRequest"
+  "/annotations/{annotationId}":
+    get:
+      summary: Get an annotation
+      description: Returns information about a single annotation that is based on its unique ID.
+      operationId: getAnnotation
+      tags:
+        - Annotations
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The annotation exists.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this annotation.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation+json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotation"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/annotation"
+        "404":
+          description: The specified annotation does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+    head:
+      summary: Check annotation availability
+      description: Returns header information and verifies that the annotation exists.
+      operationId: headersForAnnotation
+      tags:
+        - Annotations
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The value of the ETag that was returned from a GET or previous PUT of this type.  This header is optional, but if provided, this MUST match exactly the current value of the etag of the object.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The annotation exists.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this annotation.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+        "404":
+          description: The annotation does not exist.
+    put:
+      summary: Update or replace an existing annotation
+      description: Updates an existing annotation with a full replacement of the resource.  This operation cannot modify the ID field.
+      operationId: updateAnnotation
+      tags:
+        - Annotations
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that was returned from a GET, POST, or PUT of this annotation.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.annotation+json:
+            schema:
+              $ref: "#/components/schemas/updateAnnotation"
+            examples:
+              json:
+                $ref: "#/components/examples/updateAnnotationRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/updateAnnotation"
+            examples:
+              json:
+                $ref: "#/components/examples/updateAnnotationRequest"
+        description: The annotation to update.
+        required: true
+      responses:
+        "200":
+          description: The annotation was updated.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this annotation.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation+json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/updateAnnotationResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/annotation"
+              examples:
+                json:
+                  $ref: "#/components/examples/updateAnnotationResponse"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+        "412":
+          description: The specified Etag does not match the current version of the object or the last modified date.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionFailedError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionFailedError"
+        "415":
+          description: The specified media type is not supported.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/unsupportedMediaTypeError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/unsupportedMediaTypeError"
+        "428":
+          description: The Etag was not specified during update of an existing type.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionRequiredError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionRequiredError"
+    delete:
+      summary: Delete an annotation
+      description: Deletes the specified annotation.  The annotation and its members are permanently removed from the service.
+      operationId: deleteAnnotation
+      tags:
+        - Annotations
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The annotation was deleted.
+        "404":
+          description: The annotation does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+  "/annotations/{annotationId}/members":
+    get:
+      summary: Get member objects for an annotation
+      description: Returns the member objects for an annotation.  A member is an external object that uses this annotation.
+      operationId: getMembers
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The starting index of the first annotation in a page.  The default is 0.
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: The maximum number of members to return in this page of results.  The actual number of returned members might be less if the collection has been exhausted.  The default is 10.
+          schema:
+            type: integer
+        - name: filter
+          in: query
+          description: The filtering criteria for returned members.
+          schema:
+            type: string
+            format: filter-criteria
+        - name: sortBy
+          in: query
+          description: The sort returned members.  The sorting criteria supports the name and descriptions fields in either ascending or descending order.
+          schema:
+            type: string
+            format: sort-criteria
+      responses:
+        "200":
+          description: The annotation schema was retrieved.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/memberCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/memberCollection"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/memberCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/memberCollection"
+        "404":
+          description: The specified annotation ID does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/memberNotFoundError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/memberNotFoundError"
+    post:
+      summary: Create an annotation member
+      description: Creates an annotation member from the provided request.
+      operationId: createMember
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.annotation.member+json:
+            schema:
+              $ref: "#/components/schemas/createMember"
+            examples:
+              json:
+                $ref: "#/components/examples/createMember"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/createMember"
+            examples:
+              json:
+                $ref: "#/components/examples/createMember"
+        description: The member to create.  Valid fields are annotationId, value, resourceType, and resourceUri.  All other fields are ignored.
+        required: true
+      responses:
+        "201":
+          description: The annotation member was successfully created.
+          headers:
+            Location:
+              description: The URI of the newly created annotation.
+              schema:
+                type: string
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this object.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation.member+json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/createMemberResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/createMemberResponse"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+        "404":
+          description: The specified annotation does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+  "/annotations/{annotationId}/members/{memberId}":
+    get:
+      summary: Get a member
+      description: Retrieves the member for the given annotation and member ID.
+      operationId: getMember
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          description: The member ID to retrieve.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The annotation member was retrieved.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this object.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation.member+json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/member"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/member"
+        "400":
+          description: "The specified request was invalid for one of these reasons: <ul> <li>The annotation ID for the specified member is not correct. <li>The new member value exceeds the maximum allowable length. </ul>"
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+        "404":
+          description: The specified member does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+    head:
+      summary: Get headers verify that the member exists
+      description: Returns header information and verifies that the member exists.
+      operationId: headersForMember
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          description: The member ID.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The value of the ETag that was returned from a GET or previous PUT of this type.  This header is optional, but if provided, this MUST match exactly the current value of the etag of the object.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The annotation member exists.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this object.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+        "400":
+          description: "The specified request was invalid for one of these reasons: <ul> <li>The annotation ID for the specified member is not correct. <li>The new member value exceeds the maximum allowable length. </ul>"
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+        "404":
+          description: The specified member does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+    put:
+      summary: Update or replace the member value
+      description: Updates or replaces the member value for the given annotation and member ID.
+      operationId: updateMember
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          description: The member ID to update or replace.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that was returned from a GET, POST, or PUT of this annotation.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.annotation.member+json:
+            schema:
+              $ref: "#/components/schemas/updateMember"
+            examples:
+              json:
+                $ref: "#/components/examples/updateMemberRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/updateMember"
+            examples:
+              json:
+                $ref: "#/components/examples/updateMemberRequest"
+        description: The member object.
+        required: true
+      responses:
+        "200":
+          description: The annotation member value was updated.
+          headers:
+            Last-Modified:
+              description: The ISO8601 date string that represents the timestamp of the last update to this object.
+              schema:
+                type: string
+            Etag:
+              description: A tag that identifies this revision of this object.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.annotation.member+json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/updateMemberResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/member"
+              examples:
+                json:
+                  $ref: "#/components/examples/updateMemberResponse"
+        "400":
+          description: "The specified request was invalid for one of these reasons: <ul> <li>The specified annotation ID for the specified member is not correct. <li>The new member value exceeds the maximum allowable length. </ul>"
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+        "404":
+          description: The specified member does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+        "412":
+          description: The specified Etag does not match the current version or the last modified date of the object.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionFailedError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionFailedError"
+        "415":
+          description: The specified media type is not supported.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/unsupportedMediaTypeError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/unsupportedMediaTypeError"
+        "428":
+          description: The Etag was not specified during update of an existing type.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionRequiredError"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/preconditionRequiredError"
+    delete:
+      summary: Delete a member
+      description: Deletes the member for the specified annotation and member ID.
+      operationId: deleteMember
+      tags:
+        - Members
+      parameters:
+        - name: annotationId
+          in: path
+          description: The annotation ID.
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          description: The member ID to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The member was deleted.
+        "404":
+          description: The specified annotation or member does not exist.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/notFoundError"
+  /members#multi:
+    post:
+      summary: Find annotation members by annotationIds
+      description: Find all members that are associated with the provided annotationIds.  Returns an application/vnd.sas.collection of application/vnd.sas.annotation.member objects.
+      operationId: getMembersByAnnotationIds
+      tags:
+        - Members
+      requestBody:
+        content:
+          application/vnd.sas.selection+json:
+            schema:
+              $ref: "#/components/schemas/selection"
+            examples:
+              json:
+                $ref: "#/components/examples/membersList"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/selection"
+            examples:
+              json:
+                $ref: "#/components/examples/membersList"
+        description: Selects annotationIds for which associated members are to be found.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/memberCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/membersListResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/memberCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/membersListResponse"
+        "400":
+          description: The request was invalid.  This can occur when no matching members are found or when the user provides an invalid limit, start, sortBy, or filter.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+  /annotations/members#batchCreate:
+    post:
+      summary: Create multiple members
+      description: Multi-POST. It takes map of annotationIds to list of members and creates the members if they don't exists. This operation is used to create members that  will be associated with an annotation. All successfully created members will be returned in the response body in the order that they were provided in the request body. For any members that failed to be created, the collection returned will contain an application/vnd.sas.error object in place of application/vnd.sas.member object.
+      operationId: createMultipleMembers
+      tags:
+        - Members
+      requestBody:
+        content:
+          application/vnd.sas.collection+json:
+            schema:
+              $ref: "#/components/schemas/batchCreateMembers"
+            examples:
+              json:
+                $ref: "#/components/examples/batchCreateMembers"
+        description: Collection of map of annotation Ids to the list of members to be created.
+        required: true
+      responses:
+        "200":
+          description: At least one member was created. If individual resource creation fails, the corresponding item in the response collection will be an application/vnd.sas.error object that describes why/how that operation failed. The httpStatusCode member of the nested error item will indicate the failure (401, 403, etc.).
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/memberCollection"
+              examples:
+                json:
+                  $ref: "#/components/examples/batchCreateMembersResponse"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                json:
+                  $ref: "#/components/examples/error2"
+servers:
+  - url: http://example.com/annotations
+    description: This is an example base URL.
+components:
+  schemas:
+    annotation:
+      title: Annotation
+      description: The annotations provides tags related lifecycle APIs.
+      type: object
+      properties:
+        version:
+          type: number
+          description: The version of the resource.
+        id:
+          type: string
+          description: The unique ID, which the system assigns.
+        domain:
+          type: string
+          description: The domain that is associated with the annotation.  The domain and name comprise a unique key.
+        name:
+          type: string
+          description: The name.  The domain and name comprise a unique key.
+        label:
+          type: string
+          description: The display label for the annotation.
+        description:
+          type: string
+          description: The description.
+        createdBy:
+          type: string
+          description: The user who created this annotation member.
+        modifiedBy:
+          type: string
+          description: The last user to modify this annotation member.
+        creationTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was created, shown in yyyy-mm-ddThh:mm:ssZ format.
+        modifiedTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was last modified, shown in yyyy-mm-ddThh:mm:ssZ format.
+        links:
+          type: array
+          description: Zero or more link objects.
+          items:
+            $ref: "#/components/schemas/link"
+    createAnnotation:
+      title: Create Annotation
+      type: object
+      description: Create Annotation
+      properties:
+        domain:
+          type: string
+          description: The domain that is associated with the annotation.  The domain and name comprise a unique key.
+        name:
+          type: string
+          description: The name.  The domain and name comprise a unique key.
+        label:
+          type: string
+          description: The display label for the annotation.
+        description:
+          type: string
+          description: The description of the annotation.
+    updateAnnotation:
+      title: Update Annotation
+      description: The API exposes endpoint for updating an existing annotation.
+      type: object
+      properties:
+        version:
+          type: number
+          description: The version of the resource.
+        id:
+          type: string
+          description: The unique ID, which the system assigns.
+        domain:
+          type: string
+          description: The domain that is associated with the annotation.  The domain and name comprise a unique key.
+        name:
+          type: string
+          description: The name.  The domain and name comprise a unique key.
+        label:
+          type: string
+          description: The display label for the annotation.
+        description:
+          type: string
+          description: The description of the annotation.
+        createdBy:
+          type: string
+          description: The user who created this annotation member.
+        modifiedBy:
+          type: string
+          description: The last user to modify this annotation member.
+        creationTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was created, shown in yyyy-mm-ddThh:mm:ssZ format.
+        modifiedTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was last modified, shown in yyyy-mm-ddThh:mm:ssZ format.
+    annotationCollection:
+      title: Annotation Collection
+      type: object
+      description: A collection of annotation objects through which you can page.
+      properties:
+        name:
+          type: string
+          description: The name of the collection "annotations" in the context of the request.
+        start:
+          type: integer
+          description: The zero-based index of the result candidates to start returning.
+        limit:
+          type: integer
+          description: The maximum number of results that were requested.
+        count:
+          type: integer
+          description: The actual number of results that were returned in the collection.
+        accept:
+          type: string
+          description: The accept header value that was used in the initial request.
+        links:
+          type: array
+          description: The paging links that apply to this object.
+          items:
+            $ref: "#/components/schemas/link"
+        items:
+          type: array
+          description: The actual results of a query.
+          items:
+            $ref: "#/components/schemas/annotation"
+        version:
+          type: integer
+          description: The collection schema version.
+    member:
+      title: Member
+      type: object
+      description: Information about the external object that is associated with the annotation.
+      properties:
+        version:
+          type: number
+          description: The version of the resource.
+        id:
+          type: string
+          description: The unique ID, which the system assigns.
+        annotationId:
+          type: string
+          description: The annotation ID that is associated with the member.
+        resourceUri:
+          type: string
+          description: The URI of the object that is associated with the member.
+        resourceType:
+          type: string
+          description: The object type that is associated with the member.
+        value:
+          type: string
+          description: The member value.
+        createdBy:
+          type: string
+          description: The user who created this annotation member.
+        modifiedBy:
+          type: string
+          description: The last user to modify this annotation member.
+        creationTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was created, shown in yyyy-mm-ddThh:mm:ssZ format.
+        modifiedTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was last modified, shown in yyyy-mm-ddThh:mm:ssZ format.
+        links:
+          type: array
+          description: Zero or more link objects.
+          items:
+            $ref: "#/components/schemas/link"
+    createMember:
+      title: Create Member
+      type: object
+      description: Information about the external object that is associated with the annotation.
+      properties:
+        annotationId:
+          type: string
+          description: The annotation ID that is associated with the member.
+        resourceUri:
+          type: string
+          description: The URI of the object that is associated with the member.
+        resourceType:
+          type: string
+          description: The object type that is associated with the member.
+        value:
+          type: string
+          description: The member value.
+    updateMember:
+      title: Update Member
+      type: object
+      description: Information about the external object that is associated with the annotation.
+      properties:
+        id:
+          type: string
+          description: The unique ID, which the system assigns.
+        annotationId:
+          type: string
+          description: The annotation ID that is associated with the member.
+        resourceUri:
+          type: string
+          description: The URI of the object that is associated with the member.
+        resourceType:
+          type: string
+          description: The object type that is associated with the member.
+        value:
+          type: string
+          description: The member value.
+        createdBy:
+          type: string
+          description: The user who created this annotation member.
+        modifiedBy:
+          type: string
+          description: The last user to modify this annotation member.
+        creationTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was created, shown in yyyy-mm-ddThh:mm:ssZ format.
+        modifiedTimeStamp:
+          type: string
+          description: The formatted timestamp when the annotation member was last modified, shown in yyyy-mm-ddThh:mm:ssZ format.
+    memberCollection:
+      title: Member Collection
+      type: object
+      description: A collection of annotation member objects through which you can page.
+      properties:
+        name:
+          type: string
+          description: The name of the collection "members" within the context of the request.
+        start:
+          type: integer
+          description: The zero-based index of the result candidates to start returning.
+        limit:
+          type: integer
+          description: The maximum number of results that were requested.
+        count:
+          type: integer
+          description: The actual number of results that were returned in the collection.
+        accept:
+          type: string
+          description: The accept header value that was used in the initial request.
+        items:
+          type: array
+          description: The actual results of a query.
+          items:
+            $ref: "#/components/schemas/member"
+        links:
+          type: array
+          description: The paging links that apply to this object.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The collection schema version.
+    api:
+      title: API
+      type: object
+      description: A collection of the API base links.
+      properties:
+        links:
+          type: array
+          description: The API base links.
+          items:
+            $ref: "#/components/schemas/link"
+    error2:
+      title: Error
+      type: object
+      description: The representation of an error.
+      x-sas-media-type:
+        name: application/vnd.sas.error
+        version: 2
+      required:
+        - httpStatusCode
+        - version
+      properties:
+        message:
+          type: string
+          description: The message for the error.
+        id:
+          type: string
+          description: The string ID for the error.
+        errorCode:
+          type: integer
+          description: The numeric ID for the error.
+        httpStatusCode:
+          type: integer
+          description: The HTTP status code for the error.
+        details:
+          type: array
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+        remediation:
+          type: string
+          description: A message that describes how to resolve the error.
+        errors:
+          type: array
+          description: Any additional errors that occurred.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the error representation. This representation is version 2.
+    link:
+      title: Link
+      type: object
+      description: A link to a related operation or resource.
+      required:
+        - rel
+      properties:
+        method:
+          type: string
+          description: The HTTP method for the link.
+        rel:
+          type: string
+          description: The relationship of the link to the resource.
+        uri:
+          type: string
+          description: The relative URI for the link.
+        href:
+          type: string
+          description: The URL for the link.
+        title:
+          type: string
+          description: The title for the link.
+        type:
+          type: string
+          description: The media type or link type for the link.
+        itemType:
+          type: string
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+        responseType:
+          type: string
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+        responseItemType:
+          type: string
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+    selection:
+      title: Selection
+      description: Identifies a set of resources.
+      x-sas-media-type:
+        name: application/vnd.sas.selection
+        version: 1
+      required:
+        - version
+        - resources
+      properties:
+        version:
+          description: The schema version number of this media type. This representation is version 1.
+          type: integer
+        template:
+          description: 'A URI template in which the {id} parameter can be replaced with a value from the "resources" array in order to yield the URI of the identified resource. '
+          type: string
+          format: uri
+        type:
+          description: >-
+            Specifies whether the resources array contains IDs, URIs, or both. 
+
+            <dl>
+
+            <dt>"id"</dt><dd>the array contains resource identifiers only. This is the default if "type" is omitted.</dd>
+
+            <dt>"uri"</dt><dd>the array contains resource URIs</dd>
+
+            <dt>"mixed"</dt><dd>the array contains a mixture of identifiers and URIs.</dd>
+
+            </dl>
+          type: string
+          enum:
+            - id
+            - uri
+            - mixed
+        resources:
+          description: An array of resource IDs or URIs
+          type: array
+          items:
+            type: string
+        links:
+          type: array
+          description: An array of links to related resources and actions.
+          items:
+            $ref: "#/components/schemas/link"
+    annotationMemberMap:
+      title: Create multiple members
+      type: object
+      description: Creating members for particular annotation
+      properties:
+        annotationId:
+          type: string
+          description: Common annotation ID for each member to be created
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/createMember"
+    batchCreateMembers:
+      title: Annotation Member Map Collection
+      type: object
+      description: Collection of AnnotationIDs to list members
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/annotationMemberMap"
+    batchCreateAnnotations:
+      title: Annotation Collection
+      type: object
+      description: Collection of annotations to be created.
+      properties:
+        items:
+          type: array
+          description: List of annotations
+          items:
+            $ref: "#/components/schemas/createAnnotation"
+  examples:
+    annotationsroot:
+      summary: Annotations service endpoints
+      description: List of endpoints for annotations service.
+      value:
+        links:
+          - method: GET
+            rel: annotations
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: create
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+        version: 1
+    annotation:
+      summary: Annotation
+      description: Example for annotation.
+      value:
+        name: My Annotation
+        id: f9bd5124-418f-4326-86cf-b6d98d57778
+        domain: Domain1
+        label: Label
+        description: Gives context to one or more objects.
+        creationTimeStamp: 2016-12-19 18:02:07.986000+00:00
+        modifiedTimeStamp: 2016-12-19 18:02:07.986000+00:00
+        createdBy: etlguest
+        modifiedBy: etlguest
+        links:
+          - method: POST
+            rel: create
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+          - method: GET
+            rel: self
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+            type: application/vnd.sas.annotation
+          - method: PUT
+            rel: update
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+            type: application/vnd.sas.annotation
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+    annotationCollection:
+      summary: Annotations
+      description: Annotation Collection.
+      value:
+        links:
+          - method: GET
+            rel: collection
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /annotations/annotations?start=0&limit=10
+            uri: /annotations/annotations?start=0&limit=10
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: create
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+        name: annotations
+        accept: application/vnd.sas.annotation
+        count: 1
+        items:
+          - id: f9bd5124-418f-4326-86cf-b6d98d57778
+            name: Annotation1
+            domain: Domain1
+            description: One annotation.
+            creationTimeStamp: 2016-12-19 18:02:07.986000+00:00
+            modifiedTimeStamp: 2016-12-19 18:02:07.986000+00:00
+            createdBy: etlguest
+            modifiedBy: etlguest
+            links:
+              - method: POST
+                rel: create
+                href: /annotations/annotations
+                uri: /annotations/annotations
+                type: application/vnd.sas.annotation
+                responseType: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+                uri: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+                type: application/vnd.sas.annotation
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+                uri: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+                type: application/vnd.sas.annotation
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+                uri: /annotations/annotations/ccc0492f-7a0a-4481-8890-ca0b127c6ed4
+        limit: 10
+        version: 2
+    createAnnotation:
+      summary: Create a New Annotation
+      description: Request body for create annotation end point.
+      value:
+        name: newAnnotationName
+        domain: newDomainLabel
+        label: newAnnotationLabel
+        description: newDescriptionLabel
+    createAnnotationResponse:
+      summary: Create a New Annotation
+      description: Response body for create annotation end point.
+      value:
+        creationTimeStamp: 2018-03-26T19:50:09.935000Z
+        modifiedTimeStamp: 2018-03-26T19:50:09.935000Z
+        createdBy: sasboot
+        modifiedBy: sasboot
+        id: 2a902411-4f81-4819-9263-203cf0ff29ce
+        name: newAnnotationName
+        domain: newDomainLabel
+        version: 1
+        label: newAnnotationLabel
+        description: newDescriptionLabel
+        links:
+          - method: GET
+            rel: self
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            type: application/vnd.sas.annotation
+          - method: PUT
+            rel: update
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+          - method: GET
+            rel: up
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation
+          - method: GET
+            rel: members
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation.member
+    member:
+      summary: Get a member
+      description: Response body to get the member for given annotationId and memberId
+      value:
+        name: A member
+        annotationId: f9bd5124-418f-4326-86cf-b6d98d57778
+        id: bd5124b7-318f-3326-97edf-cd79fe77758
+        resourceUri: /objects/3989203-3867-1927-175d38a7421
+        resourceType: column
+        value: the member's value
+        creationTimeStamp: 2016-12-19 18:02:07.986000+00:00
+        modifiedTimeStamp: 2016-12-21 17:12:01.846000+00:00
+        createdBy: etlguest
+        modifiedBy: etlguest
+        links:
+          - method: GET
+            rel: self
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+            type: application/vnd.sas.annotation.member
+          - method: PUT
+            rel: create
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+            type: application/vnd.sas.annotation.member
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+            uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778/members/bd5124b7-318f-3326-97edf-cd79fe77758
+    memberCollection:
+      summary: Members
+      description: Get member objects for an annotation.
+      value:
+        name: members
+        accept: application/vnd.sas.annotation.member
+        start: 0
+        count: 1
+        items:
+          - creationTimeStamp: 2018-03-26 20:11:17.132000+00:00
+            modifiedTimeStamp: 2018-03-26 20:11:17.132000+00:00
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+            annotationId: 26e2df43-aeaf-475d-a64e-7baafb8a4eca
+            resourceType: table
+            resourceUri: objects/b673660283/96764860d
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+              - method: GET
+                rel: up
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+        links:
+          - method: GET
+            rel: collection
+            href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+            uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members?start=0&limit=10
+            uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members?start=0&limit=10
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: create
+            href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+            uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+            type: application/vnd.sas.annotation.member
+            responseType: application/vnd.sas.annotation.member
+        limit: 10
+        version: 2
+    updateAnnotationRequest:
+      summary: Update Annotation Request
+      description: Request Body to update the annotation
+      value:
+        id: b4be3b98-2643-4699-92e6-43bad70b531c
+        domain: Changed
+        name: Changed
+        label: Changed
+        description: Changed
+    updateAnnotationResponse:
+      summary: Update Annotation Response
+      description: Response body for update annotation endpoint.
+      value:
+        creationTimeStamp: 2022-03-08T12:28:17.47004Z
+        createdBy: sasadm
+        modifiedTimeStamp: 2022-03-08T12:30:03.640581Z
+        modifiedBy: sasadm
+        version: 1
+        id: b4be3b98-2643-4699-92e6-43bad70b531c
+        name: Changed
+        domain: Changed
+        label: Changed
+        description: Changed
+        links:
+          - method: GET
+            rel: self
+            href: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+            uri: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+            type: application/vnd.sas.annotation
+          - method: PUT
+            rel: update
+            href: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+            uri: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+            uri: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c
+          - method: GET
+            rel: up
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation
+          - method: GET
+            rel: members
+            href: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c/members
+            uri: /annotations/annotations/b4be3b98-2643-4699-92e6-43bad70b531c/members
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation.member
+    createMember:
+      summary: Create member
+      description: Sample request body for creating a member
+      value:
+        annotationId: 0782c5ec-7e39-45cc-a103-0ce854c41a72
+        resourceType: folder
+        resourceUri: /folders/folders/a0bf029d-802b-4eb2-ba18-0f1f7ddac66d
+        value: newFolder
+    createMemberResponse:
+      summary: Create new member
+      description: Response body for create member endpoint
+      value:
+        creationTimeStamp: 2018-03-26T19:58:04.918000Z
+        modifiedTimeStamp: 2018-03-26T19:58:04.918000Z
+        createdBy: sasboot
+        modifiedBy: sasboot
+        version: 1
+        id: 04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+        annotationId: 2a902411-4f81-4819-9263-203cf0ff29ce
+        resourceType: type
+        resourceUri: uri
+        value: objectValue
+        links:
+          - method: GET
+            rel: annotation
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+            type: application/vnd.sas.annotation"
+          - method: GET
+            rel: self
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            type: application/vnd.sas.annotation.member
+          - method: PUT
+            rel: update
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            type: application/vnd.sas.annotation.member
+            responseType: application/vnd.sas.annotation.member
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+          - method: GET
+            rel: up
+            href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+            uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+            type: application/vnd.sas.annotation.member
+            responseType: application/vnd.sas.annotation.member
+    updateMemberRequest:
+      summary: Update member request
+      description: Request body to update member endpoint
+      value:
+        creationTimeStamp: 2022-03-09T06:05:43.955794Z
+        createdBy: sasadm
+        modifiedTimeStamp: 2022-03-09T06:05:43.955794Z
+        modifiedBy: sasadm
+        version: 1
+        id: bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+        annotationId: b00feed8-cd6a-4ed8-8608-d57256663b93
+        resourceType: folder
+        resourceUri: /files/files/b8cdad41-81a6-4c67-a741-bc618705fd65
+        value: this updates
+    updateMemberResponse:
+      summary: Update member response
+      description: Response body to update member endpoint
+      value:
+        creationTimeStamp: 2022-03-09T06:05:43.955794Z
+        createdBy: sasadm
+        modifiedTimeStamp: 2022-03-09T06:22:59.189603Z
+        modifiedBy: sasadm
+        version: 1
+        id: bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+        annotationId: b00feed8-cd6a-4ed8-8608-d57256663b93
+        resourceType: folder
+        resourceUri: /files/files/b8cdad41-81a6-4c67-a741-bc618705fd65
+        value: this updates
+        links:
+          - method: GET
+            rel: self
+            href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            type: application/vnd.sas.annotation.member
+          - method: PUT
+            rel: update
+            href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            type: application/vnd.sas.annotation.member
+            responseType: application/vnd.sas.annotation.member
+          - method: DELETE
+            rel: delete
+            href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+          - method: GET
+            rel: up
+            href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members
+            uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation.member
+          - method: GET
+            rel: annotation
+            href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+            uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+            type: application/vnd.sas.annotation
+    error2:
+      summary: Bad Request
+      value:
+        version: 2
+        message: example error message
+        httpStatusCode: 400
+      description: This is an example of an error that could be returned for bad requests
+    getAnnotationsBadRequest:
+      summary: Bad Request
+      value:
+        version: 2
+        message: Bad Request
+        httpStatusCode: 400
+        errorCode: 16317
+        details:
+          - path /annotations/annotations
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: This is an example of an error that could be returned for bad requests
+    postAnnotationsBadRequest:
+      summary: Bad Request
+      value:
+        version: 2
+        message: Bad Request
+        httpStatusCode: 400
+        errorCode: 16302
+        details:
+          - path /annotations/annotations
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: This is an example of an error that could be returned for bad requests
+    importAnnotationsBadRequest:
+      summary: Bad Request
+      value:
+        version: 2
+        message: The importRequest was not valid.
+        httpStatusCode: 400
+        errorCode: 1177
+        details:
+          - path /transfer/importJobs
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: This is an example of an error that could be returned for bad requests
+    postMultiAnnotationsBadRequest:
+      summary: Bad Request
+      value:
+        version: 2
+        message: The importRequest was not valid.
+        httpStatusCode: 400
+        errorCode: 16319
+        details:
+          - path /transfer/importJobs
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: This is an example of an error that could be returned for bad requests
+    notFoundError:
+      summary: Not Found
+      value:
+        message: not found
+        httpStatusCode: 404
+        errorCode: 16304
+        version: 2
+        details:
+          - path /annotations/annotations/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: Example of an error that might be returned on a 404 response
+    memberNotFoundError:
+      summary: Not Found
+      value:
+        message: not found
+        httpStatusCode: 404
+        errorCode: 16303
+        version: 2
+        details:
+          - path /annotations/annotations/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a/member
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: Example of an error that might be returned on a 404 response
+    preconditionFailedError:
+      summary: Precondition Failed
+      value:
+        message: The specified "If-Match" header value did not match the value in the conditional PUT request for the object.
+        httpStatusCode: 412
+        errorCode: 16306
+        version: 2
+        details:
+          - path /annotations/annotations/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: example of an error that might be returned on a 412 response
+    unsupportedMediaTypeError:
+      summary: Unsupported Mediatype
+      value:
+        message: Unsupported Media Type
+        httpStatusCode: 415
+        version: 2
+      description: example of an error that might be returned on a 415 response
+    preconditionRequiredError:
+      summary: Precondition Required
+      value:
+        message: The PUT request must include an eTag in the "if-match" header, or a "last-modified" timestamp in the "if-unmodified-since" header.
+        httpStatusCode: 428
+        errorCode: 16305
+        version: 2
+        details:
+          - path /annotations/annotations/bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+          - correlator 87b2b31a-043f-4b1a-97b0-d0e4d3a7ad03
+      description: example of an error that might be returned on a 428 response
+    getByResourceURIs:
+      summary: Resource URI
+      value:
+        resources:
+          - uri
+          - uri2
+        version: 2
+      description: Get Annotations by Associated Resource URIs
+    getByResourceURIsResponse:
+      summary: Annotations
+      value:
+        version: 2
+        accept: application/vnd.sas.annotation
+        count: 1
+        start: 0
+        limit: 2147483647
+        name: annotationResourceCollection
+        items:
+          - creationTimeStamp: 2025-03-06T08:57:51.425873Z
+            createdBy: sasin
+            modifiedTimeStamp: 2025-03-06T08:57:51.425862Z
+            modifiedBy: sasin
+            version: 1
+            id: e3a58e6c-d723-4a18-b0f3-68df257ab077
+            name: newAnnotationExample2
+            domain: MY.DATA
+            label: Annotate
+            description: This is my new annotation...!!!
+            links:
+              - method: GET
+                rel: self
+                href: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+                uri: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+                type: application/vnd.sas.annotation
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+                uri: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+                type: application/vnd.sas.annotation
+                responseType: application/vnd.sas.annotation
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+                uri: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077
+              - method: GET
+                rel: up
+                href: /annotations/annotations
+                uri: /annotations/annotations
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.annotation
+              - method: GET
+                rel: members
+                href: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077/members
+                uri: /annotations/annotations/e3a58e6c-d723-4a18-b0f3-68df257ab077/members
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.annotation.member
+        links:
+          - method: GET
+            rel: collection
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation
+          - method: GET
+            rel: self
+            href: /annotations/annotations?start=0&limit=2147483647
+            uri: /annotations/annotations?start=0&limit=2147483647
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.annotation
+          - method: POST
+            rel: create
+            href: /annotations/annotations
+            uri: /annotations/annotations
+            type: application/vnd.sas.annotation
+            responseType: application/vnd.sas.annotation
+      description: Annotations returned corresponding to the associated resource URI
+    membersList:
+      summary: Annotation IDs
+      description: Get Members by Annotation IDs
+      value:
+        resources:
+          - 26e2df43-aeaf-475d-a64e-7baafb8a4eca
+          - 2a902411-4f81-4819-9263-203cf0ff29ce
+        version: 2
+    membersListResponse:
+      summary: Members
+      description: Get Members by Annotation IDs
+      value:
+        links:
+          - method: POST
+            rel: collection
+            href: /annotations/members
+            uri: /annotations/members
+            type: application/vnd.sas.selection
+            responseType: application/vnd.sas.collection
+        name: members
+        accept: application/vnd.sas.annotation.member
+        start: 0
+        count: 3
+        items:
+          - creationTimeStamp: 2018-03-26T19:58:04.918000Z
+            modifiedTimeStamp: 2018-03-26T19:58:04.918000Z
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version": 1,
+            id: 04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+            annotationId: 2a902411-4f81-4819-9263-203cf0ff29ce
+            resourceType: type
+            resourceUri: uri
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+                uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+                uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+                type: application/vnd.sas.annotation.member"
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+                uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member"
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9
+                uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members/04c2d36b-0f7a-4e1b-a546-a80ffbe35bf9"
+              - method: GET
+                rel: up
+                href: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+                uri: /annotations/annotations/2a902411-4f81-4819-9263-203cf0ff29ce/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+          - creationTimeStamp: 2018-03-26T20:11:17.132000Z
+            modifiedTimeStamp: 2018-03-26T20:11:17.132000Z
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+            annotationId: 26e2df43-aeaf-475d-a64e-7baafb8a4eca
+            resourceType: type
+            resourceUri: uri2
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+              - method: GET
+                rel: up
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+          - creationTimeStamp: 2018-03-26T20:16:57.732000Z
+            modifiedTimeStamp: 2018-03-26T20:16:57.732000Z
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: 13aab93d-7699-4f17-8074-0953d1183020
+            annotationId: 26e2df43-aeaf-475d-a64e-7baafb8a4eca
+            resourceType: type
+            resourceUri: uri3
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members/13aab93d-7699-4f17-8074-0953d1183020
+              - method: GET
+                rel: up
+                href: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                uri: /annotations/annotations/26e2df43-aeaf-475d-a64e-7baafb8a4eca/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+        limit: 2147483647
+        version: 2
+    transferObject:
+      summary: Transfer object
+      description: Response body for transfer endpoint
+      value:
+        version: 1
+        summary:
+          creationTimeStamp: 2022-03-09T06:05:42.986962Z
+          createdBy: sasadm
+          modifiedTimeStamp: 2022-03-09T06:05:42.986914Z
+          modifiedBy: sasadm
+          version: 1
+          id: b00feed8-cd6a-4ed8-8608-d57256663b93
+          name: testpptTag
+          type: annotation
+          links:
+            - method: GET
+              rel: self
+              href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+              uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+              type: application/vnd.sas.annotation
+            - method: PUT
+              rel: update
+              href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+              uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+              type: application/vnd.sas.annotation
+              responseType: application/vnd.sas.annotation
+            - method: DELETE
+              rel: delete
+              href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+              uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93
+            - method: GET
+              rel: up
+              href: /annotations/annotations
+              uri: /annotations/annotations
+              type: application/vnd.sas.collection
+              itemType: application/vnd.sas.annotation
+            - method: GET
+              rel: members
+              href: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members
+              uri: /annotations/annotations/b00feed8-cd6a-4ed8-8608-d57256663b93/members
+              type: application/vnd.sas.collection
+              itemType: application/vnd.sas.annotation.member
+        content: eyjjcmvhdglvblrpbwvtdgftcci6ijiwmjitmdmtmdlumdy6mdu6ndiuotg2otyywiisimnyzwf0zwrcesi6innhc2fkbsisim1vzglmawvkvgltzvn0yw1wijoimjaymi0wmy0wovqwnjownto0mi45ody5mtraiiwibw9kawzpzwrcesi6innhc2fkbsisinzlcnnpb24iojesimlkijoiyjawzmvlzdgty2q2ys00zwq4ltg2mdgtzdu3mju2njyzyjkziiwibmftzsi6inrlc3rwchruywcilcjkb21haw4ioijtqvmuq09ntu9ollrbryisimxpbmtzijpbeyjtzxrob2qioijhrvqilcjyzwwioijzzwxmiiwiahjlzii6ii9hbm5vdgf0aw9ucy9hbm5vdgf0aw9ucy9imdbmzwvkoc1jzdzhltrlzdgtodywoc1kntcynty2njniotmilcj1cmkioiivyw5ub3rhdglvbnmvyw5ub3rhdglvbnmvyjawzmvlzdgty2q2ys00zwq4ltg2mdgtzdu3mju2njyzyjkziiwidhlwzsi6imfwcgxpy2f0aw9ul3zuzc5zyxmuyw5ub3rhdglvbij9lhsibwv0ag9kijoiufvuiiwicmvsijoidxbkyxrliiwiahjlzii6ii9hbm5vdgf0aw9ucy9hbm5vdgf0aw9ucy9imdbmzwvkoc1jzdzhltrlzdgtodywoc1kntcynty2njniotmilcj1cmkioiivyw5ub3rhdglvbnmvyw5ub3rhdglvbnmvyjawzmvlzdgty2q2ys00zwq4ltg2mdgtzdu3mju2njyzyjkziiwidhlwzsi6imfwcgxpy2f0aw9ul3zuzc5zyxmuyw5ub3rhdglvbiisinjlc3bvbnnlvhlwzsi6imfwcgxpy2f0aw9ul3zuzc5zyxmuyw5ub3rhdglvbij9lhsibwv0ag9kijoirevmrvrfiiwicmvsijoizgvszxrliiwiahjlzii6ii9hbm5vdgf0aw9ucy9hbm5vdgf0aw9ucy9imdbmzwvkoc1jzdzhltrlzdgtodywoc1kntcynty2njniotmilcj1cmkioiivyw5ub3rhdglvbnmvyw5ub3rhdglvbnmvyjawzmvlzdgty2q2ys00zwq4ltg2mdgtzdu3mju2njyzyjkzin0seyjtzxrob2qioijhrvqilcjyzwwioij1ccisimhyzwyioiivyw5ub3rhdglvbnmvyw5ub3rhdglvbnmilcj1cmkioiivyw5ub3rhdglvbnmvyw5ub3rhdglvbnmilcj0exblijoiyxbwbgljyxrpb24vdm5klnnhcy5jb2xszwn0aw9uiiwiaxrlbvr5cguioijhchbsawnhdglvbi92bmquc2fzlmfubm90yxrpb24ifsx7im1ldghvzci6ikdfvcisinjlbci6im1lbwjlcnmilcjocmvmijoil2fubm90yxrpb25zl2fubm90yxrpb25zl2iwmgzlzwq4lwnknmetngvkoc04nja4lwq1nzi1njy2m2i5my9tzw1izxjziiwidxjpijoil2fubm90yxrpb25zl2fubm90yxrpb25zl2iwmgzlzwq4lwnknmetngvkoc04nja4lwq1nzi1njy2m2i5my9tzw1izxjziiwidhlwzsi6imfwcgxpy2f0aw9ul3zuzc5zyxmuy29sbgvjdglvbiisiml0zw1uexblijoiyxbwbgljyxrpb24vdm5klnnhcy5hbm5vdgf0aw9ulm1lbwjlcij9xx0=
+        connectors:
+          - version: 2
+            id: bd853c18-9faf-4f9a-a31a-3cdfc6bf866a
+            uri: /files/files/b8cdad41-81a6-4c67-a741-bc618705fd65
+            relatedUris: null
+            name: this updates
+            contentType: folder
+            type: annotation.member
+            forceMapping: false
+    batchCreateAnnotations:
+      summary: Create multiple annotation
+      description: Request body for creating annotations.
+      value:
+        items:
+          - name: Annotation1
+            domain: DomainLabel1
+            label: Label1
+            description: Description1
+          - name: Annotation2
+            domain: DomainLabel2
+            label: Label2
+            description: Description2
+    batchCreateAnnotationsResponse:
+      summary: Annotations
+      description: Annotation Collection.
+      value:
+        count: 2
+        limit: 2
+        version: 2
+        items:
+          - id: f9bd5124-418f-4326-86cf-b6d98d57778
+            name: Annotation1
+            domain: DomainLabel1
+            description: Description1
+            label: Label1
+            creationTimeStamp: 2023-04-10 18:02:07.986000+00:00
+            modifiedTimeStamp: 2023-04-10 18:02:07.986000+00:00
+            createdBy: etlguest
+            modifiedBy: etlguest
+            links:
+              - method: POST
+                rel: create
+                href: /annotations/annotations
+                uri: /annotations/annotations
+                type: application/vnd.sas.annotation
+                responseType: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+                type: application/vnd.sas.annotation
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+                type: application/vnd.sas.annotation
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/f9bd5124-418f-4326-86cf-b6d98d57778
+          - id: y8bd5124-418f-4326-86cf-b6d98d57778
+            name: Annotation2
+            domain: DomainLabel2
+            description: Description2
+            creationTimeStamp: 2023-04-10 18:02:07.986000+00:00
+            modifiedTimeStamp: 2023-04-10 18:02:07.986000+00:00
+            createdBy: etlguest
+            modifiedBy: etlguest
+            links:
+              - method: POST
+                rel: create
+                href: /annotations/annotations
+                uri: /annotations/annotations
+                type: application/vnd.sas.annotation
+                responseType: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+                type: application/vnd.sas.annotation
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+                type: application/vnd.sas.annotation
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+                uri: /annotations/annotations/y8bd5124-418f-4326-86cf-b6d98d57778
+    batchCreateMembers:
+      summary: Map of anotation IDs to list of members
+      description: Response body for creating members.
+      value:
+        items:
+          - annotationId: 561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+            members:
+              - resourceType: folder
+                resourceUri: /folders/folders/a0bf029d-802b-4eb2-ba18-0f1f7ddac66d
+                value: newFolder
+              - resourceType: reports
+                resourceUri: /reports/reports/a0bf029d-802b-4eb2-ba18-0f1f7ddac66d
+                value: newReport
+          - annotationId: a92de124-1404-4431-8863-7d5978388222
+            members:
+              - resourceType: folder
+                resourceUri: /folders/folders/0782c5ec-7e39-45cc-a103-0ce854c41a72
+                value: newFolder
+    batchCreateMembersResponse:
+      summary: Members
+      description: Collection of members created.
+      value:
+        start: 0
+        count: 3
+        limit: 3
+        version: 2
+        items:
+          - creationTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            modifiedTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+            annotationId: 561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+            resourceType: table
+            resourceUri: objects/b673660283/96764860d
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/a7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+              - method: GET
+                rel: up
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+          - creationTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            modifiedTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+            annotationId: 561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+            resourceType: table
+            resourceUri: objects/b673660283/96764860d
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members/b7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+              - method: GET
+                rel: up
+                href: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members
+                uri: /annotations/annotations/561b0a40-70d2-4f48-a682-7c52c4c3b9b6/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member
+          - creationTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            modifiedTimeStamp: 2023-04-10 20:11:17.132000+00:00
+            createdBy: sasboot
+            modifiedBy: sasboot
+            version: 1
+            id: c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+            annotationId: a92de124-1404-4431-8863-7d5978388222
+            resourceType: table
+            resourceUri: objects/b673660283/96764860d
+            value: objectValue
+            links:
+              - method: GET
+                rel: annotation
+                href: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222
+                uri: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222
+                type: application/vnd.sas.annotation
+              - method: GET
+                rel: self
+                href: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: PUT
+                rel: update
+                href: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                type: application/vnd.sas.annotation.member
+              - method: DELETE
+                rel: delete
+                href: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+                uri: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members/c7f35cb5-c72d-4fae-a5f3-af74f26cdf42
+              - method: GET
+                rel: up
+                href: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members
+                uri: /annotations/annotations/a92de124-1404-4431-8863-7d5978388222/members
+                type: application/vnd.sas.annotation.member
+                responseType: application/vnd.sas.annotation.member

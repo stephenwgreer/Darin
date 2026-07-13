@@ -1,0 +1,959 @@
+openapi: 3.0.3
+info:
+  title: SAS Logon
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  description: The SAS Logon API provides the standard OAuth protocol endpoints through which clients obtain access tokens to make API calls. <br><br> <b><font size='2'>Terminology:</font></b><br><ul> <li> <b>Client:</b> An application making protected resource requests on behalf of the resource owner and with its authorization.</li> </ul>
+  version: "1"
+  termsOfService: https://www.sas.com/en_us/legal/copyright.html
+servers:
+  - url: http://example.com/SASLogon
+    description: kubernetes mock server
+tags:
+  - name: Root
+    description: Contains the operations for the root resource.
+  - name: Client Administration
+    description: Contains the operations for administering the Client resource.
+  - name: Authorization
+    description: Contains the operations for client authorization.
+paths:
+  /:
+    get:
+      tags:
+        - Root
+      operationId: root
+      summary: Get a collection of top-level links
+      description: >
+        Returns a list containing a link to only top-level collections surfaced by this API. These top level links include the server information endpoint. </p>
+      responses:
+        "200":
+          description: OK - returns the collection of top level links
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/links"
+              examples:
+                json:
+                  $ref: "#/components/examples/rootLinks"
+  /oauth/token#client_credentials:
+    post:
+      operationId: grantClientCredentials
+      summary: Grant access using client credentials
+      description: Obtains an access token based on client credentials that have been granted to the registered client application. The SAS Logon service verifies the supplied client credentials. If they are valid, an access token is returned. Obtaining access tokens via client credentials grant works only with SAS Viya APIs that do not enforce authorization.
+      tags:
+        - Authorization
+      parameters:
+        - name: Authorization
+          in: header
+          description: The basic authorization header containing the registered OAuth client identifier and secret. Optional if this information is passed as part of the form data.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  description: The client identifier for the registered OAuth client and recipient of the token. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                client_secret:
+                  description: The client secret for the registered OAuth client. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                grant_type:
+                  description: The type of authentication used to obtain the token. In this case, 'client_credentials'.
+                  type: string
+                scope:
+                  description: The space-limited list of scopes. Defaults to get all the authorities registered to the client.
+                  type: string
+              required:
+                - grant_type
+            examples:
+              grantClientCredentialsBody:
+                $ref: "#/components/examples/grantClientCredentialsBody"
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/json:
+              schema:
+                properties:
+                  access_token:
+                    type: string
+                    description: The access token to use for subsequent API calls.
+                  token_type:
+                    type: string
+                    description: The type of access token issued (for example, 'bearer').
+                  expires_in:
+                    type: integer
+                    description: The number of seconds until the token expires.
+                  scope:
+                    type: string
+                    description: The space-limited list of scopes authorized for this client.
+                  revocable:
+                    type: boolean
+                    description: Indicates if the returned token is revocable.
+                  jti:
+                    type: string
+                    description: The globally unique identifier for this token.
+              examples:
+                grantClientCredentialsResp:
+                  $ref: "#/components/examples/grantClientCredentialsResp"
+  /oauth/token#password:
+    post:
+      operationId: grantPassword
+      summary: Grant access using password
+      description: Obtains an access token on behalf of an end user, using that user's authenticating credentials (such as username and password) along with the client identifier and the associated secret that have been registered with the SAS environment. The user credentials are validated. If they are valid, the SAS Logon API returns an access token. Obtaining access tokens on behalf of an end user is required for all SAS Viya APIs that support user and group authorization rules.
+      tags:
+        - Authorization
+      parameters:
+        - name: Authorization
+          in: header
+          description: The basic authorization header containing the registered OAuth client identifier and secret. Optional if this information is passed as part of the form data.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  description: The client identifier for the registered OAuth client and recipient of the token. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                client_secret:
+                  description: The client secret for the registered OAuth client. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                grant_type:
+                  description: The type of authentication used to obtain the token. In this case, 'password'.
+                  type: string
+                response_type:
+                  description: The type of token that should be issued.
+                  type: string
+                username:
+                  description: The username of the end user for whom the client is obtaining an access token on behalf of.
+                  type: string
+                password:
+                  description: The end user's password.
+                  type: string
+                scope:
+                  description: The space-limited list of scopes. Usually omitted, defaults to the scope registered to the client.
+                  type: string
+              required:
+                - grant_type
+                - username
+                - password
+            examples:
+              grantPasswordCredentialsBody:
+                $ref: "#/components/examples/grantPasswordCredentialsBody"
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/json:
+              schema:
+                properties:
+                  access_token:
+                    type: string
+                    description: The access token to use for subsequent API calls.
+                  token_type:
+                    type: string
+                    description: The type of access token issued (for example, 'bearer').
+                  id_token:
+                    type: string
+                    description: The OIDC token that may be used by the client to authenticate the end user.
+                  refresh_token:
+                    type: string
+                    description: The refresh token that may be used by the client to obtain new access tokens.
+                  expires_in:
+                    type: integer
+                    description: The number of seconds until the token expires.
+                  scope:
+                    type: string
+                    description: The space-limited list of scopes authorized for this client.
+                  refresh_expires_in:
+                    type: integer
+                    description: The number of seconds until the refresh token expires.
+                  refresh_revocable:
+                    type: boolean
+                    description: Indicates if the returned refresh token is revocable.
+                  revocable:
+                    type: boolean
+                    description: Indicates if the returned token is revocable.
+                  jti:
+                    type: string
+                    description: The globally unique identifier for this token.
+              examples:
+                grantPasswordCredentialsResp:
+                  $ref: "#/components/examples/grantPasswordCredentialsResp"
+        "400":
+          description: The request was invalid.
+  /oauth/token#authorization_code:
+    post:
+      operationId: grantAuthorizationCode
+      summary: Grant access using authorization code
+      description: Obtains an access token on behalf of an end user, using an authorization code provided by the user along with the client identifier and the associated secret that have been registered with the SAS environment. The authorization code is validated and can be used only once. If it is valid, the SAS Logon API returns an access token. Obtaining access tokens on behalf of an end user is required for all SAS Viya APIs that support user and group authorization rules.
+      tags:
+        - Authorization
+      parameters:
+        - name: Authorization
+          in: header
+          description: The basic authorization header containing the registered OAuth client identifier and secret. Optional if this information is passed as part of the form data.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  description: The client identifier for the registered OAuth client and recipient of the token. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                client_secret:
+                  description: The client secret for the registered OAuth client. Optional if this information is passed as part of the Authorization header.
+                  type: string
+                grant_type:
+                  description: The type of authentication used to obtain the token. In this case, 'authorization_code'.
+                  type: string
+                response_type:
+                  description: The type of token that should be issued.
+                  type: string
+                code:
+                  description: The authorization code provided by the end user for whom the client is obtaining an access token on behalf of.
+                  type: string
+                scope:
+                  description: The space-limited list of scopes. Usually omitted, this value must match the scope in the authorization request.
+                  type: string
+              required:
+                - grant_type
+                - code
+            examples:
+              grantAuthorizationCodeBody:
+                $ref: "#/components/examples/grantAuthorizationCodeBody"
+      responses:
+        "200":
+          description: The request succeeded.
+          content:
+            application/json:
+              schema:
+                properties:
+                  access_token:
+                    type: string
+                    description: The access token to use for subsequent API calls.
+                  token_type:
+                    type: string
+                    description: The type of access token issued (for example, 'bearer').
+                  id_token:
+                    type: string
+                    description: The OIDC token that may be used by the client to authenticate the end user.
+                  expires_in:
+                    type: integer
+                    description: The number of seconds until the token expires.
+                  scope:
+                    type: string
+                    description: The space-limited list of scopes authorized for this client.
+                  refresh_expires_in:
+                    type: integer
+                    description: The number of seconds until the refresh token expires.
+                  refresh_revocable:
+                    type: boolean
+                    description: Indicates if the returned refresh token is revocable.
+                  revocable:
+                    type: boolean
+                    description: Indicates if the returned token is revocable.
+                  jti:
+                    type: string
+                    description: The globally unique identifier for this token.
+              examples:
+                grantAuthorizationCodeResp:
+                  $ref: "#/components/examples/grantAuthorizationCodeResp"
+        "400":
+          description: The request was invalid.
+  /oauth/clients:
+    get:
+      summary: Return collection of clients
+      operationId: getClients
+      description: >
+        Returns the collection of clients registered. <p> <b>Authorization:</b> Bearer token with clients.read, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/clientCollection"
+              examples:
+                listClientsResp:
+                  $ref: "#/components/examples/listClientsResp"
+        "400":
+          description: The request was invalid. An invalid query parameter was specified.
+      parameters:
+        - name: filter
+          in: query
+          description: The SCIM filter for querying clients. The default is 'client_id pr'.
+          schema:
+            type: string
+        - name: sortBy
+          in: query
+          description: The field to sort results by. The default is client_id.
+          schema:
+            type: string
+        - name: sortOrder
+          in: query
+          description: The sort order of results by ascending or descending order. The default is ascending.
+          schema:
+            type: string
+        - name: startIndex
+          in: query
+          description: The index of the first result on which to begin the page. The default is 1.
+          schema:
+            type: integer
+        - name: count
+          in: query
+          description: The number of results per page. The default is 100.
+          schema:
+            type: integer
+    post:
+      summary: Create client
+      operationId: createClient
+      description: >
+        Creates a new client. <p> <b>Authorization:</b> Bearer token with clients.write, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "201":
+          description: A client object was created. The secret is masked in the response.
+          headers:
+            Content-Type:
+              description: Type of returned content.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/client"
+              examples:
+                createClientResp:
+                  $ref: "#/components/examples/createClientResp"
+        "400":
+          description: The request was invalid.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/clientIn"
+            examples:
+              createClientBody:
+                $ref: "#/components/examples/createClientBody"
+        description: The client to be created.
+        required: true
+  "/oauth/clients/{clientId}":
+    head:
+      summary: Determine whether client exists
+      operationId: headersForClient
+      description: >
+        Returns whether the client that is specified in the request exists. <p> <b>Authorization:</b> Bearer token with clients.read, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: The request succeeded. The requested client exists.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+        "404":
+          description: No client exists at the requested path.
+      parameters:
+        - name: clientId
+          in: path
+          description: The ID of the request client.
+          required: true
+          schema:
+            type: string
+    get:
+      summary: Return client
+      operationId: getClient
+      description: >
+        Returns the client that is specified in the request. <p> <b>Authorization:</b> Bearer token with clients.read, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/client"
+              examples:
+                retrieveClientResp:
+                  $ref: "#/components/examples/retrieveClientResp"
+        "404":
+          description: No client exists at the requested path.
+      parameters:
+        - name: clientId
+          in: path
+          description: The ID of the requested client.
+          required: true
+          schema:
+            type: string
+    put:
+      summary: Update client
+      operationId: updateClient
+      description: >
+        Updates the existing client that is specified in the request. This method performs a full replacement of the client resource. The ID may not be changed. <p> <b>Authorization:</b> Bearer token with clients.write, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: The request succeeded and the updated client object is returned. The secret is masked in the response.
+          headers:
+            Content-Type:
+              description: Type of returned content.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/client"
+              examples:
+                updateClientResp:
+                  $ref: "#/components/examples/updateClientResp"
+        "400":
+          description: The request was invalid.
+        "404":
+          description: No client exists at the requested path. The requested client could not be updated.
+      parameters:
+        - name: clientId
+          in: path
+          description: The ID of the request client.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/clientIn"
+            examples:
+              updateClientBody:
+                $ref: "#/components/examples/updateClientBody"
+        description: The client to be updated.
+        required: true
+    delete:
+      summary: Delete client
+      operationId: deleteClient
+      description: >
+        Deletes the client that is specified in the request. <p> <b>Authorization:</b> Bearer token with clients.write, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: client deleted
+        "404":
+          description: No client exists at the requested path. The requested client could not be found or was deleted successfully.
+      parameters:
+        - name: clientId
+          in: path
+          description: The ID of the request client.
+          required: true
+          schema:
+            type: string
+  "/oauth/clients/{clientId}/secret":
+    put:
+      summary: Change secret
+      operationId: updateSecret
+      description: >
+        Changes the secret for the client that is specified in the request. <p> <b>Authorization:</b> Bearer token with clients.write, clients.admin, zones.{zoneId}.admin, or equivalent (SASAdministrators) scope. </p>
+      tags:
+        - Client Administration
+      responses:
+        "200":
+          description: The request succeeded. The secret was updated.
+          content:
+            application/json:
+              examples:
+                changeSecretResp:
+                  $ref: "#/components/examples/changeSecretResp"
+          headers:
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/errorResponse"
+              examples:
+                json:
+                  $ref: "#/components/examples/updateSecretErrorResponse"
+        "404":
+          description: No client exists at the requested path. The requested client could not be updated.
+      parameters:
+        - name: clientId
+          in: path
+          description: The ID of the request client.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/clientSecretIn"
+            examples:
+              changeSecretBody:
+                $ref: "#/components/examples/changeSecretBody"
+        description: The client secret information
+        required: true
+components:
+  schemas:
+    clientIn:
+      title: Client Input
+      description: The OAuth client information that is passed as input to the POST/PUT calls.
+      type: object
+      required:
+        - client_id
+        - authorized_grant_types
+      properties:
+        client_id:
+          type: string
+          description: The client identifier that is unique within identity zone.
+        authorized_grant_types:
+          type: array
+          description: The list of grant types that can be used to obtain a token with this client. Types can include authorization_code, password, implicit, and client_credentials.
+          items:
+            type: string
+        redirect_uri:
+          type: array
+          description: The allowed URI pattern for redirect during authorization or "urn:ietf:wg:oauth:2.0:oob" for out-of-band delivery.
+          items:
+            type: string
+        scope:
+          type: array
+          description: The list of scopes allowed for the client to obtain on behalf of users, when using any grant type other than "client_credentials". For most SAS Viya APIs, "openid" and "uaa.user" are sufficient. For client applications that only use the grant type "client_credentials" and therefore do not act on behalf of users, use the default scope "uaa.none".
+          items:
+            type: string
+        resource_ids:
+          type: array
+          description: The resources that the client is allowed to access.
+          items:
+            type: string
+        authorities:
+          type: array
+          description: The list of groups the client is a member of, to access resources and endpoints.
+          items:
+            type: string
+        autoapprove:
+          type: array
+          description: The scopes that do not require user approval, or a simple Boolean value to apply to all scopes.
+          items:
+            type: string
+        access_token_validity:
+          type: integer
+          description: The time in seconds to access token expiration after it is issued.
+        refresh_token_validity:
+          type: integer
+          description: The time in seconds to refresh token expiration after it is issued.
+        allowedproviders:
+          type: array
+          description: The list of the origin keys (alias) for identity providers that the client is limited to. Null implies any identity provider is allowed.
+          items:
+            type: string
+        name:
+          type: string
+          description: The human-readable name for the client.
+        token_salt:
+          type: string
+          description: A random string that is used to generate the client's revocation key. Change this value to revoke all active tokens for the client.
+        createdwith:
+          type: string
+          description: The scope that the bearer token had when the client was created.
+        approvals_deleted:
+          type: boolean
+          description: An indication whether the approvals were deleted for the client and an audit event was sent.
+        required_user_groups:
+          type: array
+          description: A list of group names. If a user does not belong to all the required groups, the user will not be authenticated and no tokens are issued to this client for that user. If this field is not specified, authentication and token issuance proceeds normally.
+          items:
+            type: string
+        client_secret:
+          type: string
+          description: The secret string used for authenticating as this client. To support secret rotation this can be a space-delimited string of two secrets. This is required if the client allows authorization_code or client_credentials grant type.
+    client:
+      title: Client
+      description: The OAuth client information that is returned from the server response.
+      allOf:
+        - $ref: "#/components/schemas/clientIn"
+        - type: object
+          properties:
+            lastModified:
+              type: integer
+              description: The epoch (milliseconds) of the moment the client information was last altered.
+    clientCollection:
+      type: object
+      title: Client Collection
+      description: Collection of Clients.
+      properties:
+        startIndex:
+          type: integer
+        itemsPerPage:
+          type: integer
+        totalResults:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/client"
+    clientSecretIn:
+      title: Client Secret
+      description: The client secret information.
+      type: object
+      required:
+        - clientId
+        - secret
+      properties:
+        clientId:
+          type: string
+          description: The client identifier that is unique within identity zone.
+        oldSecret:
+          type: string
+          description: The valid client secret before updating. This is optional if authenticated as an admin client. Otherwise, it is required.
+        secret:
+          type: string
+          description: The new client secret.
+        changeMode:
+          type: string
+          description: (Optional) The default is UPDATE. If change mode is set to ADD, then the new secret is added to the existing one. If the change mode is set to DELETE, then the old secret is deleted to support secret rotation. Only two client secrets are supported at any given time.
+    link:
+      title: Link
+      description: A link to a related operation or resource.
+      required:
+        - rel
+      properties:
+        method:
+          type: string
+          description: The HTTP method to invoke this endpoint.
+        rel:
+          type: string
+          description: The relationship of this URL to the object.
+        uri:
+          type: string
+          description: The relative URI of the REST endpoint.
+        href:
+          type: string
+          description: The full URL of the REST endpoint.
+        title:
+          type: string
+          description: The title for the link.
+        type:
+          type: string
+          description: The media type consumed/produced.
+        itemType:
+          type: string
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+        responseType:
+          type: string
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+        responseItemType:
+          type: string
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+    links:
+      title: Links
+      description: A list of links related to an operation or resource
+      properties:
+        version:
+          type: integer
+          description: The version of the links model.
+          default: 1
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/link"
+    errorResponse:
+      title: Error
+      description: The representation of an error.
+      required:
+        - httpStatusCode
+        - version
+      properties:
+        message:
+          type: string
+          description: The error message.
+        id:
+          type: string
+          description: The string ID for the error.
+        errorCode:
+          type: integer
+          description: The numeric ID for the error.
+        httpStatusCode:
+          type: integer
+          description: The HTTP status code for the error.
+        details:
+          type: array
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+        remediation:
+          type: string
+          description: A message that describes how to resolve the error.
+        errors:
+          type: array
+          description: Any additional errors that occurred
+          items:
+            $ref: "#/components/schemas/errorResponse"
+        links:
+          type: array
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the error representation. This representation is version 2.
+  examples:
+    rootLinks:
+      summary: List of root links
+      description: Get root links
+      value:
+        links:
+          - method: GET
+            rel: info
+            href: /SASLogon/info
+            uri: /SASLogon/info
+            type: application/json
+        version: 1
+    grantClientCredentialsBody:
+      summary: Request Body
+      description: An example of a request body for obtaining an access token using its client credentials
+      value:
+        grant_type: client_credentials
+    grantClientCredentialsResp:
+      summary: Obtain Access Token Using Client Credentials
+      description: An example of a client application obtaining an access token using its client credentials
+      value:
+        access_token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxlZ2FjeS10b2tlbi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJqdGkiOiIzMjJmZGIyOTAyYzg0YTUxYTY2N2I5MGI5OWZhMWYwNiIsInN1YiI6ImFwcCIsImF1dGhvcml0aWVzIjpbInVhYS5ub25lIl0sInNjb3BlIjpbInVhYS5ub25lIl0sImNsaWVudF9pZCI6ImFwcCIsImNpZCI6ImFwcCIsImF6cCI6ImFwcCIsImdyYW50X3R5cGUiOiJjbGllbnRfY3JlZGVudGlhbHMiLCJyZXZfc2lnIjoiNjY4ZjYzYjkiLCJpYXQiOjE1MjIxNjY2MTEsImV4cCI6MTUyMjIwOTgxMSwiaXNzIjoiaHR0cHM6Ly9leGFtcGxlLnNhcy5jb20vU0FTTG9nb24vb2F1dGgvdG9rZW4iLCJ6aWQiOiJ1YWEiLCJhdWQiOlsiYXBwIl19.VPuBsB2Yod-OKtt87nhjPFlkkhG3eN48CvFkbxvWli5hDYMihTmTBVTSuAAdqaZoesNwSICYWmjBbS0FJkIp5kNKxuxb8sEtwUa8zVS5FZy0D9Ocir1mS5Fgz7ox0u6YQDXKe_mC6tij8YaYzRxJiS-fcVe6vCaRjXHbIRqVQ3U
+        token_type: bearer
+        expires_in: 43199
+        scope: uaa.none
+        revocable: false
+        jti: 322fdb2902c84a51a667b90b99fa1f06
+    grantPasswordCredentialsBody:
+      summary: Request Body
+      description: An example of a request body for obtaining an access token on behalf of an end user by providing the users password credentials
+      value:
+        grant_type: password
+        username: bob
+        password: bobspassword
+    grantPasswordCredentialsResp:
+      summary: Obtain an Access Token Using Resource Owner Password Credentials
+      description: An example of a client application obtaining an access token on behalf of an end user by providing the users password credentials
+      value:
+        access_token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxlZ2FjeS10b2tlbi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJqdGkiOiIzNTM4ZTQxNTEyNDY0NmU3YTJiZjA1NDBlNTM3MjNlNSIsInN1YiI6IjAzMzNiODlkLTc5MjUtNDllZS04N2Y3LTQ4YzY1Mzg2N2RlZCIsInNjb3BlIjpbIm9wZW5pZCIsImdyb3VwMSIsImdyb3VwMiIsImdyb3VwMyJdLCJjbGllbnRfaWQiOiJhcHAiLCJjaWQiOiJhcHAiLCJhenAiOiJhcHAiLCJncmFudF90eXBlIjoicGFzc3dvcmQiLCJ1c2VyX2lkIjoiMDMzM2I4OWQtNzkyNS00OWVlLTg3ZjctNDhjNjUzODY3ZGVkIiwib3JpZ2luIjoidWFhIiwidXNlcl9uYW1lIjoiYm9iIiwiZW1haWwiOiJub25lIiwiYXV0aF90aW1lIjoxNTIyMTY3MTY3LCJyZXZfc2lnIjoiOWEzYzI0ZWQiLCJpYXQiOjE1MjIxNjcxNjcsImV4cCI6MTUyMjIxMDM2NywiaXNzIjoiaHR0cHM6Ly9leGFtcGxlLnNhcy5jb20vU0FTTG9nb24vb2F1dGgvdG9rZW4iLCJ6aWQiOiJ1YWEiLCJhdWQiOlsiYXBwIiwib3BlbmlkIl19.EOpYXf5acyiTn1wY5Tjr9vdu5Ez_UyPnYriMPlR9DkDTPtxxphdCiQweMEx8bjevWmFhDV-m4MDFm9F551F36cyhkpaXq39Xu6My_iDdc-xdAMvm04PHhz6p2NDSjCrmg9L5remIK-WQDyN3klkKNQvuN2V8jklVoXVMj_bBgpg
+        id_token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxlZ2FjeS10b2tlbi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJqdGkiOiIzNTM4ZTQxNTEyNDY0NmU3YTJiZjA1NDBlNTM3MjNlNSIsInN1YiI6IjAzMzNiODlkLTc5MjUtNDllZS04N2Y3LTQ4YzY1Mzg2N2RlZCIsInNjb3BlIjpbIm9wZW5pZCIsImdyb3VwMSIsImdyb3VwMiIsImdyb3VwMyJdLCJjbGllbnRfaWQiOiJhcHAiLCJjaWQiOiJhcHAiLCJhenAiOiJhcHAiLCJncmFudF90eXBlIjoicGFzc3dvcmQiLCJ1c2VyX2lkIjoiMDMzM2I4OWQtNzkyNS00OWVlLTg3ZjctNDhjNjUzODY3ZGVkIiwib3JpZ2luIjoidWFhIiwidXNlcl9uYW1lIjoiYm9iIiwiZW1haWwiOiJub25lIiwiYXV0aF90aW1lIjoxNTIyMTY3MTY3LCJyZXZfc2lnIjoiOWEzYzI0ZWQiLCJpYXQiOjE1MjIxNjcxNjcsImV4cCI6MTUyMjIxMDM2NywiaXNzIjoiaHR0cHM6Ly9leGFtcGxlLnNhcy5jb20vU0FTTG9nb24vb2F1dGgvdG9rZW4iLCJ6aWQiOiJ1YWEiLCJhdWQiOlsiYXBwIiwib3BlbmlkIl19.EOpYXf5acyiTn1wY5Tjr9vdu5Ez_UyPnYriMPlR9DkDTPtxxphdCiQweMEx8bjevWmFhDV-m4MDFm9F551F36cyhkpaXq39Xu6My_iDdc-xdAMvm04PHhz6p2NDSjCrmg9L5remIK-WQDyN3klkKNQvuN2V8jklVoXVMj_bBgpg
+        refresh_token: dfd22292eaf447c4af633ff589f8c899-r
+        token_type: bearer
+        expires_in: 43199
+        scope: openid group1 group2 group3
+        refresh_expires_in: 1209599
+        refresh_revocable: true
+        revocable: false
+        jti: 322fdb2902c84a51a667b90b99fa1f06
+    grantAuthorizationCodeBody:
+      summary: Obtain an Access Token Using an authorization code request body
+      description: An example of a request body for obtaining an access token on behalf of an end user by providing an authorization code
+      value:
+        grant_type: authorization_code
+        code: UJOjs7dWkEfoS45EHHRZTvFT6B0iJjoS
+    grantAuthorizationCodeResp:
+      summary: Obtain an Access Token Using an authorization code response
+      description: An example of a client application obtaining an access token on behalf of an end user by providing the users password credentials
+      value:
+        access_token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxlZ2FjeS10b2tlbi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJqdGkiOiIzNTM4ZTQxNTEyNDY0NmU3YTJiZjA1NDBlNTM3MjNlNSIsInN1YiI6IjAzMzNiODlkLTc5MjUtNDllZS04N2Y3LTQ4YzY1Mzg2N2RlZCIsInNjb3BlIjpbIm9wZW5pZCIsImdyb3VwMSIsImdyb3VwMiIsImdyb3VwMyJdLCJjbGllbnRfaWQiOiJhcHAiLCJjaWQiOiJhcHAiLCJhenAiOiJhcHAiLCJncmFudF90eXBlIjoicGFzc3dvcmQiLCJ1c2VyX2lkIjoiMDMzM2I4OWQtNzkyNS00OWVlLTg3ZjctNDhjNjUzODY3ZGVkIiwib3JpZ2luIjoidWFhIiwidXNlcl9uYW1lIjoiYm9iIiwiZW1haWwiOiJub25lIiwiYXV0aF90aW1lIjoxNTIyMTY3MTY3LCJyZXZfc2lnIjoiOWEzYzI0ZWQiLCJpYXQiOjE1MjIxNjcxNjcsImV4cCI6MTUyMjIxMDM2NywiaXNzIjoiaHR0cHM6Ly9leGFtcGxlLnNhcy5jb20vU0FTTG9nb24vb2F1dGgvdG9rZW4iLCJ6aWQiOiJ1YWEiLCJhdWQiOlsiYXBwIiwib3BlbmlkIl19.EOpYXf5acyiTn1wY5Tjr9vdu5Ez_UyPnYriMPlR9DkDTPtxxphdCiQweMEx8bjevWmFhDV-m4MDFm9F551F36cyhkpaXq39Xu6My_iDdc-xdAMvm04PHhz6p2NDSjCrmg9L5remIK-WQDyN3klkKNQvuN2V8jklVoXVMj_bBgpg
+        id_token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxlZ2FjeS10b2tlbi1rZXkiLCJ0eXAiOiJKV1QifQ.eyJqdGkiOiIzNTM4ZTQxNTEyNDY0NmU3YTJiZjA1NDBlNTM3MjNlNSIsInN1YiI6IjAzMzNiODlkLTc5MjUtNDllZS04N2Y3LTQ4YzY1Mzg2N2RlZCIsInNjb3BlIjpbIm9wZW5pZCIsImdyb3VwMSIsImdyb3VwMiIsImdyb3VwMyJdLCJjbGllbnRfaWQiOiJhcHAiLCJjaWQiOiJhcHAiLCJhenAiOiJhcHAiLCJncmFudF90eXBlIjoicGFzc3dvcmQiLCJ1c2VyX2lkIjoiMDMzM2I4OWQtNzkyNS00OWVlLTg3ZjctNDhjNjUzODY3ZGVkIiwib3JpZ2luIjoidWFhIiwidXNlcl9uYW1lIjoiYm9iIiwiZW1haWwiOiJub25lIiwiYXV0aF90aW1lIjoxNTIyMTY3MTY3LCJyZXZfc2lnIjoiOWEzYzI0ZWQiLCJpYXQiOjE1MjIxNjcxNjcsImV4cCI6MTUyMjIxMDM2NywiaXNzIjoiaHR0cHM6Ly9leGFtcGxlLnNhcy5jb20vU0FTTG9nb24vb2F1dGgvdG9rZW4iLCJ6aWQiOiJ1YWEiLCJhdWQiOlsiYXBwIiwib3BlbmlkIl19.EOpYXf5acyiTn1wY5Tjr9vdu5Ez_UyPnYriMPlR9DkDTPtxxphdCiQweMEx8bjevWmFhDV-m4MDFm9F551F36cyhkpaXq39Xu6My_iDdc-xdAMvm04PHhz6p2NDSjCrmg9L5remIK-WQDyN3klkKNQvuN2V8jklVoXVMj_bBgpg
+        refresh_token: dfd22292eaf447c4af633ff589f8c899-r
+        token_type: bearer
+        expires_in: 43199
+        scope: openid group1 group2 group3
+        refresh_expires_in: 1209599
+        refresh_revocable: true
+        revocable: false
+        jti: 322fdb2902c84a51a667b90b99fa1f06
+    listClientsResp:
+      summary: List clients
+      description: A GET request to list clients.
+      value:
+        items:
+          - scope:
+              - openid
+              - uaa.user
+            client_id: app
+            resource_ids:
+              - none
+            authorized_grant_types:
+              - authorization_code
+            redirect_uri:
+              - http://example.com/app
+            autoapprove:
+              - "true"
+            authorities:
+              - uaa.none
+            name: My custom application
+            lastModified: 1548439765963
+          - scope:
+              - uaa.none
+            client_id: azure
+            resource_ids:
+              - none
+            authorized_grant_types:
+              - client_credentials
+            authorities:
+              - SCIM
+            access_token_validity: 63070000
+            name: Microsoft Azure SCIM client
+            lastModified: 1548439755441
+        startIndex: 1
+        itemsPerPage: 1
+        totalResults: 2
+        schemas:
+          - http://cloudfoundry.org/schema/scim/oauth-clients-1.0
+    retrieveClientResp:
+      summary: Retrieve client
+      description: A GET request to retrieve client.
+      value:
+        scope:
+          - openid
+          - uaa.user
+        client_id: app
+        resource_ids:
+          - none
+        authorized_grant_types:
+          - authorization_code
+        redirect_uri:
+          - http://example.com/app
+        autoapprove:
+          - "true"
+        authorities:
+          - uaa.none
+        name: My custom application
+        lastModified: 1548439765963
+    createClientBody:
+      summary: Request Body
+      description: An example of a request body for creating a client
+      value:
+        scope:
+          - openid
+          - uaa.user
+        client_id: app
+        client_secret: appclientsecret
+        resource_ids:
+          - none
+        authorized_grant_types:
+          - authorization_code
+        redirect_uri:
+          - http://example.com/app
+        autoapprove:
+          - "true"
+        authorities:
+          - uaa.none
+        name: My custom application
+    createClientResp:
+      summary: Create Client
+      description: An example of performing a POST request to create a client
+      value:
+        scope:
+          - openid
+          - uaa.user
+        client_id: app
+        resource_ids:
+          - none
+        authorized_grant_types:
+          - authorization_code
+        redirect_uri:
+          - http://example.com/app
+        autoapprove:
+          - "true"
+        authorities:
+          - uaa.none
+        name: My custom application
+        lastModified: 1548439765169
+    updateClientBody:
+      summary: Request Body
+      description: An example of a request body for updating a client
+      value:
+        scope:
+          - openid
+          - uaa.user
+        client_id: app
+        resource_ids:
+          - none
+        authorized_grant_types:
+          - authorization_code
+        redirect_uri:
+          - http://example.com/app
+        autoapprove:
+          - "true"
+        authorities:
+          - uaa.none
+        name: My custom application
+    updateClientResp:
+      summary: Update Client
+      description: An example of performing a PUT request to update a client
+      value:
+        scope:
+          - openid
+          - uaa.user
+        client_id: app
+        resource_ids:
+          - none
+        authorized_grant_types:
+          - authorization_code
+        redirect_uri:
+          - http://example.com/app
+        autoapprove:
+          - "true"
+        authorities:
+          - uaa.none
+        name: My custom application
+        lastModified: 1548439765169
+    changeSecretBody:
+      summary: Request Body
+      description: An example of a request body to change a secret.
+      value:
+        clientId: app
+        secret: new_secret
+    changeSecretResp:
+      summary: Change Secret
+      description: An example of performing a PUT request to change a secret.
+      value:
+        status: ok
+        message: secret updated
+    updateSecretErrorResponse:
+      summary: Update secret error response
+      description: Here is an example of an error response when the body is missing from a PUT request to change the client secret.
+      value:
+        errorCode: 0
+        message: The request body was missing or invalid.
+        details:
+          - "traceId: a43905a77c578fa2"
+          - "path: /SASLogon/oauth/clients/app/secret"
+        links: []
+        version: 2
+        httpStatusCode: 404

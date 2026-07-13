@@ -1,0 +1,4702 @@
+openapi: 3.0.3
+info:
+  version: "8"
+  title: Micro Analytic Score
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  termsOfService: https://www.sas.com/en_us/legal/copyright.html
+  license:
+    name: SAS Institute
+    url: https://support.sas.com/techsup/license/index.html
+  description: The Micro Analytic Score API provides stateless, memory-resident, high-performance program execution.
+servers:
+  - url: https://example.com/microanalyticScore
+    description: This is an example of a base URL.
+externalDocs:
+  description: Developer documentation
+  url: https://developer.sas.com
+security:
+  - SASLogon:
+      - openid
+tags:
+  - name: Root
+    description: Contains the operations for the Root resource.
+  - name: Modules
+    description: Contains the operations for module resources.
+  - name: Submodules
+    description: Contains the operations for submodule resources.
+  - name: Steps
+    description: Contains the operations for step resources.
+  - name: Jobs
+    description: Contains the operations for job resources.
+paths:
+  /:
+    get:
+      summary: Get a list of top-level links
+      description: Returns a list of links to the top-level collections that are surfaced through the API.  HEAD is also supported and returns status and headers only.
+      operationId: root
+      tags:
+        - Root
+      responses:
+        "200":
+          description: The request succeeded. A collection of link objects was returned.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                root:
+                  $ref: "#/components/examples/root"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                root:
+                  $ref: "#/components/examples/root"
+    head:
+      summary: Get headers for the service
+      description: Retrieves headers for the service and checks whether the service is available.
+      operationId: headersForRoot
+      tags:
+        - Root
+      responses:
+        "200":
+          description: The request succeeded. The service is available.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+  /modules:
+    get:
+      tags:
+        - Modules
+      summary: Get loaded modules
+      description: Retrieves the collection of modules that are loaded in memory by the service. Standard paging options are supported. The returned collection items are of type application/vnd.sas.microanalytic.module.
+      operationId: getModules
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first module to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of modules to return.
+          schema:
+            type: integer
+            default: 20
+        - name: filter
+          in: query
+          description: The criteria for filtering the modules. See [Filtering in REST APIs](https://developer.sas.com/apis/rest/Topics/#filters).
+          schema:
+            type: string
+            format: filter-criteria
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the modules. See [Sorting in REST APIs](https://developer.sas.com/apis/rest/Topics/#sorting).
+          schema:
+            type: string
+            format: sort-criteria
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/moduleCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetLoadedModulesResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moduleCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetLoadedModulesResponse"
+    post:
+      tags:
+        - Modules
+      summary: Create a module
+      description: "Creates and loads a module from the provided module definition and returns a representation of the loaded module. Note that the name assigned to a module ID, package, public method, or submodule must not include any of the following characters: forward slash, backslash, period, and semicolon."
+      operationId: createModule
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module.definition+json:
+            schema:
+              $ref: "#/components/schemas/moduleDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/CreateModuleRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moduleDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/CreateModuleRequest"
+        description: A definition of the module to be created.
+        required: true
+      responses:
+        "201":
+          description: The module was created.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+            Location:
+              description: The URL of the module.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/vnd.sas.microanalytic.module+json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateModuleResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateModuleResponse"
+        "400":
+          description: The request was invalid. The module was not created.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/createModuleBadRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/createModuleBadRequest"
+  "/modules/{moduleId}":
+    get:
+      tags:
+        - Modules
+      summary: Get module
+      description: For the specified module, returns detailed information including the steps that are contained in the module.
+      operationId: getModule
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to retrieve.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that is returned from a GET, POST, or PUT of this module.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The value of the 'lastModified' date of the module. If the module has been updated since this time, the update will fail.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module+json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetLoadedModuleResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetLoadedModuleResponse"
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Modules
+      summary: Get headers for module
+      description: For the specified module, returns header information for subsequent PUT or check for existence.
+      operationId: headersForModule
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to retrieve.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that is returned from a GET, POST, or PUT of this module.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The value of the 'lastModified' date of the module. If the module has been updated since this time, the update will fail.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    put:
+      tags:
+        - Modules
+      summary: Update a module
+      description: For the specified module, replaces the existing module with values from the request body. Please note, the source of the module is not replaced.
+      operationId: updateModule
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to update.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that is returned from a GET, POST, or PUT of this module.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The value of the 'lastModified' date of the module. If the module has been updated since this time, the update will fail.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module+json:
+            schema:
+              $ref: "#/components/schemas/module"
+            examples:
+              default:
+                $ref: "#/components/examples/UpdateModuleRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/module"
+            examples:
+              default:
+                $ref: "#/components/examples/UpdateModuleRequest"
+        description: The new definition of the module to load. The name of the module in the new definition must match the previously loaded name.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module+json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/UpdateModuleResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/module"
+              examples:
+                default:
+                  $ref: "#/components/examples/UpdateModuleResponse"
+        "400":
+          description: The request was invalid. The module could not be updated.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+        "412":
+          description: The If-Match request header did not match the module's Etag or the If-Unmodified-Since request header did not match the module's last modified timestamp.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/preConditionFailed"
+        "428":
+          description: The request headers did not include an If-Match or If-Unmodified-Since precondition. Set appropriate values for the If-Unmodified-Since and If-Match request headers before reattempting the request.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/updateModulePreConditionRequired"
+    delete:
+      tags:
+        - Modules
+      summary: Delete a module
+      description: Deletes the specified module.
+      operationId: deleteModule
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The module was deleted.
+  "/modules/{moduleId}/source":
+    get:
+      tags:
+        - Modules
+      summary: Get module source
+      description: Returns the source code of the specified module.
+      operationId: getModuleSource
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module that contains the source code.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module.source+json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleSourceResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleSourceResponse"
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Modules
+      summary: Get headers for module source
+      description: For the specified module, returns header information for subsequent PUT or check for existence. Since the module source is persisted as part of the module, the ETag and Last Modified Date as the same as that of the module.
+      operationId: headersForModuleSource
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module of the source to retrieve.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag that is returned from a GET, POST, or PUT of this module.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The value of the 'lastModified' date of the module. If the module has been updated since this time, the update will fail.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    put:
+      tags:
+        - Modules
+      summary: Update module source
+      description: Replaces the module source of the specified module with values in the request body.
+      operationId: updateModuleSource
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to update.
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          description: The Etag returned from a GET, POST, or PUT of this module source.
+          schema:
+            type: string
+        - name: If-Unmodified-Since
+          in: header
+          description: The value of the lastModified date of the module source. If the module source has been updated since this time, the update will fail.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module.source+json:
+            schema:
+              $ref: "#/components/schemas/moduleSource"
+            examples:
+              default:
+                $ref: "#/components/examples/UpdateModuleSourceRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moduleSource"
+            examples:
+              default:
+                $ref: "#/components/examples/UpdateModuleSourceRequest"
+        description: The new module source to load.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module.source+json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/UpdateModuleSourceResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/UpdateModuleSourceResponse"
+        "400":
+          description: The request was invalid. The module could not be updated.
+          content:
+            application/vnd.sas.microanalytic.module.source+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: The requested module could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+        "412":
+          description: The If-Match request header did not match the module's Etag or the If-Unmodified-Since request header did not match the module's last modified timestamp.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/updateModuleSourcePreConditionFailed"
+        "428":
+          description: The request header did not include an If-Match or If-Unmodified-Since precondition. Set the appropriate values for the If-Unmodified-Since and If-Match request headers before reattempting the request.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/updateModuleSourcePreConditionRequired"
+  "/modules/{moduleId}/submodules":
+    get:
+      tags:
+        - Submodules
+      summary: Get submodules for this module
+      description: Retrieves the collection of submodules contained by the specified module.
+      operationId: getSubmodules
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule collection.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The index of the first submodule to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of submodules to return.
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/submoduleCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmodulesResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/submoduleCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmodulesResponse"
+        "404":
+          description: The module that contains the submodules collection could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Submodules
+      summary: Get headers to the submodules for this module
+      description: Retrieves the headers of the collection of submodules contained by the specified module.
+      operationId: headersForSubmodules
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule collection.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The index of the first submodule to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of submodules to return.
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module.
+              schema:
+                type: string
+        "404":
+          description: The module that contains the submodules collection could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+  "/modules/{moduleId}/submodules/{submoduleId}":
+    get:
+      tags:
+        - Submodules
+      summary: Get a submodule of the module
+      description: Returns detailed information about the specified submodule of the specified module.
+      operationId: getSubmodule
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule.
+          schema:
+            type: string
+        - name: submoduleId
+          in: path
+          required: true
+          description: The identifier of the submodule.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this submodule was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this submodule.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.submodule+json:
+              schema:
+                $ref: "#/components/schemas/submodule"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmoduleResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/submodule"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmoduleResponse"
+        "404":
+          description: The requested module or submodule could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Submodules
+      summary: Get headers for a submodule of the module
+      description: Returns header information about the specified submodule of the specified module.
+      operationId: headersForSubmodule
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule.
+          schema:
+            type: string
+        - name: submoduleId
+          in: path
+          required: true
+          description: The identifier of the submodule.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this submodule was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this submodule.
+              schema:
+                type: string
+        "404":
+          description: The requested module or submodule could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+  "/modules/{moduleId}/submodules/{submoduleId}/source":
+    get:
+      tags:
+        - Submodules
+      summary: Get submodule source
+      description: Retrieves the source code for the specified submodule and module.
+      operationId: getSubmoduleSource
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule.
+          schema:
+            type: string
+        - name: submoduleId
+          in: path
+          required: true
+          description: The identifier of the submodule.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this submodule was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this submodule.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module.source+json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmoduleSource"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/moduleSource"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetSubmoduleSource"
+        "404":
+          description: The requested module or submodule could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Submodules
+      summary: Get headers for submodule source
+      description: Retrieves the header for the source code for the specified submodule and module.
+      operationId: headersForSubmoduleSource
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the submodule.
+          schema:
+            type: string
+        - name: submoduleId
+          in: path
+          required: true
+          description: The identifier of the submodule.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this submodule was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this submodule.
+              schema:
+                type: string
+        "404":
+          description: The requested module or submodule could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+  "/modules/{moduleId}/steps":
+    get:
+      tags:
+        - Steps
+      summary: Get module steps
+      description: Retrieves the collection of steps that correspond to a specific module.
+      operationId: getSteps
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the step collection.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The index of the first step to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of steps to return.
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this submodule was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this submodule.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/stepCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleStepsResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/stepCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleStepsResponse"
+        "404":
+          description: The requested module that contains the step collection could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Steps
+      summary: Get headers for module steps
+      description: Retrieves the headers for collection of steps that correspond to a specific module.
+      operationId: headersForSteps
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module that contains the step collection.
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: The index of the first step to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of steps to return.
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains the steps was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies the module that contains the step collection.
+              schema:
+                type: string
+        "404":
+          description: The requested module that contains the step collection could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+  "/modules/{moduleId}/steps/{stepId}":
+    get:
+      tags:
+        - Steps
+      summary: Get a specific step of the module
+      description: Returns detailed information about the input and output signatures used to execute a specific step of the module.
+      operationId: getStep
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module containing the step.
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          description: The identifier of the step.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this step was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this step.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.module.step+json:
+              schema:
+                $ref: "#/components/schemas/step"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleStepResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/step"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetModuleStepResponse"
+        "404":
+          description: The requested module or step could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Steps
+      summary: Get the header for a specific step of the module
+      description: Returns header information of a specific step of the module.
+      operationId: headersForStep
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          description: The identifier of the module containing the step.
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          description: The identifier of the step.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the module that contains this step was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of the module that contains this step.
+              schema:
+                type: string
+        "404":
+          description: The requested module or step could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    post:
+      tags:
+        - Steps
+      summary: Execute a step
+      description: >
+        Executes the step with the specified input values. Depending on the value that is assigned to the `waitTime` parameter, execution occurs in one of the following ways:
+
+        If the assigned value is `missing`, the call waits until the execution is complete before it
+
+        returns. The `outputs` variable in the reply contains the output of the
+
+        execution. The `executionState` variable is assigned the value
+
+        `completed` in the returned `stepOutput` object.
+
+
+        If the assigned value is a positive number, the call waits the
+
+        specified  number of milliseconds. If the execution completes within the
+
+        `waitTime` value, the `outputs` variable in the reply contains the
+
+        output of the execution and the `executionState` variable is set to
+
+        `completed`.
+
+
+        If the execution does not complete within
+
+        `waitTime` value, the `outputs` variable is empty and the
+
+        `executionState` variable is assigned the value `timedOut` in the
+
+        returned `stepOutput` object.
+
+
+
+        If the assigned value is
+
+        zero, the call returns immediately after validation. The `outputs`
+
+        variable is empty and the `executionState` variable is assigned the
+
+        value `submitted` in the returned `stepOutput` object.
+
+
+
+        If the assigned value is non-numeric or a negative value, the execution
+
+        fails with an error.
+      operationId: createStepExecution
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module that contains the step to execute.
+          required: true
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          description: The identifier of the step to execute.
+          required: true
+          schema:
+            type: string
+        - name: waitTime
+          in: query
+          description: A value that determines how to execute the step. For more information, see the operation description above and [Synchronous, Asynchronous, and Timed Execution](https://documentation.sas.com/doc/en/mascdc/default/masag/p0t6c324lr03qkn1tsjq8gcielko.htm).
+          required: false
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module.step.input+json:
+            schema:
+              $ref: "#/components/schemas/stepInput"
+            examples:
+              default:
+                $ref: "#/components/examples/ExecuteStepRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/stepInput"
+            examples:
+              default:
+                $ref: "#/components/examples/ExecuteStepRequest"
+        description: The input values to use for the execution.
+        required: true
+      responses:
+        "201":
+          description: The StepOutput was created.
+          content:
+            application/vnd.sas.microanalytic.module.step.output+json:
+              schema:
+                $ref: "#/components/schemas/stepOutput"
+              examples:
+                default:
+                  $ref: "#/components/examples/ExecuteStepResponse"
+                timedOut:
+                  $ref: "#/components/examples/ExecuteStepTimedOutResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/stepOutput"
+              examples:
+                default:
+                  $ref: "#/components/examples/ExecuteStepResponse"
+                timedOut:
+                  $ref: "#/components/examples/ExecuteStepTimedOutResponse"
+        "400":
+          description: The specified inputs were invalid. The step could not be executed.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/error2"
+                  - $ref: "#/components/schemas/microAnalyticScoreError"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: The requested module or step could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/error2"
+                  - $ref: "#/components/schemas/microAnalyticScoreError"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+  /jobs:
+    get:
+      tags:
+        - Jobs
+      summary: Get jobs
+      description: Retrieves the collection of jobs that have been submitted to the service. Standard paging options are supported.
+      operationId: getJobs
+      parameters:
+        - name: start
+          in: query
+          description: The index of the first job to return.
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          in: query
+          description: The maximum number of jobs to return.
+          schema:
+            type: integer
+            default: 20
+        - name: filter
+          in: query
+          description: The criteria for filtering the modules. See [Filtering in REST APIs](https://developer.sas.com/apis/rest/Topics/#filters).
+          schema:
+            type: string
+            format: filter-criteria
+        - name: sortBy
+          in: query
+          description: The criteria for sorting the modules. See [Sorting in REST APIs](https://developer.sas.com/apis/rest/Topics/#sorting).
+          schema:
+            type: string
+            format: sort-criteria
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/jobCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetJobsResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/jobCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetJobsResponse"
+    post:
+      tags:
+        - Jobs
+      summary: Create an asynchronous job
+      description: Create a job to asynchronously publish the submitted module definition. If moduleId is set, the specified module is updated with the submitted module definition.
+      operationId: createJob
+      parameters:
+        - name: moduleId
+          in: query
+          description: The moduleId of the existing module to update asynchronously.
+          required: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module.definition+json:
+            schema:
+              $ref: "#/components/schemas/moduleDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/CreateJobRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/moduleDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/CreateJobRequest"
+        description: A definition of the module to be applied in the update.
+        required: true
+      responses:
+        "201":
+          description: The request succeeded. The job completed compilation before the POST operation returned.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the job was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of this job.
+              schema:
+                type: string
+            Location:
+              description: The URL of the job.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/vnd.sas.microanalytic.job+json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateJobResponse201"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateJobResponse201"
+        "202":
+          description: The job accepted the module for compilation and has not completed (typical).
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the job was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies the revision of this job.
+              schema:
+                type: string
+            Location:
+              description: The URL of the job.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/vnd.sas.microanalytic.job+json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateJobResponse202"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/CreateJobResponse202"
+        "400":
+          description: The submitted module definition was invalid or the module specified by moduleId was not found. The job could not be created.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+  "/jobs/{jobId}":
+    get:
+      tags:
+        - Jobs
+      summary: Get job
+      description: Returns detailed information about the job with the specified ID.
+      operationId: getJob
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the job to retrieve.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the job was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this revision of this job.
+              schema:
+                type: string
+          content:
+            application/vnd.sas.microanalytic.job+json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetJobResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/job"
+              examples:
+                default:
+                  $ref: "#/components/examples/GetJobResponse"
+        "404":
+          description: The requested job could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Jobs
+      summary: Get headers for a job
+      description: Returns header information about the job with the specified ID.
+      operationId: headersForJob
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the job.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Last-Modified:
+              description: The timestamp (in EEE, dd MMM yyyy HH:mm:ss GMT format) that indicates when the job was last modified.
+              schema:
+                type: string
+            Etag:
+              description: The entity tag that identifies this job.
+              schema:
+                type: string
+        "404":
+          description: The requested job could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    delete:
+      tags:
+        - Jobs
+      summary: Delete job
+      description: Deletes the job with the specified ID.
+      operationId: deleteJob
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the job to delete.
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The job was deleted or not found.
+  "/commons/validations/modules/{moduleId}/steps/{stepId}":
+    post:
+      tags:
+        - Steps
+      summary: Validate step inputs
+      description: Validates input values that are used to execute the step against the expected input signature of the step. If the input is not formatted properly or does not match the input requirements of the step, one violation of each input parameter is reported.
+      operationId: createStepInputValidationResult
+      parameters:
+        - name: moduleId
+          in: path
+          description: The identifier of the module to update.
+          required: true
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          description: The identifier of the step to validate.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.microanalytic.module.step.input+json:
+            schema:
+              $ref: "#/components/schemas/stepInput"
+            examples:
+              default:
+                $ref: "#/components/examples/ValidateStepRequest"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/stepInput"
+            examples:
+              default:
+                $ref: "#/components/examples/ValidateStepRequest"
+        description: The input values to validate against the expected input signature of the step.
+        required: true
+      responses:
+        "201":
+          description: The request succeeded.
+          content:
+            application/vnd.sas.validation+json:
+              schema:
+                $ref: "#/components/schemas/validation"
+              examples:
+                default:
+                  $ref: "#/components/examples/ValidateStepResponse"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/validation"
+              examples:
+                default:
+                  $ref: "#/components/examples/ValidateStepResponse"
+        "400":
+          description: The request body is missing or invalid.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: The requested module or step could not be found.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+components:
+  headers:
+    Sas-Service-Response-Flag:
+      description: Indicates whether the response is from a SAS service.
+      schema:
+        type: boolean
+      example: true
+  schemas:
+    module:
+      title: Module
+      description: Describes a module that has been compiled and loaded by the service.
+      properties:
+        id:
+          type: string
+          description: A generated unique string that identifies a module in an installation.
+        name:
+          type: string
+          description: The name that is associated with a module.
+        revision:
+          type: integer
+          description: A whole number that indicates the revision of a module. It starts at 1 and increments by 1 each time the module is revised.
+        description:
+          type: string
+          description: Text that describes the rules and logic performed by the module.
+        scope:
+          type: string
+          description: The scope restricts how a module can be used. The value 'public' indicates the module is available to be called outside another module. The value 'private' indicates that a module can be called only from within another module.
+          enum:
+            - public
+            - private
+        language:
+          type: string
+          description: The language of the module source. DS2 indicates that the module source is written in the DS2 language.
+          enum:
+            - ds2
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The initial creation time of the module.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The last revision time of the module.
+        stepsIds:
+          type: array
+          description: An array of step IDs in the module.
+          items:
+            type: string
+        properties:
+          type: array
+          items:
+            $ref: "#/components/schemas/property"
+          description: The properties specified for the module.
+        warnings:
+          type: array
+          description: Optional object that is included if warnings are generated when this resource is compiled.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The link relations for the module.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 2.
+          default: 2
+    submodule:
+      title: Submodule
+      description: Describes a submodule that has been compiled and loaded by the service.
+      properties:
+        id:
+          type: string
+          description: A string that, together with the moduleId, uniquely identifies the submodule.
+        name:
+          type: string
+          description: The name that is associated with the submodule.
+        moduleId:
+          type: string
+          description: A unique string that identifies the module that contains this submodule.
+        language:
+          type: string
+          description: A string that describes the type or language of the submodule.
+          enum:
+            - ds2
+            - astore
+        description:
+          type: string
+          description: Text that describes the rules and logic performed by the submodule.
+        attributes:
+          type: object
+          description: Optional attributes that are determined by the language.
+          properties:
+            keyValue:
+              type: string
+              description: Contains the key value that is needed to access the keystore. It is required for ASTORE submodules and ignored for DS2 submodules.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The initial creation time of the submodule.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The last revision time of the submodule.
+        links:
+          type: array
+          description: The link relations for the submodule.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 1.
+          default: 1
+    moduleDefinition:
+      title: Module Definition
+      description: The representation of a module for module creation.
+      required:
+        - scope
+        - source
+      properties:
+        id:
+          type: string
+          description: An optional identifier for the module. If not specified, the source code of the module is parsed to determine the value of the module identifier.
+        description:
+          type: string
+          description: Optional text that describes the logic or functionality of the module.
+          default: ""
+        scope:
+          type: string
+          description: The scope restricts how a module can be used. The value 'public' indicates the module is available to be called outside another module. The value 'private' indicates that a module can be called only from within another module.
+          enum:
+            - public
+            - private
+        type:
+          type: string
+          description: Optional text that describes the source code type. Currently, the only valid value is text/vnd.sas.source.ds2.
+          enum:
+            - text/vnd.sas.source.ds2
+        source:
+          type: string
+          description: The source code of the module.
+        properties:
+          type: array
+          items:
+            $ref: "#/components/schemas/property"
+          description: Additional metadata about the module. If a property definition is not needed, this can be omitted or specified as an empty array.
+          default: []
+        submodules:
+          type: array
+          items:
+            $ref: "#/components/schemas/submoduleDefinition"
+          description: Optional list of submodules for this module.
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 2.
+          default: 2
+    submoduleDefinition:
+      title: Submodule Definition
+      description: A representation of a submodule for module creation.
+      required:
+        - language
+        - source
+      properties:
+        name:
+          type: string
+          description: An optional name of the submodule module. If not present, the source code of the submodule is parsed to determine the value of the submodule name.
+        language:
+          type: string
+          description: String that describes the type or language of the submodule.
+          enum:
+            - ds2
+            - astore
+        description:
+          type: string
+          description: Optional text that describes the logic or functionality of the submodule.
+          default: ""
+        source:
+          type: string
+          description: For DS2 modules, this must contain the source code of the module. For analytic store (ASTORE) modules, this contains the absolute path to a file that contains the ASTORE module. The file must be accessible to the Micro Analytic Service server, not the client. For a clustered deployment, the file must be accessible from each cluster member. Locating the file on a network share is one way to accomplish this.
+        attributes:
+          type: object
+          description: Optional attributes that are determined by the language.
+          properties:
+            keyValue:
+              type: string
+              description: Contains the key value that is needed to access the keystore. It is required for ASTORE submodules and ignored for DS2 submodules.
+    moduleSource:
+      title: Module Source
+      description: The source code of the module or submodule.
+      type: object
+      properties:
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 2.
+          default: 2
+        moduleId:
+          type: string
+          description: A unique string that identifies the module that contains this source.
+        submoduleId:
+          type: string
+          description: Optional unique string that identifies the submodule that contains this source. This is omitted if the source code is for a module.
+        source:
+          type: string
+          description: The source code used.
+        links:
+          type: array
+          description: A collection of links to related resources or operations.
+          items:
+            $ref: "#/components/schemas/link"
+    step:
+      title: Step
+      description: A representation of a unit of code to be executed, and its inputs and outputs.
+      type: object
+      properties:
+        id:
+          type: string
+          description: The identifier of a step that is included in the compiled module. The identifier is user-specified and is often a name for the step.
+        moduleId:
+          type: string
+          description: The identifier of the module that contains the step.
+        description:
+          type: string
+          description: Text that describes the logic performed by the step.
+        inputs:
+          type: array
+          description: Describes information about the specific input values that should be specified in the request body when a step is executed.
+          items:
+            $ref: "#/components/schemas/stepParameter"
+        outputs:
+          type: array
+          description: Describes information about the specific output values that should be expected in the response body of step execution.
+          items:
+            $ref: "#/components/schemas/stepParameter"
+        links:
+          type: array
+          description: A collection of links to related resources or operations.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 1.
+          default: 1
+    stepInput:
+      title: Step Input
+      description: Describes the input values that are required when a step is validated or executed.
+      type: object
+      required:
+        - inputs
+      properties:
+        inputs:
+          type: array
+          description: The values to pass to the step as inputs for validation or execution. The order of the variables should match the order presented in the input signature.
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/numberVariable"
+              - $ref: "#/components/schemas/stringVariable"
+              - $ref: "#/components/schemas/booleanVariable"
+              - $ref: "#/components/schemas/arrayVariable"
+              - $ref: "#/components/schemas/objectVariable"
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 1.
+          default: 1
+        metadata:
+          type: object
+          description: A map of name-value pairs that are used to pass metadata from the client to the server. For more information, see [Using Transaction Metadata during Step Execution](https://documentation.sas.com/doc/en/mascdc/default/masag/p1g5v0cgkvs318n1i3cyhy7j6j7k.htm).
+          additionalProperties:
+            type: string
+    stepOutput:
+      title: Step Output
+      description: This type describes the output values that are returned when a step is executed.
+      type: object
+      properties:
+        moduleId:
+          type: string
+          description: The identifier of the module that contains the executed step.
+        stepId:
+          type: string
+          description: The name of the step that produced this output.
+        executionState:
+          type: string
+          description: The state of execution. Valid values are 'completed', 'submitted' and 'timedOut'.
+        outputs:
+          type: array
+          description: The output values that are returned from an executed step. The order of the variables matches the order presented in the output signature.
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/numberVariable"
+              - $ref: "#/components/schemas/stringVariable"
+              - $ref: "#/components/schemas/booleanVariable"
+              - $ref: "#/components/schemas/arrayVariable"
+              - $ref: "#/components/schemas/objectVariable"
+        links:
+          type: array
+          description: The link relations for the step output.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 2.
+          default: 2
+        metadata:
+          type: object
+          description: A map of name-value pairs that are used to pass metadata from the server to the client.
+          additionalProperties:
+            type: string
+    stepParameter:
+      title: Step Parameter
+      description: An object that describes the format of an input or output to a step.
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the input or output variable.
+        type:
+          type: string
+          description: The data type of a variable. If the variable's type is (array of) integer, long, or decimal, the value must be a JSON (array of) number. If the variable's type is (array of) string or char, the value must be a JSON (array of) string. Only one-dimensional arrays are supported. Null is used to represent missing values. For DS2, decimal corresponds to the double data type.
+          enum:
+            - decimal
+            - bigint
+            - integer
+            - string
+            - binary
+            - decimalArray
+            - bigintArray
+            - integerArray
+            - stringArray
+            - binaryArray
+        size:
+          type: integer
+          description: For a string type, this field indicates the length of the string and is at least one. For non-string types, this field is ignored.
+        dim:
+          type: integer
+          description: For an array type, this field indicates the length of the array and is at least one. For non-array types, this field is ignored.
+    property:
+      title: Property
+      description: A name/value property that represents metadata for a module.
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the property.
+        value:
+          type: string
+          description: Value of the property.
+    numberVariable:
+      title: NumberVariable
+      description: A name/value pair that represents an input or output variable of type number.
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the variable.
+        value:
+          description: The value of the variable of type number.
+          type: number
+    stringVariable:
+      title: StringVariable
+      description: A name/value pair that represents an input or output variable of type String.
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the variable.
+        value:
+          description: The value of the variable of type string.
+          type: string
+        encoding:
+          type: string
+          description: The encoding of the variable value. It can be null or 'b64'.
+    booleanVariable:
+      title: BooleanVariable
+      description: A name/value pair that represents an input or output variable of type boolean.
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the variable.
+        value:
+          description: The value of the variable of type boolean.
+          type: boolean
+    arrayVariable:
+      title: ArrayVariable
+      description: A name/value pair that represents an input or output variable of type array
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the variable.
+        value:
+          description: The value of the variable of type array.
+          type: array
+    objectVariable:
+      title: ObjectVariable
+      description: A name/value pair that represents an input or output variable of type object
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the variable.
+        value:
+          description: The value of the variable of type object.
+          type: object
+    job:
+      title: Job
+      description: Describes an asynchronous job that is used to create a module.
+      type: object
+      properties:
+        id:
+          type: string
+          description: A generated unique string that identifies a job.
+        description:
+          type: string
+          description: Optional text that describes the job.
+        moduleId:
+          type: string
+          description: The ID of module that is being created or updated. This information is also logged for all the messages related to this job.
+        operation:
+          type: string
+          description: Indicates whether the job is used to create or update the module.
+          enum:
+            - create
+            - update
+        state:
+          type: string
+          description: The state of the job. It can be 'pending', 'running', 'completed', 'failed', 'cancelled'  or 'timedOut'.
+        errors:
+          type: array
+          description: Optional object that is included if compiling the provided module produced errors.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The link relations for the job.
+          items: {}
+        version:
+          type: integer
+          description: The media type's schema version number. The current version is 2.
+          default: 2
+    moduleCollection:
+      title: Module Collection
+      description: A collection of module representations.
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/module"
+              description: An array that contains module resources.
+    submoduleCollection:
+      title: Submodule Collection
+      description: A collection of submodule representations.
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/submodule"
+              description: An array that contains module resources.
+    stepCollection:
+      title: Step Collection
+      description: A collection of step representations.
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/step"
+              description: An array that contains step resources.
+    jobCollection:
+      title: Job Collection
+      description: A collection of job representations.
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          required:
+            - items
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/job"
+              description: An array that contains job resources.
+    microAnalyticScoreError:
+      title: Micro Analytic Score Error
+      description: An error with Micro Analytic Score execution.
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/error2"
+        - properties:
+            moduleId:
+              type: string
+              description: The identifier of the module in which the error occured.
+            stepId:
+              type: string
+              description: The identifier of the execution step in which the error occured.
+            timestamp:
+              type: integer
+              description: The time at which the error occured.
+            serverity:
+              type: integer
+              description: The level of the error. Possible values are NULL (0), NONE (1), NOTE (2), WARNING (3), or ERROR (4).
+            loggerName:
+              type: string
+              description: The name of the logger that printed the error.
+            threadId:
+              type: integer
+              description: The ID of the thread in which the error occured.
+            sqlState:
+              type: string
+              description: Additional error information that is related to databases.
+    baseCollection2:
+      title: Base Collection
+      description: This is a base schema used to define paginated collections of resources. This base schema is extended by other schemas in APIs by adding an 'items' array property. These extensions define the application/vnd.sas.collection media type (version 2)
+      properties:
+        name:
+          type: string
+          description: The name of the collection.
+        start:
+          type: integer
+          description: The zero-based index of the first item in the collection.
+          format: int64
+        limit:
+          type: integer
+          description: The number of items that were requested for the collection.
+        count:
+          type: integer
+          description: If populated indicates the number of items in the collection.
+          format: int64
+        accept:
+          type: string
+          description: A space-delimited list of media types from which an `Accept` header may be constructed.
+        links:
+          type: array
+          description: The links that apply to the collection.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the collection representation. This representation is version 2.
+    error2:
+      title: Error
+      type: object
+      description: The representation of an error.
+      x-sas-media-type:
+        name: application/vnd.sas.error
+        version: 2
+      required:
+        - httpStatusCode
+        - version
+      properties:
+        message:
+          type: string
+          description: The message for the error.
+        id:
+          type: string
+          description: The string ID for the error.
+        errorCode:
+          type: integer
+          description: The numeric ID for the error.
+        httpStatusCode:
+          type: integer
+          description: The HTTP status code for the error.
+        details:
+          type: array
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+        remediation:
+          type: string
+          description: A message that describes how to resolve the error.
+        errors:
+          type: array
+          description: Any additional errors that occurred.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the error representation. This representation is version 2.
+    link:
+      title: Link
+      type: object
+      description: A link to a related operation or resource.
+      required:
+        - rel
+      properties:
+        method:
+          type: string
+          description: The HTTP method for the link.
+        rel:
+          type: string
+          description: The relationship of the link to the resource.
+        uri:
+          type: string
+          description: The relative URI for the link.
+        href:
+          type: string
+          description: The URL for the link.
+        title:
+          type: string
+          description: The title for the link.
+        type:
+          type: string
+          description: The media type or link type for the link.
+        itemType:
+          type: string
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+        responseType:
+          type: string
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+        responseItemType:
+          type: string
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+    api:
+      title: API
+      description: The list of links to top-level resources and operations available from the root of the API.
+      x-sas-media-type:
+        name: application/vnd.sas.api
+        version: 1
+      required:
+        - version
+        - links
+      properties:
+        version:
+          type: integer
+          description: The version number of the API representation. This is version 1.
+          minimum: 1
+        links:
+          description: The API's top-level links.
+          type: array
+          items:
+            $ref: "#/components/schemas/link"
+    validation:
+      title: Validation Response
+      description: The response from a pre-flight validation request. For APIs which support validation, the client can run operations (typically on resources in the `/commons/validation`) with `application/vnd.sas.validation+json` as the requested response type (via the `Accept:` request header). The service will validate the request but not execute the request, and return this response to indicate if the request was valid at the time it was made.
+      x-sas-media-type:
+        name: application/vnd.sas.validation
+        version: 1
+      required:
+        - version
+        - valid
+      properties:
+        version:
+          description: This media type's schema version number. This representation is version 1.
+          type: integer
+        valid:
+          description: "`true` if and only if the validation was successful."
+          type: boolean
+        error:
+          $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: An array of links to related resources and actions.
+          items:
+            $ref: "#/components/schemas/link"
+  examples:
+    CreateModuleResponse:
+      description: Create new module response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/newmodule
+            uri: /microanalyticScore/modules/newmoudue
+            type: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: source
+            href: /microanalyticScore/modules/newmodule/source
+            uri: /microanalyticScore/modules/newmodule/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: steps
+            href: /microanalyticScore/modules/newmoudue/steps
+            uri: /microanalyticScore/modules/newmodule/steps
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module.step
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/modules/newmodule/submodules
+            uri: /microanalyticScore/modules/newmodule/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: PUT
+            rel: update
+            href: /microanalyticScore/modules/newmodule
+            uri: /microanalyticScore/modules/newmodule
+            type: application/vnd.sas.microanalytic.module
+            responseType: application/vnd.sas.microanalytic.module
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/modules/newmodule
+            uri: /microanalyticScore/modules/newmoudule
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-03T14:31:26.796Z
+        modifiedBy: sasboot
+        modifiedTimeStamp: 2022-05-03T14:31:26.796Z
+        id: newmodule
+        name: variabletest
+        revision: 0
+        description: New Module
+        scope: public
+        language: ds2
+        stepIds:
+          - variable_test
+        properties:
+          - name: NewModule property 1
+            value: NewModule property value
+          - name: NewModule property 2
+            value: ""
+        warnings: []
+    UpdateModuleRequest:
+      description: Update module request.
+      value:
+        id: SampleModule
+        version: 1
+        description: Update the SampleModule module.
+        source: >
+          package variabletest /overwrite=yes;
+           method variable_test_update(varchar(32767) in_string, bigint in_int, double in_float, bigint in_boolean, in_out varchar out_string, in_out bigint out_int, in_out double out_float, in_out bigint out_boolean);
+           out_int=in_int + 2;
+           out_float=in_float + 1.11;
+           if (in_boolean = 0) then out_boolean=1;
+           else out_boolean=0;
+           out_string=reverse(in_string);
+           end;
+           endpackage;
+        type: text/vnd.sas.source.ds2
+        properties:
+          - name: test property name
+            value: test property value
+          - name: test property name 2
+            value: ""
+        scope: public
+    GetLoadedModulesResponse:
+      description: Get loaded modules response.
+      value:
+        links:
+          - method: GET
+            rel: collection
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules?start=0&limit=20
+            uri: /microanalyticScore/modules?start=0&limit=20
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: createModule
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.microanalytic.module.definition
+            responseType: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: next
+            href: /microanalyticScore/modules?start=20&limit=20
+            uri: /microanalyticScore/modules?start=20&limit=20
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: last
+            href: /microanalyticScore/modules?start=40&limit=20
+            uri: /microanalyticScore/modules?start=40&limit=20
+            type: application/vnd.sas.collection
+        name: modules
+        accept: application/vnd.sas.microanalytic.module
+        start: 0
+        count: 45
+        items:
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/dcm_sortingalgorithm
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/dcm_sortingalgorithm/source
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/dcm_sortingalgorithm/steps
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/dcm_sortingalgorithm/submodules
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/dcm_sortingalgorithm
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/dcm_sortingalgorithm
+                uri: /microanalyticScore/modules/dcm_sortingalgorithm
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.286Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:04.286Z
+            id: dcm_sortingalgorithm
+            name: DCM_SortingAlgorithm
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - quicksortstep
+              - sort
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage
+                uri: /microanalyticScore/modules/driverpackage
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/source
+                uri: /microanalyticScore/modules/driverpackage/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/driverpackage/steps
+                uri: /microanalyticScore/modules/driverpackage/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/driverpackage
+                uri: /microanalyticScore/modules/driverpackage
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/driverpackage
+                uri: /microanalyticScore/modules/driverpackage
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:02.903Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:02.903Z
+            id: driverpackage
+            name: driverPackage
+            revision: 0
+            description: Simple driver package module
+            scope: public
+            language: ds2
+            stepIds:
+              - test_driver
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/subpackage
+                uri: /microanalyticScore/modules/subpackage
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/subpackage/source
+                uri: /microanalyticScore/modules/subpackage/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/subpackage/submodules
+                uri: /microanalyticScore/modules/subpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/subpackage
+                uri: /microanalyticScore/modules/subpackage
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/subpackage
+                uri: /microanalyticScore/modules/subpackage
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:02.804Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:03.045Z
+            id: subpackage
+            name: SUBPACKAGE
+            revision: 0
+            description: Simple subpackage module
+            scope: private
+            language: ds2
+            stepIds:
+              - test_sub
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/vmastslvl
+                uri: /microanalyticScore/modules/vmastslvl
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/vmastslvl/source
+                uri: /microanalyticScore/modules/vmastslvl/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/vmastslvl/steps
+                uri: /microanalyticScore/modules/vmastslvl/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/vmastslvl/submodules
+                uri: /microanalyticScore/modules/vmastslvl/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/vmastslvl
+                uri: /microanalyticScore/modules/vmastslvl
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/vmastslvl
+                uri: /microanalyticScore/modules/vmastslvl
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:03.275Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:03.275Z
+            id: vmastslvl
+            name: vmastslvl
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - gettslvl
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule
+                uri: /microanalyticScore/modules/samplemodule
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/samplemodule/source
+                uri: /microanalyticScore/modules/samplemodule/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/samplemodule/submodules
+                uri: /microanalyticScore/modules/samplemodule/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/samplemodule
+                uri: /microanalyticScore/modules/samplemodule
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/samplemodule
+                uri: /microanalyticScore/modules/samplemodule
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:04.062Z
+            id: samplemodule
+            name: sampleModule
+            revision: 0
+            description: Sample module
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+              - copy_varchar_array
+              - copy_int_array
+              - copy_float_array
+              - copy_bigint_array
+              - copy_arrays
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/privatesamplemodule
+                uri: /microanalyticScore/modules/privatesamplemodule
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/privatesamplemodule/source
+                uri: /microanalyticScore/modules/privatesamplemodule/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/privatesamplemodule/submodules
+                uri: /microanalyticScore/modules/privatesamplemodule/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/privatesamplemodule
+                uri: /microanalyticScore/modules/privatesamplemodule
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/privatesamplemodule
+                uri: /microanalyticScore/modules/privatesamplemodule
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.177Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:04.177Z
+            id: privatesamplemodule
+            name: sampleModule
+            revision: 0
+            description: A private version of sample module
+            scope: private
+            language: ds2
+            stepIds:
+              - copy_charn_array
+              - copy_varchar_array
+              - copy_int_array
+              - copy_float_array
+              - copy_bigint_array
+              - copy_arrays
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/astoretest
+                uri: /microanalyticScore/modules/astoretest
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/astoretest/source
+                uri: /microanalyticScore/modules/astoretest/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/astoretest/steps
+                uri: /microanalyticScore/modules/astoretest/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/astoretest/submodules
+                uri: /microanalyticScore/modules/astoretest/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/astoretest
+                uri: /microanalyticScore/modules/astoretest
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/astoretest
+                uri: /microanalyticScore/modules/astoretest
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:05.457Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:19:05.457Z
+            id: astoretest
+            name: astoretest
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - precode
+              - postcode
+              - astorescore
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test_conflict
+                uri: /microanalyticScore/modules/test_conflict
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test_conflict/source
+                uri: /microanalyticScore/modules/test_conflict/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test_conflict/steps
+                uri: /microanalyticScore/modules/test_conflict/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test_conflict/submodules
+                uri: /microanalyticScore/modules/test_conflict/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test_conflict
+                uri: /microanalyticScore/modules/test_conflict
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test_conflict
+                uri: /microanalyticScore/modules/test_conflict
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T20:49:11.323Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T20:49:11.323Z
+            id: test_conflict
+            name: test_conflict
+            revision: 0
+            scope: public
+            language: ds2
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-1
+                uri: /microanalyticScore/modules/test-module-1
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-1/source
+                uri: /microanalyticScore/modules/test-module-1/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-1/steps
+                uri: /microanalyticScore/modules/test-module-1/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-1/submodules
+                uri: /microanalyticScore/modules/test-module-1/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-1
+                uri: /microanalyticScore/modules/test-module-1
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-1
+                uri: /microanalyticScore/modules/test-module-1
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:26.536Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:26.536Z
+            id: test-module-1
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-2
+                uri: /microanalyticScore/modules/test-module-2
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-2/source
+                uri: /microanalyticScore/modules/test-module-2/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-2/steps
+                uri: /microanalyticScore/modules/test-module-2/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-2/submodules
+                uri: /microanalyticScore/modules/test-module-2/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-2
+                uri: /microanalyticScore/modules/test-module-2
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-2
+                uri: /microanalyticScore/modules/test-module-2
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:26.688Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:26.688Z
+            id: test-module-2
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-3
+                uri: /microanalyticScore/modules/test-module-3
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-3/source
+                uri: /microanalyticScore/modules/test-module-3/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-3/steps
+                uri: /microanalyticScore/modules/test-module-3/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-3/submodules
+                uri: /microanalyticScore/modules/test-module-3/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-3
+                uri: /microanalyticScore/modules/test-module-3
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-3
+                uri: /microanalyticScore/modules/test-module-3
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:26.811Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:26.811Z
+            id: test-module-3
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-4
+                uri: /microanalyticScore/modules/test-module-4
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-4/source
+                uri: /microanalyticScore/modules/test-module-4/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-4/steps
+                uri: /microanalyticScore/modules/test-module-4/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-4/submodules
+                uri: /microanalyticScore/modules/test-module-4/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-4
+                uri: /microanalyticScore/modules/test-module-4
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-4
+                uri: /microanalyticScore/modules/test-module-4
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:26.931Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:26.931Z
+            id: test-module-4
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-5
+                uri: /microanalyticScore/modules/test-module-5
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-5/source
+                uri: /microanalyticScore/modules/test-module-5/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-5/steps
+                uri: /microanalyticScore/modules/test-module-5/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-5/submodules
+                uri: /microanalyticScore/modules/test-module-5/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-5
+                uri: /microanalyticScore/modules/test-module-5
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-5
+                uri: /microanalyticScore/modules/test-module-5
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.055Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.055Z
+            id: test-module-5
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-6
+                uri: /microanalyticScore/modules/test-module-6
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-6/source
+                uri: /microanalyticScore/modules/test-module-6/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-6/steps
+                uri: /microanalyticScore/modules/test-module-6/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-6/submodules
+                uri: /microanalyticScore/modules/test-module-6/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-6
+                uri: /microanalyticScore/modules/test-module-6
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-6
+                uri: /microanalyticScore/modules/test-module-6
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.194Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.194Z
+            id: test-module-6
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-7
+                uri: /microanalyticScore/modules/test-module-7
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-7/source
+                uri: /microanalyticScore/modules/test-module-7/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-7/steps
+                uri: /microanalyticScore/modules/test-module-7/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-7/submodules
+                uri: /microanalyticScore/modules/test-module-7/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-7
+                uri: /microanalyticScore/modules/test-module-7
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-7
+                uri: /microanalyticScore/modules/test-module-7
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.313Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.313Z
+            id: test-module-7
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-8
+                uri: /microanalyticScore/modules/test-module-8
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-8/source
+                uri: /microanalyticScore/modules/test-module-8/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-8/steps
+                uri: /microanalyticScore/modules/test-module-8/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-8/submodules
+                uri: /microanalyticScore/modules/test-module-8/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-8
+                uri: /microanalyticScore/modules/test-module-8
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-8
+                uri: /microanalyticScore/modules/test-module-8
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.431Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.431Z
+            id: test-module-8
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-9
+                uri: /microanalyticScore/modules/test-module-9
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-9/source
+                uri: /microanalyticScore/modules/test-module-9/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-9/steps
+                uri: /microanalyticScore/modules/test-module-9/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-9/submodules
+                uri: /microanalyticScore/modules/test-module-9/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-9
+                uri: /microanalyticScore/modules/test-module-9
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-9
+                uri: /microanalyticScore/modules/test-module-9
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.553Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.553Z
+            id: test-module-9
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-10
+                uri: /microanalyticScore/modules/test-module-10
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-10/source
+                uri: /microanalyticScore/modules/test-module-10/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-10/steps
+                uri: /microanalyticScore/modules/test-module-10/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-10/submodules
+                uri: /microanalyticScore/modules/test-module-10/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-10
+                uri: /microanalyticScore/modules/test-module-10
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-10
+                uri: /microanalyticScore/modules/test-module-10
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.662Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.662Z
+            id: test-module-10
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-11
+                uri: /microanalyticScore/modules/test-module-11
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-11/source
+                uri: /microanalyticScore/modules/test-module-11/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-11/steps
+                uri: /microanalyticScore/modules/test-module-11/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-11/submodules
+                uri: /microanalyticScore/modules/test-module-11/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-11
+                uri: /microanalyticScore/modules/test-module-11
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-11
+                uri: /microanalyticScore/modules/test-module-11
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.790Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.790Z
+            id: test-module-11
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules
+                uri: /microanalyticScore/modules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/test-module-12
+                uri: /microanalyticScore/modules/test-module-12
+                type: application/vnd.sas.microanalytic.module
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/test-module-12/source
+                uri: /microanalyticScore/modules/test-module-12/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: steps
+                href: /microanalyticScore/modules/test-module-12/steps
+                uri: /microanalyticScore/modules/test-module-12/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/modules/test-module-12/submodules
+                uri: /microanalyticScore/modules/test-module-12/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: PUT
+                rel: update
+                href: /microanalyticScore/modules/test-module-12
+                uri: /microanalyticScore/modules/test-module-12
+                type: application/vnd.sas.microanalytic.module
+                responseType: application/vnd.sas.microanalytic.module
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/modules/test-module-12
+                uri: /microanalyticScore/modules/test-module-12
+            version: 2
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:18:27.918Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-03-15T21:18:27.918Z
+            id: test-module-12
+            name: module
+            revision: 0
+            scope: public
+            language: ds2
+            stepIds:
+              - copy_charn_array
+            warnings: []
+        limit: 20
+        version: 2
+    ExecuteStepRequest:
+      description: Execute step request.
+      value:
+        inputs:
+          - name: in_string
+            value: In String
+          - name: in_int
+            value: 1
+          - name: in_float
+            value: -0.2
+          - name: in_boolean
+            value: 1
+    CreateJobRequest:
+      description: Create job request.
+      value:
+        version: 1
+        description: Driver package job request.
+        scope: public
+        source: >
+          ds2_options sas;package driverPackage_job;method test_driver();dcl package subpackage0_job
+
+          sub0();dcl int i;i = 1;sub0.test_sub(i);end;endpackage;
+        submodules:
+          - name: subpackage0_job
+            description: sub package 0
+            language: ds2
+            source: ds2_options sas;package subpackage0_job;method test_sub(int i);end;endpackage;
+    ExecuteStepResponse:
+      description: Execute step response.
+      value:
+        links: []
+        version: 2
+        moduleId: endtoend
+        stepId: variable_test
+        executionState: completed
+        metadata:
+          module_id: endtoend
+          step_id: variable_test
+        outputs:
+          - name: out_string
+            value: gnirtS nI
+          - name: out_int
+            value: -1
+          - name: out_float
+            value: 0.9100000000000001
+          - name: out_boolean
+            value: 0
+    CreateModuleRequest:
+      description: Create module job request.
+      value:
+        id: NewModule
+        scope: public
+        version: 1
+        description: Create the NewModule module.
+        source: >
+          package variabletest /overwrite=yes;
+
+          method variable_test_update(varchar(32767) in_string, bigint in_int, double in_float, bigint in_boolean, in_out varchar out_string, in_out bigint out_int, in_out double out_float, in_out bigint out_boolean);
+
+          out_int=in_int + 2;
+
+          out_float=in_float + 1.11;
+
+          if (in_boolean = 0) then out_boolean=1;
+
+          else out_boolean=0;
+
+          out_string=reverse(in_string);
+
+          end;
+
+          endpackage;
+        type: text/vnd.sas.source.ds2
+        properties:
+          - name: NewModule property name
+            value: NewModule property value
+          - name: NewModule property name 2
+            value: ""
+    badRequest:
+      description: Bad request.
+      value:
+        httpStatusCode: 400
+        version: 2
+    updateModulePreConditionRequired:
+      description: Pre-condition required.
+      value:
+        errorCode: 1010
+        message: 'One of the following request header fields is required: "If-Match" or "If-Unmodified-Since".'
+        details:
+          - "traceId: 3053787a073a346c"
+          - "path: /microanalyticScore/modules/samplemodule/"
+        remediation: "In the request header, include one of the following: the resource's entity tag for the field \"If-Match\", or the resource's last-modified timestamp for the field \"If-Unmodified-Since\"."
+        links: []
+        httpStatusCode: 428
+        version: 2
+    ExecuteStepTimedOutResponse:
+      description: Execute step response timed out.
+      value:
+        links: []
+        version: 2
+        moduleId: endtoend
+        stepId: variable_test
+        executionState: timedOut
+    UpdateModuleSourceRequest:
+      description: Update module source request.
+      value:
+        id: endToEnd
+        version: 1
+        description: Updated source for the endToEnd module.
+        source: >
+          package endtoend /overwrite=yes;
+
+          method variable_test(varchar(32767) in_string, bigint in_int, double in_float, bigint in_boolean, in_out varchar out_string, in_out bigint out_int, in_out double out_float, in_out bigint out_boolean);
+
+          out_int=in_int - 2;
+
+          out_float=in_float + 1.11;
+
+          if (in_boolean = 0) then out_boolean=1;
+
+          else out_boolean=0;
+
+          out_string=reverse(in_string);
+
+          end;
+
+          endpackage;
+        type: text/vnd.sas.source.ds2
+        properties:
+          - name: prop1
+            value: value1
+          - name: prop3
+            value: 3
+        scope: public
+    ValidateStepResponse:
+      description: Validate step input response.
+      value:
+        version: 1
+        valid: true
+    updateModuleSourcePreConditionFailed:
+      description: Pre-condition failed.
+      value:
+        errorCode: 1010
+        message: The request header field "If-Unmodified-Since" has an earlier value (Fri, 17 Apr 2015 19:31:56 GMT) than the resource's last-modified timestamp (Thu, 05 May 2022 15:16:34 GMT).
+        details:
+          - "traceId: 84454323c93eca3d"
+          - "path: /microanalyticScore/modules/endtoend/source"
+        remediation: Get the latest representation of the resource, and apply the desired changes. Retry the operation with the modified representation and the entity tag from the response header field "ETag".
+        links: []
+        httpStatusCode: 412
+        version: 2
+    UpdateModuleResponse:
+      description: Update module response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+            type: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: source
+            href: /microanalyticScore/modules/samplemodule/source
+            uri: /microanalyticScore/modules/samplemodule/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: steps
+            href: /microanalyticScore/modules/samplemodule/steps
+            uri: /microanalyticScore/modules/samplemodule/steps
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module.step
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/modules/samplemodule/submodules
+            uri: /microanalyticScore/modules/samplemodule/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: PUT
+            rel: update
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+            type: application/vnd.sas.microanalytic.module
+            responseType: application/vnd.sas.microanalytic.module
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-03-15T21:19:04.062Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+        id: samplemodule
+        name: sampleModule
+        revision: 0
+        description: Updated sample module.
+        scope: public
+        language: ds2
+        stepIds:
+          - copy_charn_array
+          - copy_varchar_array
+          - copy_int_array
+          - copy_float_array
+          - copy_bigint_array
+          - copy_arrays
+        properties:
+          - name: test property name 2
+            value: ""
+          - name: test property name
+            value: test property value
+        warnings: []
+    CreateJobResponse201:
+      description: Create job response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: self
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            type: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: source
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/source
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/submodules
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+        version: 1
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-10T13:09:46.154Z
+        modifiedBy: sasboot
+        modifiedTimeStamp: 2022-05-10T13:09:46.154Z
+        id: d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+        description: driver package
+        moduleId: driverpackage_job
+        operation: update
+        state: completed
+        errors: []
+    root:
+      description: List of top-level links
+      value:
+        version: 1
+        links:
+          - method: GET
+            rel: modules
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module
+          - method: POST
+            rel: createModule
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.microanalytic.module.definition
+            responseType: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: jobs
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.job
+          - method: POST
+            rel: createJob
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.microanalytic.module.definition
+            responseType: application/vnd.sas.microanalytic.job
+    UpdateModuleSourceResponse:
+      description: Update module source response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules/endtoend
+            uri: /microanalyticScore/modules/endtoend
+            type: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/endtoend/source
+            uri: /microanalyticScore/modules/endtoend/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: PUT
+            rel: update
+            href: /microanalyticScore/modules/endtoend/source
+            uri: /microanalyticScore/modules/endtoend/source
+            type: application/vnd.sas.microanalytic.module.source
+            responseType: application/vnd.sas.microanalytic.module.source
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-04T13:11:25.715Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-05T15:04:22.520Z
+        moduleId: endtoend
+        source: >-
+          package endtoend /overwrite=yes;
+
+          method variable_test(varchar(32767) in_string, bigint in_int, double in_float, bigint in_boolean, in_out varchar out_string, in_out bigint out_int, in_out double out_float, in_out bigint out_boolean);
+
+          out_int=in_int - 2;
+
+          out_float=in_float + 1.11;
+
+          if (in_boolean = 0) then out_boolean=1;
+
+          else out_boolean=0;
+
+          out_string=reverse(in_string);
+
+          end;
+
+          endpackage;
+    GetJobResponse:
+      description: Get job response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: self
+            href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+            uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+            type: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: source
+            href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/source
+            uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/submodules
+            uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+            uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+          - method: GET
+            rel: module
+            href: /microanalyticScore/modules/driverpackage_job
+            uri: /microanalyticScore/modules/driverpackage_job
+            type: application/vnd.sas.microanalytic.module
+        version: 1
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-10T20:16:21.416Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-10T20:16:27.336Z
+        id: 8418e47f-0593-4fdf-9bc8-407242e4d6b9
+        description: driver package
+        moduleId: driverpackage_job
+        operation: create
+        state: completed
+        errors: []
+    createModuleBadRequest:
+      description: Bad request.
+      value:
+        errorCode: 0
+        message: The request body was missing or invalid.
+        details:
+          - "traceId: acb6c926539b5946"
+          - "path: /microanalyticScore/modules"
+        links: []
+        version: 2
+        httpStatusCode: 400
+    updateModuleSourcePreConditionRequired:
+      description: Pre-condition required.
+      value:
+        errorCode: 1010
+        message: 'One of the following request header fields is required: "If-Match" or "If-Unmodified-Since".'
+        details:
+          - "traceId: 0aa49767237e6936"
+          - "path: /microanalyticScore/modules/endtoend/source"
+        remediation: "In the request header, include one of the following: the resource's entity tag for the field \"If-Match\", or the resource's last-modified timestamp for the field \"If-Unmodified-Since\"."
+        links: []
+        httpStatusCode: 428
+        version: 2
+    GetModuleStepResponse:
+      description: Get module step response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules/samplemodule/steps
+            uri: /microanalyticScore/modules/samplemodule/steps
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module.step
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+            uri: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+            type: application/vnd.sas.microanalytic.module.step
+          - method: POST
+            rel: execute
+            href: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+            uri: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+            type: application/vnd.sas.microanalytic.module.step.input
+            responseType: application/vnd.sas.microanalytic.module.step.output
+          - method: POST
+            rel: validateStepInput
+            href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_charn_array
+            uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_charn_array
+            type: application/vnd.sas.microanalytic.module.step.input
+            responseType: application/vnd.sas.validation
+        version: 1
+        createdBy: sasdemo
+        creationTimeStamp: 2022-03-15T21:19:04.062Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+        id: copy_charn_array
+        moduleId: samplemodule
+        inputs:
+          - name: in_array
+            type: stringArray
+            dim: 4
+            size: 12
+        outputs:
+          - name: out_array
+            type: stringArray
+            dim: 4
+            size: 12
+    GetJobsResponse:
+      description: Get jobs response.
+      value:
+        links:
+          - method: GET
+            rel: collection
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /microanalyticScore/jobs?start=0&limit=20
+            uri: /microanalyticScore/jobs?start=0&limit=20
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: createJob
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.microanalytic.module.definition
+            responseType: application/vnd.sas.microanalytic.job
+        name: jobs
+        accept: application/vnd.sas.microanalytic.job
+        start: 0
+        count: 1
+        items:
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/jobs
+                uri: /microanalyticScore/jobs
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.job
+              - method: GET
+                rel: self
+                href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+                uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+                type: application/vnd.sas.microanalytic.job
+              - method: GET
+                rel: source
+                href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/source
+                uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/source
+                type: application/vnd.sas.microanalytic.module.source
+              - method: GET
+                rel: submodules
+                href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/submodules
+                uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: DELETE
+                rel: delete
+                href: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+                uri: /microanalyticScore/jobs/8418e47f-0593-4fdf-9bc8-407242e4d6b9
+              - method: GET
+                rel: module
+                href: /microanalyticScore/modules/driverpackage_job
+                uri: /microanalyticScore/modules/driverpackage_job
+                type: application/vnd.sas.microanalytic.module
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-10T20:16:21.416Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-10T20:16:27.336Z
+            id: 8418e47f-0593-4fdf-9bc8-407242e4d6b9
+            description: driver package
+            moduleId: driverpackage_job
+            operation: create
+            state: completed
+            errors: []
+        limit: 20
+        version: 2
+    GetModuleSourceResponse:
+      description: Get module source response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+            type: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/samplemodule/source
+            uri: /microanalyticScore/modules/samplemodule/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: PUT
+            rel: update
+            href: /microanalyticScore/modules/samplemodule/source
+            uri: /microanalyticScore/modules/samplemodule/source
+            type: application/vnd.sas.microanalytic.module.source
+            responseType: application/vnd.sas.microanalytic.module.source
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-03-15T21:19:04.286Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-03-15T21:19:04.286Z
+        moduleId: samplemodule
+        source: ds2_options sas; package sampleModule / overwrite=yes;   method copy_charN_array(char(12) in_array[4], in_out char(12)  out_array[4]); out_array := in_array; end;  method copy_varchar_array(varchar(512) in_array[3], in_out varchar out_array[3]); out_array := in_array; end;  method copy_int_array(int in_array[5], in_out int out_array[5]); out_array := in_array; end;  method copy_float_array(double in_array[2], in_out double out_array[2]); out_array := in_array; end;  method copy_bigint_array(bigint in_array[1], in_out bigint out_array[1]); out_array := in_array; end;  method copy_arrays(char(12) in_charN_array[4], varchar(512) in_varchar_array[1], int in_int_array[5], double in_double_array[2],  bigint in_bigint_array[1],  in_out char(12)  out_charN_array[4], in_out varchar(512) out_varchar_array[1], in_out int out_int_array[5], in_out double out_double_array[2], in_out bigint out_bigint_array[1]);  copy_charN_array(in_charN_array, out_charN_array); copy_int_array(in_int_array, out_int_array); copy_float_array(in_double_array,  out_double_array); copy_bigint_array(in_bigint_array, out_bigint_array);  end;  endpackage;
+    GetLoadedModuleResponse:
+      description: Get loaded module reponse.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules
+            uri: /microanalyticScore/modules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+            type: application/vnd.sas.microanalytic.module
+          - method: GET
+            rel: source
+            href: /microanalyticScore/modules/samplemodule/source
+            uri: /microanalyticScore/modules/samplemodule/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: steps
+            href: /microanalyticScore/modules/samplemodule/steps
+            uri: /microanalyticScore/modules/samplemodule/steps
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.module.step
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/modules/samplemodule/submodules
+            uri: /microanalyticScore/modules/samplemodule/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: PUT
+            rel: update
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+            type: application/vnd.sas.microanalytic.module
+            responseType: application/vnd.sas.microanalytic.module
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/modules/samplemodule
+            uri: /microanalyticScore/modules/samplemodule
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-03-15T21:19:04.062Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-03-15T21:19:04.062Z
+        id: samplemodule
+        name: sampleModule
+        revision: 0
+        description: Sample module
+        scope: public
+        language: ds2
+        stepIds:
+          - copy_charn_array
+          - copy_varchar_array
+          - copy_int_array
+          - copy_float_array
+          - copy_bigint_array
+          - copy_arrays
+        warnings: []
+    CreateJobResponse202:
+      description: Create job response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/jobs
+            uri: /microanalyticScore/jobs
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: self
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            type: application/vnd.sas.microanalytic.job
+          - method: GET
+            rel: source
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/source
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/source
+            type: application/vnd.sas.microanalytic.module.source
+          - method: GET
+            rel: submodules
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/submodules
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: DELETE
+            rel: delete
+            href: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+            uri: /microanalyticScore/jobs/d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+        version: 1
+        createdBy: sasboot
+        creationTimeStamp: 2022-05-10T13:09:46.154Z
+        modifiedBy: sasboot
+        modifiedTimeStamp: 2022-05-10T13:09:46.154Z
+        id: d831b1d3-fc00-49c1-ac39-a9c4ed76bbea
+        description: driver package
+        moduleId: driverpackage_job
+        operation: create
+        state: pending
+        errors: []
+    GetSubmoduleSource:
+      description: Get submodule source response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+            uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+            type: application/vnd.sas.microanalytic.submodule
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+            uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+            type: application/vnd.sas.microanalytic.module.source
+        version: 2
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-05T20:03:46.066Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+        moduleId: driverpackage
+        submoduleId: subpackage0
+        source: ds2_options sas;package subpackage0;method test_sub(int i);end;endpackage;
+    GetSubmoduleResponse:
+      description: Get submodule response.
+      value:
+        links:
+          - method: GET
+            rel: up
+            href: /microanalyticScore/modules/driverpackage/submodules
+            uri: /microanalyticScore/modules/driverpackage/submodules
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.microanalytic.submodule
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+            uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+            type: application/vnd.sas.microanalytic.submodule
+          - method: GET
+            rel: source
+            href: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+            uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+            type: application/vnd.sas.microanalytic.module.source
+        version: 1
+        createdBy: sasdemo
+        creationTimeStamp: 2022-05-05T20:03:46.066Z
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+        moduleId: driverPackage
+        id: subpackage0
+        name: subpackage0
+        language: ds2
+        description: sub package 0
+    GetModuleStepsResponse:
+      description: Get module steps response.
+      value:
+        links:
+          - method: GET
+            rel: collection
+            href: /microanalyticScore/modules/samplemodule/steps
+            uri: /microanalyticScore/modules/samplemodule/steps
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/samplemodule/steps?start=0&limit=20
+            uri: /microanalyticScore/modules/samplemodule/steps?start=0&limit=20
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: /microanalyticScore/modules/samplemodule/steps
+            href: /microanalyticScore/modules/samplemodule/steps
+            uri: /microanalyticScore/modules/samplemodule/steps
+            type: application/vnd.sas.microanalytic.module.definition
+            responseType: application/vnd.sas.microanalytic.module
+        name: steps
+        accept: application/vnd.sas.microanalytic.module.step
+        count: 6
+        items:
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_charn_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_charn_array
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_charn_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_charn_array
+            moduleId: samplemodule
+            inputs:
+              - name: in_array
+                type: stringArray
+                dim: 4
+                size: 12
+            outputs:
+              - name: out_array
+                type: stringArray
+                dim: 4
+                size: 12
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_varchar_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_varchar_array
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_varchar_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_varchar_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_varchar_array
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_varchar_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_varchar_array
+            moduleId: samplemodule
+            inputs:
+              - name: in_array
+                type: stringArray
+                dim: 3
+                size: 512
+            outputs:
+              - name: out_array
+                type: stringArray
+                dim: 3
+                size: 0
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_int_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_int_array
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_int_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_int_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_int_array
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_int_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_int_array
+            moduleId: samplemodule
+            inputs:
+              - name: in_array
+                type: integerArray
+                dim: 5
+                size: 0
+            outputs:
+              - name: out_array
+                type: integerArray
+                dim: 5
+                size: 0
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_float_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_float_array
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_float_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_float_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_float_array
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_float_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_float_array
+            moduleId: samplemodule
+            inputs:
+              - name: in_array
+                type: decimalArray
+            dim: 2
+            size: 0
+            outputs:
+              - name: out_array
+                type: decimalArray
+                dim: 2
+                size: 0
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_bigint_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_bigint_array
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_bigint_array
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_bigint_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_bigint_array
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_bigint_array
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_bigint_array
+            moduleId: samplemodule
+            inputs:
+              - name: in_array
+                type: bigintArray
+                dim: 1
+                size: 0
+            outputs:
+              - name: out_array
+                type: bigintArray
+                dim: 1
+                size: 0
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/samplemodule/steps
+                uri: /microanalyticScore/modules/samplemodule/steps
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.module.step
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/samplemodule/steps/copy_arrays
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_arrays
+                type: application/vnd.sas.microanalytic.module.step
+              - method: POST
+                rel: execute
+                href: /microanalyticScore/modules/samplemodule/steps/copy_arrays
+                uri: /microanalyticScore/modules/samplemodule/steps/copy_arrays
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.microanalytic.module.step.output
+              - method: POST
+                rel: validateStepInput
+                href: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_arrays
+                uri: /microanalyticScore/commons/validations/modules/samplemodule/steps/copy_arrays
+                type: application/vnd.sas.microanalytic.module.step.input
+                responseType: application/vnd.sas.validation
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-03-15T21:19:04.062Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-04T19:49:02.867Z
+            id: copy_arrays
+            moduleId: samplemodule
+            inputs:
+              - name: in_charn_array
+                type: stringArray
+                dim: 4
+                size: 12
+              - name: in_varchar_array
+                type: stringArray
+                dim: 1
+                size: 512
+              - name: in_int_array
+                type: integerArray
+                dim: 5
+                size: 0
+              - name: in_double_array
+                type: decimalArray
+                dim: 2
+                size: 0
+              - name: in_bigint_array
+                type: bigintArray
+                dim: 1
+                size: 0
+            outputs:
+              - name: out_charn_array
+                type: stringArray
+                dim: 4
+                size: 12
+              - name: out_varchar_array
+                type: stringArray
+                dim: 1
+                size: 512
+              - name: out_int_array
+                type: integerArray
+                dim: 5
+                size: 0
+              - name: out_double_array
+                type: decimalArray
+                dim: 2
+                size: 0
+              - name: out_bigint_array
+                type: bigintArray
+                dim: 1
+                size: 0
+        version: 2
+    ValidateStepRequest:
+      description: Validate step input request.
+      value:
+        inputs:
+          - name: in_string
+            value: In String
+          - name: in_int
+            value: 1
+          - name: in_float
+            value: -0.2
+          - name: in_boolean
+            value: 1
+    notFound:
+      description: Not found.
+      value:
+        httpStatusCode: 404
+        version: 2
+    GetSubmodulesResponse:
+      description: Get submodules response.
+      value:
+        links:
+          - method: GET
+            rel: collection
+            href: /microanalyticScore/modules/driverpackage/submodules
+            uri: /microanalyticScore/modules/driverpackage/submodules
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /microanalyticScore/modules/driverpackage/submodules?start=0&limit=20
+            uri: /microanalyticScore/modules/driverpackage/submodules?start=0&limit=20
+            type: application/vnd.sas.collection
+        name: submodules
+        accept: application/vnd.sas.microanalytic.submodule
+        count: 10
+        items:
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage6
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage6
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage6/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage6/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage6
+            name: subpackage6
+            language: ds2
+            description: sub package 6
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage7
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage7
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage7/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage7/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage7
+            name: subpackage7
+            language: ds2
+            description: sub package 7
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage8
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage8
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage8/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage8/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage8
+            name: subpackage8
+            language: ds2
+            description: sub package 8
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage9
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage9
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage9/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage9/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage9
+            name: subpackage9
+            language: ds2
+            description: sub package 9
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage0/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage0
+            name: subpackage0
+            language: ds2
+            description: sub package 0
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage1
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage1
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage1/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage1/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage1
+            name: subpackage1
+            language: ds2
+            description: sub package 1
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage2
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage2
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage2/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage2/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage2
+            name: subpackage2
+            language: ds2
+            description: sub package 2
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage3
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage3
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage3/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage3/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage3
+            name: subpackage3
+            language: ds2
+            description: sub package 3
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage4
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage4
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage4/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage4/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage4
+            name: subpackage4
+            language: ds2
+            description: sub package 4
+          - links:
+              - method: GET
+                rel: up
+                href: /microanalyticScore/modules/driverpackage/submodules
+                uri: /microanalyticScore/modules/driverpackage/submodules
+                type: application/vnd.sas.collection
+                itemType: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: self
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage5
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage5
+                type: application/vnd.sas.microanalytic.submodule
+              - method: GET
+                rel: source
+                href: /microanalyticScore/modules/driverpackage/submodules/subpackage5/source
+                uri: /microanalyticScore/modules/driverpackage/submodules/subpackage5/source
+                type: application/vnd.sas.microanalytic.module.source
+            version: 1
+            createdBy: sasdemo
+            creationTimeStamp: 2022-05-05T20:03:46.066Z
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2022-05-05T20:03:46.066Z
+            moduleId: driverPackage
+            id: subpackage5
+            name: subpackage5
+            language: ds2
+            description: sub package 5
+        version: 2
+    preConditionFailed:
+      description: Pre-condition failed.
+      value:
+        httpStatusCode: 412
+        version: 2

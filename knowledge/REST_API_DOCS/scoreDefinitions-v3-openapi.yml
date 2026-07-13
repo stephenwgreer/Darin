@@ -1,0 +1,1292 @@
+openapi: 3.0.3
+info:
+  version: "3"
+  title: Score Definitions
+  contact:
+    name: SAS Developers
+    url: https://developer.sas.com
+    email: devex@sas.com
+  description: The Score Definitions API is used for creating and maintaining score definitions.
+servers:
+  - url: https://example.com/scoreDefinitions
+    description: This is an example of a base URL.
+tags:
+  - name: Root
+    description: Contains the operations for the root resource.
+  - name: Score Definitions
+    description: Contains operations to create, read, update, and delete score definitions.
+  - name: Code
+    description: Contains operations for generating code.
+paths:
+  /:
+    get:
+      tags:
+        - Root
+      summary: Get the links for the API
+      description: Returns the links to the top-level resources for the API.
+      operationId: root
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+          content:
+            application/vnd.sas.api+json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                root:
+                  $ref: "#/components/examples/root"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/api"
+              examples:
+                root:
+                  $ref: "#/components/examples/root"
+    head:
+      tags:
+        - Root
+      summary: Get the headers for the API
+      description: Returns the headers for the API. Also used to determine whether the service provided by the API is available.
+      operationId: headersForRoot
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+  /definitions:
+    get:
+      tags:
+        - Score Definitions
+      summary: Get a collection of the score definitions
+      description: Returns a list of the score definitions based on the specified pagination, filtering, and sorting options. The items in the list depend on the `Accept-Item` header.
+      operationId: getScoreDefinitions
+      parameters:
+        - name: Accept-Item
+          description: Used for selecting the desired item representation.
+          in: header
+          schema:
+            type: string
+            format: media-type
+            enum:
+              - application/vnd.sas.score.definition+json
+              - application/vnd.sas.score.definition.summary+json
+              - application/vnd.sas.summary+json
+            default: application/vnd.sas.summary+json
+        - name: start
+          description: Returns the index of the first score definition.
+          in: query
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: limit
+          description: Returns the maximum number of score definitions.
+          in: query
+          schema:
+            type: integer
+            format: int32
+            default: 20
+        - name: filter
+          in: query
+          description: The criteria used for filtering the score definitions. See [Filtering in REST APIs](https://developer.sas.com/rest-apis/scoreDefinitions-v3/docs/getting-started/usage-notes#filtering).
+          schema:
+            type: string
+            format: filter-criteria
+        - name: sortBy
+          in: query
+          description: The criteria used for sorting the score definitions. See [Sorting in REST APIs](https://developer.sas.com/rest-apis/scoreDefinitions-v3/docs/getting-started/usage-notes#sorting).
+          schema:
+            type: string
+            format: sort-criteria
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinitionCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionList"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinitionCollection"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionList"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.collection+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+    post:
+      tags:
+        - Score Definitions
+      summary: Create a new score definition
+      description: Creates a new score definition based on the representation in the request body.
+      operationId: createScoreDefinition
+      parameters:
+        - name: parentFolderUri
+          in: query
+          description: Adds the score definition as a member of a folder.
+          required: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.score.definition+json:
+            schema:
+              $ref: "#/components/schemas/scoreDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/scoreDefinitionFull"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/scoreDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/scoreDefinitionFull"
+        description: Score definition details that need to be created.
+        required: true
+      responses:
+        "201":
+          description: A score definition was created.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            Location:
+              description: The URL of the score definition.
+              schema:
+                type: string
+                format: uri
+            ETag:
+              description: The entity tag for the score definition.
+              schema:
+                type: string
+            Last-Modified:
+              description: The timestamp when the score definition was last modified. The timestamp is in the format `EEE, dd MMM yyyy HH:mm:ss GMT`.
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+  "/definitions/{definitionId}":
+    get:
+      tags:
+        - Score Definitions
+      summary: Get a score definition
+      description: Returns the representation of the specified score definition.
+      operationId: getScoreDefinition
+      parameters:
+        - name: definitionId
+          description: The unique identifier for the score definition.
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            ETag:
+              description: The entity tag for the score definition.
+              schema:
+                type: string
+            Last-Modified:
+              description: The timestamp when the score definition was last modified. The timestamp is in the format `EEE, dd MMM yyyy HH:mm:ss GMT`.
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+            application/vnd.sas.score.definition.summary+json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinitionDefinitionSummary"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionSummary"
+            application/vnd.sas.summary+json:
+              schema:
+                $ref: "#/components/schemas/summary"
+              examples:
+                default:
+                  $ref: "#/components/examples/summary"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+        "404":
+          description: No score definition exists at the requested path.
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+            application/vnd.sas.score.definition.summary+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+            application/vnd.sas.summary+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+    head:
+      tags:
+        - Score Definitions
+      summary: Get the headers for a score definition
+      description: Returns the headers for the specified score definition. Also used to determine whether a particular score definition exists.
+      operationId: headersForScoreDefinition
+      parameters:
+        - name: definitionId
+          description: The unique identifier for the score definition.
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            ETag:
+              description: The entity tag for the score definition.
+              schema:
+                type: string
+            Last-Modified:
+              description: The timestamp when the score definition was last modified. The timestamp is in the format `EEE, dd MMM yyyy HH:mm:ss GMT`.
+              schema:
+                type: string
+                format: date-time
+        "404":
+          description: No score definition exists at the requested path.
+    put:
+      tags:
+        - Score Definitions
+      summary: Update a score definition
+      description: Updates the specified score definition based on the representation in the request body.
+      operationId: updateScoreDefinition
+      parameters:
+        - name: definitionId
+          description: The unique identifier for the score definition.
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: If-Match
+          description: The entity tag obtained from the most recent `ETag` response header. Must match the current entity tag for the score definition.
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.score.definition+json:
+            schema:
+              $ref: "#/components/schemas/scoreDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/scoreDefinitionFull"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/scoreDefinition"
+            examples:
+              default:
+                $ref: "#/components/examples/scoreDefinitionFull"
+        description: The representation of a score definition.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            ETag:
+              description: The entity tag for the score definition.
+              schema:
+                type: string
+            Last-Modified:
+              description: The timestamp when the score definition was last modified. The timestamp is in the format `EEE, dd MMM yyyy HH:mm:ss GMT`.
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/scoreDefinition"
+              examples:
+                default:
+                  $ref: "#/components/examples/scoreDefinitionFull"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: No score definition exists at the requested path.
+          content:
+            application/vnd.sas.score.definition+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+        "412":
+          description: The `If-Match` request header did not match the resource's entity tag.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/preConditionFailed"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/preConditionFailed"
+        "428":
+          description: The request headers did not include a `If-Match` precondition.
+          content:
+            application/vnd.sas.error+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/preConditionRequired"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/preConditionRequired"
+    delete:
+      tags:
+        - Score Definitions
+      summary: Delete a score definition
+      description: Deletes the specified score definition.
+      operationId: deleteScoreDefinition
+      parameters:
+        - name: definitionId
+          description: The unique identifier for the score definition.
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The score definition was deleted.
+  "/definitions/{definitionId}/mappedCode":
+    post:
+      tags:
+        - Code
+      summary: Generate mapped code
+      description: Generates mapped code from the score definition by forwarding the request to the score object.
+      operationId: getMappedCode
+      parameters:
+        - name: definitionId
+          description: The unique identifier for the score definition.
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/vnd.sas.score.code.generation.request+json:
+            schema:
+              $ref: "#/components/schemas/scoreCodeGenerationRequest"
+            examples:
+              default:
+                $ref: "#/components/examples/generateMappedCode"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/scoreCodeGenerationRequest"
+            examples:
+              default:
+                $ref: "#/components/examples/generateMappedCode"
+        description: Representation of the score code generation request containing the score definition ID and hints.
+        required: true
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Sas-Service-Response-Flag:
+              $ref: "#/components/headers/Sas-Service-Response-Flag"
+            Location:
+              schema:
+                type: string
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/mappedCode"
+              examples:
+                default:
+                  $ref: "#/components/examples/mappedCode"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/mappedCode"
+              examples:
+                default:
+                  $ref: "#/components/examples/mappedCode"
+        "400":
+          description: The request was invalid.
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/badRequest"
+        "404":
+          description: No score definition exists at the requested path.
+          content:
+            application/vnd.sas.score.mapped.code+json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error2"
+              examples:
+                default:
+                  $ref: "#/components/examples/notFound"
+components:
+  headers:
+    Sas-Service-Response-Flag:
+      description: Indicates whether the response is coming from a SAS service.
+      schema:
+        type: boolean
+      example: true
+  examples:
+    root:
+      description: scoreDefinition root content.
+      value:
+        version: 1
+        links:
+          - method: GET
+            rel: scoreDefinitions
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.collection
+          - method: POST
+            rel: createScoreDefinition
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.score.definition
+            responseType: application/vnd.sas.score.definition
+    scoreDefinitionList:
+      description: scoreDefinition List
+      value:
+        accept: application/vnd.sas.score.definition
+        items:
+          - createdBy: sasdemo
+            creationTimeStamp: 2021-09-18T03:20:14.136294Z
+            id: 2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            inputData:
+              type: CASTable
+              serverName: cas-shared-default
+              libraryName: Public
+              tableName: HMEQ_EN
+            links:
+              - method: GET
+                rel: up
+                href: /scoreDefinitions/definitions
+                uri: /scoreDefinitions/definitions
+                type: application/vnd.sas.collection
+              - method: GET
+                rel: self
+                href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                type: application/vnd.sas.score.definition
+              - method: GET
+                rel: alternate
+                href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                type: application/vnd.sas.summary
+              - method: DELETE
+                rel: delete
+                href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+              - method: PUT
+                rel: update
+                href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+                type: application/vnd.sas.score.definition
+                responseType: application/vnd.sas.score.definition
+              - method: POST
+                rel: mappedCode
+                href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+                uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+                type: application/vnd.sas.score.code.generation.request
+                responseType: application/vnd.sas.score.mapped.code
+            mappings:
+              - variableName: fired
+                mappingType: datasource
+                mappingValue: JOB
+              - variableName: itemCount
+                mappingType: datasource
+                mappingValue: LOAN
+              - variableName: findAllRetCode
+                mappingType: datasource
+                mappingValue: MORTDUE
+            modifiedBy: sasdemo
+            modifiedTimeStamp: 2021-09-18T03:20:14.136294Z
+            name: Code_file_9130_Test_1
+            objectDescriptor:
+              name: Code_file_9130
+              type: codeFile
+              uri: http://scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            properties:
+              outputLibraryName: Public
+              outputServerName: cas-shared-default
+              tableBaseName: Code_file_9130_Test_1_Code_file_9130
+              test: "true"
+              version: "1.0"
+            version: 2
+        limit: 1
+        links:
+          - method: GET
+            rel: collection
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.summary application/vnd.sas.score.definition
+          - method: GET
+            rel: self
+            href: /scoreDefinitions/definitions?start=0&limit=1
+            uri: /scoreDefinitions/definitions?start=0&limit=1
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.score.definition
+          - method: GET
+            rel: next
+            href: /scoreDefinitions/definitions?start=1&limit=1
+            uri: /scoreDefinitions/definitions?start=1&limit=1
+            type: application/vnd.sas.collection
+            itemType: application/vnd.sas.score.definition
+        name: scoreDefinitions
+        start: 0
+        version: 2
+    scoreDefinitionFull:
+      description: scoreDefinition List
+      value:
+        createdBy: sasdemo
+        creationTimeStamp: 2021-09-18T03:20:14.136294Z
+        id: 2e585929-9334-4db9-9f52-2dbc01fc6d0f
+        inputData:
+          type: CASTable
+          serverName: cas-shared-default
+          libraryName: Public
+          tableName: HMEQ_EN
+        links:
+          - method: GET
+            rel: up
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+          - method: GET
+            rel: alternate
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.summary
+          - method: DELETE
+            rel: delete
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+          - method: PUT
+            rel: update
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+            responseType: application/vnd.sas.score.definition
+          - method: POST
+            rel: mappedCode
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            type: application/vnd.sas.score.code.generation.request
+            responseType: application/vnd.sas.score.mapped.code
+        mappings:
+          - variableName: findAllRetCode
+            mappingType: datasource
+            mappingValue: MORTDUE
+          - variableName: itemCount
+            mappingType: datasource
+            mappingValue: LOAN
+          - variableName: fired
+            mappingType: datasource
+            mappingValue: JOB
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2021-09-18T03:20:14.136294Z
+        name: Code_file_9130_Test_1
+        objectDescriptor:
+          name: Code_file_9130
+          type: codeFile
+          uri: http://decisions/codeFiles/5f7a0523-5fd8-4cba-90d1-a6971f12d220/revisions/2c99a55e-e4c9-4518-8f54-918ffc18c9a7
+        properties:
+          outputLibraryName: Public
+          outputServerName: cas-shared-default
+          tableBaseName: Code_file_9130_Test_1_Code_file_9130
+          test: "true"
+          version: "1.0"
+        version: 2
+    scoreDefinitionSummary:
+      description: scoreDefinition List
+      value:
+        createdBy: sasdemo
+        creationTimeStamp: 2021-09-18T03:20:14.136294Z
+        id: 2e585929-9334-4db9-9f52-2dbc01fc6d0f
+        links:
+          - method: GET
+            rel: up
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+          - method: GET
+            rel: alternate
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.summary
+          - method: DELETE
+            rel: delete
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+          - method: PUT
+            rel: update
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+            responseType: application/vnd.sas.score.definition
+          - method: POST
+            rel: mappedCode
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            type: application/vnd.sas.score.code.generation.request
+            responseType: application/vnd.sas.score.mapped.code
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2021-09-18T03:20:14.136294Z
+        name: Code_file_9130_Test_1
+        objectDescriptor:
+          name: Code_file_9130
+          type: codeFile
+          uri: http://decisions/codeFiles/5f7a0523-5fd8-4cba-90d1-a6971f12d220/revisions/2c99a55e-e4c9-4518-8f54-918ffc18c9a7
+        properties:
+          outputLibraryName: Public
+          outputServerName: cas-shared-default
+          tableBaseName: Code_file_9130_Test_1_Code_file_9130
+          test: "true"
+          version: "1.0"
+        version: 2
+    mappedCode:
+      description: mappedcode example
+      value:
+        code: /* DS2 code of an object, which generates an XYZ output table */
+        codeType: text/vnd.sas.source.ds2
+        outputTableName: XYZ
+        outputLibraryName: HPS
+    summary:
+      description: scoreDefinition List
+      value:
+        createdBy: sasdemo
+        creationTimeStamp: 2021-09-18T03:20:14.136294Z
+        id: 2e585929-9334-4db9-9f52-2dbc01fc6d0f
+        links:
+          - method: GET
+            rel: up
+            href: /scoreDefinitions/definitions
+            uri: /scoreDefinitions/definitions
+            type: application/vnd.sas.collection
+          - method: GET
+            rel: self
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+          - method: GET
+            rel: alternate
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.summary
+          - method: DELETE
+            rel: delete
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+          - method: PUT
+            rel: update
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f
+            type: application/vnd.sas.score.definition
+            responseType: application/vnd.sas.score.definition
+          - method: POST
+            rel: mappedCode
+            href: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            uri: /scoreDefinitions/definitions/2e585929-9334-4db9-9f52-2dbc01fc6d0f/mappedCode
+            type: application/vnd.sas.score.code.generation.request
+            responseType: application/vnd.sas.score.mapped.code
+        modifiedBy: sasdemo
+        modifiedTimeStamp: 2021-09-18T03:20:14.136294Z
+        name: Code_file_9130_Test_1
+        type: scoreDefinition
+        version: 2
+    generateMappedCode:
+      description: Generate mappedCode
+      value:
+        scoreDefinitionId: 2e585929-9334-4db9-9f52-2dbc01fc6d0f
+        hints:
+          outputLibraryName: PUBLIC
+    badRequest:
+      description: Bad request.
+      value:
+        details:
+          - "path: /scoreDefinitions/definitions"
+          - "correlator: ed99521a-e493-4bd3-81c9-7856434a4ed2"
+        errors:
+          - version: 2
+            httpStatusCode: 400
+            errorCode: 1021
+            message: The request is not valid
+        httpStatusCode: 400
+        message: The request is not valid.
+        remediation: Correct the errors and retry the request.
+        version: 2
+    notFound:
+      description: Not found.
+      value:
+        httpStatusCode: 404
+        version: 2
+    preConditionFailed:
+      description: Pre-condition failed.
+      value:
+        httpStatusCode: 412
+        version: 2
+    preConditionRequired:
+      description: Pre-condition required.
+      value:
+        httpStatusCode: 428
+        version: 2
+  schemas:
+    scoreDefinitionCollection:
+      title: Score Definition Collection
+      description: One page of the score definition representations, with optional links to first, prev, next, and last page of the list.
+      allOf:
+        - $ref: "#/components/schemas/baseCollection2"
+        - type: object
+          properties:
+            items:
+              type: array
+              description: The actual results of a query
+              items:
+                $ref: "#/components/schemas/scoreDefinition"
+    mappedCode:
+      title: Mapped Code
+      description: Executable code generated by a score object using a score definition and input data. This represents application/vnd.sas.score.mapped.code media type (version 1).
+      required:
+        - code
+        - codeType
+        - outputTableName
+        - outputLibraryName
+      properties:
+        code:
+          type: string
+          description: The executable code generated by a score object.
+        codeType:
+          type: string
+          format: media-type
+          description: The type of code.
+        outputTableName:
+          type: string
+          description: The name of the table that is generated when the code is executed.
+        outputLibraryName:
+          type: string
+          description: The name of the library where the table is generated when the code is executed.
+        version:
+          type: integer
+          readOnly: true
+          description: This media type's schema version number. This representation is version 2.
+    scoreDefinition:
+      title: Score Definition
+      description: A definition containing details about Input Data, Score Object and Mapping. This represents application/vnd.sas.score.definition media type (version 1).
+      required:
+        - name
+        - objectDescriptor
+        - inputData
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: The system-assigned unique ID for this object
+        name:
+          type: string
+          description: The score definition name
+        description:
+          type: string
+          description: The score definition description
+        createdBy:
+          type: string
+          readOnly: true
+          description: The user who created the score definition.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The date and time that the score definition was created.
+        modifiedBy:
+          type: string
+          readOnly: true
+          description: The userId of the authenticated user who last updated the score definition.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The date and time that the score definition was last modified.
+        preprocessingCode:
+          type: string
+          description: Preprocessing code that is executed before executing the Mapped Code.
+        objectDescriptor:
+          $ref: "#/components/schemas/objectDescriptor"
+        inputData:
+          $ref: "#/components/schemas/inputData"
+        mappings:
+          type: array
+          description: Array of mappings between Score Object variables and Input Data columns.
+          items:
+            $ref: "#/components/schemas/termMapping"
+        properties:
+          type: object
+          description: 'The properties for this score definition that support scoring for decisions and business rules. <ul> <li>outputServerName: The name of a Cloud Analytic Server. <li>outputLibraryName: The name of a Cloud Analytic Server library. <li>tableBaseName: The name of a table in the output library. <li>test: A flag that indicates whether the score definition is used for test scoring. Valid values are "true" and "false". </ul> These additional properties support publish validation for decisions and business rules. <ul> <li>asssetUri: The URI of the decision or business rule that is being validated. <li>publishDestination: The name of a publish destination. <li>publishType: The type of publish destination. <li>publishName: The name for publishing the asset. </ul> '
+          additionalProperties:
+            type: string
+        folderType:
+          type: string
+          readOnly: true
+          description: Indicates the kind of folder where the score definition is housed.
+        links:
+          type: array
+          readOnly: true
+          description: Zero or more links to related resources or operations.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          readOnly: true
+          description: This media type's schema version number. This representation is version 2.
+    scoreCodeGenerationRequest:
+      title: Score Code Generation Request
+      description: Request containing hints to generate mapped code using the Scoring Definition by Score Object.
+      required:
+        - scoreDefinitionId
+      properties:
+        scoreDefinitionId:
+          type: string
+          description: The score definition ID that is used for generating mapped code.
+        hints:
+          type: object
+          description: Hints for generating mapped code. The mapped code request is forwarded to the score object of the score definition. The score object should understand these hints.
+          additionalProperties:
+            type: string
+        version:
+          type: integer
+          readOnly: true
+          description: This media type's schema version number. This representation is version 2.
+    scoreDefinitionDefinitionSummary:
+      title: Score Definition Definition Summary
+      description: A definition containing details about Score Object and Properties. This represents application/vnd.sas.score.definition.summary media type (version 1).
+      required:
+        - name
+        - objectDescriptor
+      properties:
+        id:
+          type: string
+          description: The system-assigned unique ID for this object
+        name:
+          type: string
+          description: The score definition name
+        description:
+          type: string
+          description: The score definition description
+        createdBy:
+          type: string
+          description: The user who created the score definition.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The date and time that the score definition was created.
+        modifiedBy:
+          type: string
+          description: The userId of the authenticated user who last updated the score definition.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The date and time that the score definition was last modified.
+        objectDescriptor:
+          $ref: "#/components/schemas/objectDescriptor"
+        properties:
+          type: object
+          description: 'The properties for this score definition that support scoring for decisions and business rules. <ul> <li>outputServerName: The name of a Cloud Analytic Server. <li>outputLibraryName: The name of a Cloud Analytic Server library. <li>tableBaseName: The name of a table in the output library. <li>test: A flag that indicates whether the score definition is used for test scoring. Valid values are "true" and "false". </ul> These additional properties support publish validation for decisions and business rules. <ul> <li>asssetUri: The URI of the decision or business rule that is being validated. <li>publishDestination: The name of a publish destination. <li>publishType: The type of publish destination. <li>publishName: The name for publishing the asset. </ul> '
+          additionalProperties:
+            type: string
+        folderType:
+          type: string
+          description: Indicates the kind of folder where the score definition is housed.
+        links:
+          type: array
+          description: Zero or more links to related resources or operations.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: This media type's schema version number. This representation is version 2.
+    api:
+      title: API
+      description: The list of links to top-level resources and operations available from the root of the API.
+      x-sas-media-type:
+        name: application/vnd.sas.api
+        version: 1
+      required:
+        - version
+        - links
+      properties:
+        version:
+          type: integer
+          description: The version number of the API representation. This is version 1.
+          minimum: 1
+        links:
+          description: The API's top-level links.
+          type: array
+          items:
+            $ref: "#/components/schemas/link"
+    baseCollection2:
+      title: Base Collection
+      description: This is a base schema used to define paginated collections of resources. This base schema is extended by other schemas in APIs by adding an 'items' array property. These extensions define the application/vnd.sas.collection media type (version 2)
+      properties:
+        name:
+          type: string
+          description: The name of the collection.
+        start:
+          type: integer
+          description: The zero-based index of the first item in the collection.
+          format: int64
+        limit:
+          type: integer
+          description: The number of items that were requested for the collection.
+        count:
+          type: integer
+          description: If populated indicates the number of items in the collection.
+          format: int64
+        accept:
+          type: string
+          description: A space-delimited list of media types from which an `Accept` header may be constructed.
+        links:
+          type: array
+          description: The links that apply to the collection.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the collection representation. This representation is version 2.
+    summary:
+      title: Resource Summary
+      type: object
+      description: The summarized representation of a resource. Often used in collection responses when more specific details aren't needed.
+      x-sas-media-type:
+        name: application/vnd.sas.summary
+        version: 2
+      required:
+        - id
+        - links
+        - version
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the resource.
+        name:
+          type: string
+          description: The name of the resource.
+        type:
+          type: string
+          description: The type of the resource.
+        description:
+          type: string
+          description: The description of the resource.
+        typeDefName:
+          type: string
+          description: (version 2) The name of the type definition that describes the contents of this resource.
+        iconUri:
+          type: string
+          description: (version 2) The URI of an icon assigned to this resource, overrides default icons for the type.
+        createdBy:
+          type: string
+          description: The user who created the resource.
+        creationTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp in YYYY-MM-DDThh:mm:ss.sssZ format when the resource was created.
+        modifiedBy:
+          type: string
+          description: The user who most recently modified the resource.
+        modifiedTimeStamp:
+          type: string
+          format: date-time
+          description: The timestamp in YYYY-MM-DDThh:mm:ss.sssZ format when the resource was last modified.
+        links:
+          type: array
+          description: The links that apply to the resource.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the resource. This representation is version 2.
+    error2:
+      title: Error
+      type: object
+      description: The representation of an error.
+      x-sas-media-type:
+        name: application/vnd.sas.error
+        version: 2
+      required:
+        - httpStatusCode
+        - version
+      properties:
+        message:
+          type: string
+          description: The message for the error.
+        id:
+          type: string
+          description: The string ID for the error.
+        errorCode:
+          type: integer
+          description: The numeric ID for the error.
+        httpStatusCode:
+          type: integer
+          description: The HTTP status code for the error.
+        details:
+          type: array
+          description: Messages that provide additional details about the cause of the error.
+          items:
+            type: string
+        remediation:
+          type: string
+          description: A message that describes how to resolve the error.
+        errors:
+          type: array
+          description: Any additional errors that occurred.
+          items:
+            $ref: "#/components/schemas/error2"
+        links:
+          type: array
+          description: The links that apply to the error.
+          items:
+            $ref: "#/components/schemas/link"
+        version:
+          type: integer
+          description: The version number of the error representation. This representation is version 2.
+    termMapping:
+      title: Mapping
+      description: Assigning Input Data column to a variable of the generated Mapped Code of Score Object. This doesn't represent any top-level media type.
+      required:
+        - variableName
+        - mappingType
+      properties:
+        variableName:
+          type: string
+          description: Name of the Score Object's variable.
+        mappingType:
+          description: The mapping type.
+          type: string
+          format: enumeration
+          enum:
+            - datasource
+            - static
+            - expected
+        mappingValue:
+          anyOf:
+            - type: integer
+            - type: number
+            - type: array
+            - type: boolean
+            - type: object
+            - type: string
+          description: Value that is assigned to Score Object's variable. If the mappingType is dataSource then this should be column name of the Input Data. If the mappingType is static then this should be a constant value. If the mappingType is expected then this is the expected value of the output and it is always constant. Required if the mappingType is datasource.
+    link:
+      title: Link
+      type: object
+      description: A link to a related operation or resource.
+      required:
+        - rel
+      properties:
+        method:
+          type: string
+          description: The HTTP method for the link.
+        rel:
+          type: string
+          description: The relationship of the link to the resource.
+        uri:
+          type: string
+          description: The relative URI for the link.
+        href:
+          type: string
+          description: The URL for the link.
+        title:
+          type: string
+          description: The title for the link.
+        type:
+          type: string
+          description: The media type or link type for the link.
+        itemType:
+          type: string
+          description: If this is a link to a container, `itemType` is the media type or link type for the items in the container.
+        responseType:
+          type: string
+          description: The media type or link type of the response body for a `PUT`, `POST`, or `PATCH` operation.
+        responseItemType:
+          type: string
+          description: The media type or link type of the items in the response body for a `PUT`, `POST`, or `PATCH` operation.
+    objectDescriptor:
+      title: Object Descriptor
+      description: Descriptor of a Score Object whose logic is used to produce a score for Input Data. This doesn't represent any top-level media type.
+      required:
+        - uri
+      properties:
+        name:
+          type: string
+          description: Name of the Score Object.
+        type:
+          type: string
+          description: Type of the Score Object.
+        uri:
+          type: string
+          format: uri
+          description: Uri to the Score Object.
+    inputData:
+      title: Input Data
+      description: Input Data that will be scored.  This doesn't represent any top-level media type.
+      required:
+        - type
+        - serverName
+        - libraryName
+        - tableName
+      properties:
+        type:
+          type: string
+          format: enumeration
+          description: The type of input data.
+          enum:
+            - CASTable
+            - Inline
+            - Scenario
+        serverName:
+          type: string
+          description: CAS Server name where CAS table is located. Valid only if the type is CASTable.
+        libraryName:
+          type: string
+          description: CAS Library name where CAS table is located. Valid only if the type is CASTable.
+        tableName:
+          type: string
+          description: Name of the CAS table. Valid only if the type is CASTable.
+        code:
+          type: string
+          description: Code containing inline data. Valid only if the type is Inline.
+        outputTableName:
+          type: string
+          description: Name of the output table that will be generated when the inline code is executed. Valid only if the type is Inline.
