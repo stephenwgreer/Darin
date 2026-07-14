@@ -655,9 +655,9 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
 .copilot-card.lane-reactive  { border-color: color-mix(in srgb, var(--ink-interactive) 45%, transparent); }
 .copilot-card.lane-proactive { border-color: color-mix(in srgb, var(--ink-them) 45%, transparent); }
 
-/* Urgency: the boundary seal. `soon` tints the border; `now` deepens it and
-   pulses the red attention seal exactly twice on arrival, then stops. */
-.copilot-card.urgency-soon { border-color: color-mix(in srgb, var(--ink-urgent) 55%, transparent); }
+/* Urgency: the boundary seal. `now` deepens the border to the ochre seal and
+   pulses the red attention seal exactly twice on arrival, then stops. `fyi`
+   cards live in the passive side rail (see .rail-*), never here. */
 .copilot-card.urgency-now {
   border-color: color-mix(in srgb, var(--ink-urgent) 80%, transparent);
   animation: card-in 0.25s ease-out, attention-seal 0.9s ease-out 2;
@@ -757,6 +757,22 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
   text-wrap: balance;
 }
 
+/* key_fact — the payload datum, rendered largest on the card so it lands first
+   in a glance (headline says WHAT, key_fact carries the number/version/name).
+   Display serif, sized above the headline; ledger-teal ink ties it to the
+   proactive lane without becoming a signal of its own (still furniture-neutral
+   on reactive cards via the token, which the card border already disambiguates). */
+.card-key-fact {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  margin: 0.1rem 0 0.4rem;
+  text-wrap: balance;
+}
+
 /* Bullets are the "why" — subordinate to the say-this payload above them:
    capped at a readable measure, one step toward faded ink. */
 .card-bullets {
@@ -841,8 +857,7 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
   color: var(--text);
   border: 1px solid var(--border);
 }
-.urgency-soon .card-cue,
-.urgency-now  .card-cue {
+.urgency-now .card-cue {
   background: color-mix(in srgb, var(--ink-urgent) 14%, transparent);
   color: var(--ink-urgent-text);
   border-color: color-mix(in srgb, var(--ink-urgent) 45%, transparent);
@@ -870,6 +885,48 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
 .copilot-card.aged.aged-expanded .card-bullets { display: block; }
 .copilot-card.aged.aged-expanded .card-meta { display: block; }
 .copilot-card.aged.aged-expanded .say-this { display: flex; }
+
+/* ── The passive side rail (fyi ledger) ───────────────────────────────── */
+/* Commentary and ambient nudges that must not compete for the operator's
+   attention or the interrupt slot. It reads as a recessed well — a quiet ledger
+   of notes off to the side — not a second feed. Nothing here is live, so
+   nothing here pulses or seals (Ink-Means-Alive Rule): the rail is static
+   paper. Its cards are the same case pocket, one tonal step quieter. */
+.rail-section {
+  margin-bottom: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+html.bg-darin .rail-section { background: color-mix(in srgb, var(--bg-well) 88%, transparent); }
+
+.rail-title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.45rem;
+}
+
+.rail-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* Rail cards: the same pocket, quieter. No attention seal (fyi never pulses),
+   tighter padding, and the fill sits on the well so it recedes. */
+.rail-feed .copilot-card {
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-card);
+  animation: card-in 0.2s ease-out;
+}
+.rail-feed .copilot-card .card-key-fact { font-size: 1.15rem; }
 
 /* ── Post-meeting section ────────────────────────────────────────────── */
 .bucket {

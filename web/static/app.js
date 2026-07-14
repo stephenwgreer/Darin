@@ -86,6 +86,8 @@ const el = {
   btnAsk:            $('btn-ask'),
   cardFeed:          $('card-feed'),
   feedEmpty:         $('feed-empty'),
+  railSection:       $('rail-section'),
+  railFeed:          $('rail-feed'),
   postSection:       $('post-meeting-section'),
   bucketPostMeeting: $('bucket-post-meeting'),
   outputTitle:       $('output-title'),
@@ -400,8 +402,16 @@ const CARD_TYPE_LABELS = {
 
 const cardExpiryTimers = new Map(); // card id → [timeout ids]
 
+// The passive side-rail holds a bounded ledger of fyi cards (newest on top).
+const RAIL_MAX = 12;
+
 function updateFeedEmpty() {
   el.feedEmpty.hidden = el.cardFeed.children.length > 0;
+}
+
+function updateRailEmpty() {
+  const has = el.railFeed.children.length > 0;
+  el.railSection.hidden = !has;
 }
 
 function buildCardCues(cues) {
@@ -421,6 +431,7 @@ function buildCardElement(card) {
   const article = document.createElement('article');
   article.className = `copilot-card lane-${card.lane} urgency-${card.urgency}`;
   article.dataset.cardId = card.id;
+  if (card.topic_key) article.dataset.topicKey = card.topic_key;
 
   // Aged cards collapse to headline + cues; clicking the card (outside its
   // buttons) re-expands the full body.
@@ -472,6 +483,17 @@ function buildCardElement(card) {
   headline.className = 'card-headline';
   headline.textContent = card.headline;
   article.appendChild(headline);
+
+  // key_fact — the single largest datum (number, version, date, name). Sits
+  // between the headline (what happened) and the say-this (delivery), rendered
+  // biggest so it lands first in a glance. Omitted when the card has no single
+  // hero fact.
+  if (card.key_fact) {
+    const keyFact = document.createElement('div');
+    keyFact.className = 'card-key-fact';
+    keyFact.textContent = card.key_fact;
+    article.appendChild(keyFact);
+  }
 
   // Say-this renders directly under the headline: the actionable line is the
   // payload (PRODUCT.md — "say-this first"); bullets and cues are supporting
@@ -531,18 +553,67 @@ function buildCardElement(card) {
   return article;
 }
 
+// Find an already-rendered card node for a topic_key, in either surface. Used
+// by update:true so an evolving point refreshes its card instead of stacking a
+// duplicate. Empty topic_key never matches (avoids collapsing unrelated cards).
+function findCardByTopic(topicKey) {
+  if (!topicKey) return null;
+  const sel = `[data-topic-key="${CSS.escape(topicKey)}"]`;
+  return el.cardFeed.querySelector(sel) || el.railFeed.querySelector(sel);
+}
+
 function renderCard(card) {
   if (!card || !card.id) return;
+
+  // disposition:"log" cards are silent post-meeting artifacts — never surfaced
+  // live. The backend routes them to a log sink; this is the defensive guard in
+  // case one reaches the client.
+  if (card.disposition === 'log') return;
+
   if (el.cardFeed.querySelector(`[data-card-id="${CSS.escape(card.id)}"]`)) return;
 
+  // update:true refreshes the existing card on the same topic (an objection that
+  // hardened, a number that moved) rather than prepending a duplicate.
+  if (card.update) {
+    const existing = findCardByTopic(card.topic_key);
+    if (existing) {
+      const fresh = buildCardElement(card);
+      existing.replaceWith(fresh);
+      // Re-arm expiry for the refreshed proactive interrupt card.
+      const oldTimers = cardExpiryTimers.get(card.id);
+      if (oldTimers) { oldTimers.forEach(clearTimeout); cardExpiryTimers.delete(card.id); }
+      scheduleCardExpiry(card, fresh);
+      updateFeedEmpty();
+      return;
+    }
+  }
+
   const node = buildCardElement(card);
+
+  // Two surfaces (One-Interrupt Rule): urgency "fyi" is a passive side-rail
+  // item that does NOT compete for the operator's attention or the interrupt
+  // slot; everything else is an interrupt card in the main feed. The rail is a
+  // quiet ledger — newest on top, capped, no attention seals, no aging churn.
+  if (card.urgency === 'fyi') {
+    el.railFeed.prepend(node);
+    while (el.railFeed.children.length > RAIL_MAX) {
+      el.railFeed.lastElementChild.remove();
+    }
+    updateRailEmpty();
+    updateFeedEmpty();
+    return;
+  }
+
   el.cardFeed.prepend(node);
   updateFeedEmpty();
+  scheduleCardExpiry(card, node);
+}
 
-  // Proactive cards transition at expires_in_s: by default they age (dim +
-  // collapse, kept below the fresh cards); with auto_hide_expired on they fade
-  // out and are removed (old behavior). Reactive cards stay pinned until
-  // dismissed.
+// Proactive interrupt cards transition at expires_in_s: by default they age
+// (dim + collapse, kept below the fresh cards); with auto_hide_expired on they
+// fade out and are removed. Reactive cards stay pinned until dismissed. Rail
+// cards never enter here — they are passive and don't age into the feed.
+function scheduleCardExpiry(card, node) {
   if (card.lane === 'proactive') {
     const expireMs = Math.max(5, Number(card.expires_in_s) || 45) * 1000;
     const t1 = setTimeout(() => {
@@ -583,6 +654,8 @@ function clearCardFeed() {
   for (const timers of cardExpiryTimers.values()) timers.forEach(clearTimeout);
   cardExpiryTimers.clear();
   el.cardFeed.textContent = '';
+  el.railFeed.textContent = '';
+  updateRailEmpty();
   updateFeedEmpty();
 }
 
