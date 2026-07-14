@@ -10,6 +10,8 @@ from services.cards import (
     MAX_CUE_WORDS,
     MAX_CUES,
     MAX_HEADLINE_CHARS,
+    MAX_KEY_FACT_CHARS,
+    MAX_WATCHER_BULLET_CHARS,
     parse_card,
     parse_cards,
 )
@@ -76,6 +78,22 @@ class TestParseCard:
         assert len(card.bullets) == MAX_BULLETS
         assert all(len(b) <= MAX_BULLET_CHARS for b in card.bullets)
 
+    def test_proactive_lane_clamps_bullets_to_80(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "bullets": ["y" * 300]},
+            lane="proactive",
+        )
+        assert card is not None
+        assert all(len(b) <= MAX_WATCHER_BULLET_CHARS for b in card.bullets)
+
+    def test_reactive_lane_clamps_bullets_to_140(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "bullets": ["y" * 300]},
+            lane="reactive",
+        )
+        assert card is not None
+        assert all(len(b) <= MAX_BULLET_CHARS for b in card.bullets)
+
     def test_cues_parsed(self) -> None:
         card = parse_card(
             {"type": "answer", "headline": "h", "cues": ["ask pricing", "suggest OpenShift"]},
@@ -125,6 +143,132 @@ class TestParseCard:
         assert card.urgency == "fyi"
         assert card.source == "transcript"
 
+    def test_key_fact_parsed_and_clamped(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "key_fact": "x" * 100},
+            lane="reactive",
+        )
+        assert card is not None
+        assert len(card.key_fact) <= MAX_KEY_FACT_CHARS
+
+        card2 = parse_card({"type": "answer", "headline": "h"}, lane="reactive")
+        assert card2 is not None
+        assert card2.key_fact is None
+
+        card3 = parse_card(
+            {"type": "answer", "headline": "h", "key_fact": "   "}, lane="reactive"
+        )
+        assert card3 is not None
+        assert card3.key_fact is None
+
+    def test_urgency_soon_migrates_to_now(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "urgency": "soon"}, lane="reactive"
+        )
+        assert card is not None
+        assert card.urgency == "now"
+
+    def test_urgency_unknown_falls_back_to_fyi(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "urgency": "whenever"}, lane="reactive"
+        )
+        assert card is not None
+        assert card.urgency == "fyi"
+
+    def test_disposition_and_update_parsed(self) -> None:
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "disposition": "log",
+                "update": True,
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.disposition == "log"
+        assert card.update is True
+
+    def test_disposition_and_update_default(self) -> None:
+        card = parse_card({"type": "answer", "headline": "h"}, lane="reactive")
+        assert card is not None
+        assert card.disposition == "render"
+        assert card.update is False
+
+    def test_disposition_invalid_falls_back_to_render(self) -> None:
+        card = parse_card(
+            {"type": "answer", "headline": "h", "disposition": "explode"},
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.disposition == "render"
+
+    def test_medium_confidence_say_this_nulled_and_bullet_hedged(self) -> None:
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "say_this": "We already handle that.",
+                "bullets": ["Redis is included in the base license."],
+                "confidence": "medium",
+                "source": "kb",
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.say_this is None
+        assert card.bullets[0] == "Likely: Redis is included in the base license."
+
+    def test_medium_confidence_say_this_nulled_no_bullets_is_safe(self) -> None:
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "say_this": "We already handle that.",
+                "confidence": "medium",
+                "source": "kb",
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.say_this is None
+        assert card.bullets == []
+
+    def test_high_confidence_kb_source_keeps_say_this(self) -> None:
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "say_this": "We already handle that.",
+                "bullets": ["Redis is included."],
+                "confidence": "high",
+                "source": "kb",
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.say_this == "We already handle that."
+        assert card.bullets[0] == "Redis is included."
+
+    def test_high_confidence_non_gating_source_keeps_say_this_unchanged(self) -> None:
+        # Per the gate contract: only confidence != "high" triggers the
+        # null-and-hedge path, so high-confidence say_this survives even
+        # when the source isn't one of SAY_THIS_SOURCES.
+        card = parse_card(
+            {
+                "type": "answer",
+                "headline": "h",
+                "say_this": "We already handle that.",
+                "bullets": ["Redis is included."],
+                "confidence": "high",
+                "source": "knowledge",
+            },
+            lane="reactive",
+        )
+        assert card is not None
+        assert card.say_this == "We already handle that."
+        assert card.bullets[0] == "Redis is included."
+
     def test_topic_key_derived_from_headline_when_missing(self) -> None:
         card = parse_card({"type": "status", "headline": "Where We Are Now"}, lane="reactive")
         assert card is not None
@@ -158,12 +302,15 @@ class TestParseCard:
             "type",
             "trigger",
             "headline",
+            "key_fact",
             "bullets",
             "cues",
             "say_this",
             "confidence",
             "urgency",
             "source",
+            "disposition",
+            "update",
             "expires_in_s",
             "topic_key",
         ):

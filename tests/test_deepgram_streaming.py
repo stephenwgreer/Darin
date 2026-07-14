@@ -30,13 +30,20 @@ def _result(
     is_final: bool = False,
     channel: int = 0,
     total_channels: int = 2,
+    start: float = 0.0,
+    duration: float = 0.0,
+    words: list[SimpleNamespace] | None = None,
 ) -> SimpleNamespace:
     """Build a fake SDK v4 LiveResultResponse."""
     return SimpleNamespace(
         is_final=is_final,
         speech_final=False,
+        start=start,
+        duration=duration,
         channel_index=[channel, total_channels],
-        channel=SimpleNamespace(alternatives=[SimpleNamespace(transcript=transcript)]),
+        channel=SimpleNamespace(
+            alternatives=[SimpleNamespace(transcript=transcript, words=words)]
+        ),
     )
 
 
@@ -147,7 +154,9 @@ class TestAudioConversion:
 class TestTranscriptCallbacks:
     def test_final_transcript_channel0_is_me(self, client):
         received = []
-        client._on_final_transcript = lambda text, speaker: received.append((text, speaker))
+        client._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((text, speaker))
+        )
 
         client._handle_transcript(None, result=_result("Hello", is_final=True, channel=0))
 
@@ -156,7 +165,9 @@ class TestTranscriptCallbacks:
 
     def test_final_transcript_channel1_is_them(self, client):
         received = []
-        client._on_final_transcript = lambda text, speaker: received.append((text, speaker))
+        client._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((text, speaker))
+        )
 
         client._handle_transcript(None, result=_result("Hi there", is_final=True, channel=1))
 
@@ -175,7 +186,9 @@ class TestTranscriptCallbacks:
     def test_mono_client_reports_no_speaker(self):
         mono = DeepgramStreamingClient(api_key=API_KEY, channels=1)
         received = []
-        mono._on_final_transcript = lambda text, speaker: received.append((text, speaker))
+        mono._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((text, speaker))
+        )
 
         mono._handle_transcript(
             None, result=_result("Hello", is_final=True, channel=0, total_channels=1)
@@ -225,6 +238,61 @@ class TestUtteranceEnd:
         client._handle_transcript(None, result=result)
 
         assert received == []
+
+
+class TestResultTiming:
+    """Widened on_final_transcript carries (start, duration) seconds."""
+
+    def test_top_level_start_duration_passed_through(self, client):
+        received = []
+        client._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((start, duration))
+        )
+
+        client._handle_transcript(
+            None, result=_result("Hello", is_final=True, channel=0, start=12.5, duration=1.5)
+        )
+
+        assert received == [(12.5, 1.5)]
+
+    def test_falls_back_to_word_timings_when_top_level_absent(self, client):
+        received = []
+        client._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((start, duration))
+        )
+        words = [
+            SimpleNamespace(word="hello", start=3.0, end=3.4),
+            SimpleNamespace(word="there", start=3.4, end=4.1),
+        ]
+
+        client._handle_transcript(
+            None,
+            result=_result("hello there", is_final=True, channel=0, words=words),
+        )
+
+        assert len(received) == 1
+        start, duration = received[0]
+        assert start == pytest.approx(3.0)
+        assert duration == pytest.approx(1.1)
+
+    def test_no_timing_available_defaults_to_zero(self, client):
+        received = []
+        client._on_final_transcript = (
+            lambda text, speaker, start, duration: received.append((start, duration))
+        )
+
+        client._handle_transcript(None, result=_result("Hello", is_final=True, channel=0))
+
+        assert received == [(0.0, 0.0)]
+
+    def test_interim_transcript_does_not_require_timing(self, client):
+        """Interim callback keeps its original 2-arg shape — no timing needed."""
+        received = []
+        client._on_interim_transcript = lambda text, speaker: received.append((text, speaker))
+
+        client._handle_transcript(None, result=_result("Hello wor", channel=1))
+
+        assert received == [("Hello wor", "THEM")]
 
 
 # ============================================================================

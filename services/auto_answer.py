@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 QUESTION_TRIGGER = "question_at_user"
 AUTO_ANSWER_TRIGGER = "auto_answer"
+RESPONSE_EXPECTED_TRIGGERS = frozenset({"question_at_user", "response_expected", "objection"})
 
 
 class AutoAnswerPolicy:
@@ -38,7 +39,7 @@ class AutoAnswerPolicy:
     ) -> tuple[bool, str]:
         if not enabled:
             return False, "disabled"
-        if trigger != QUESTION_TRIGGER:
+        if trigger not in RESPONSE_EXPECTED_TRIGGERS:
             return False, "wrong_trigger"
         if not meeting_active:
             return False, "not_active"

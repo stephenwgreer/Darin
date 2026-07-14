@@ -7,11 +7,14 @@ A card is the atomic unit the copilot renders:
       type: "answer"|"fact_check"|"reframe"|"status"|"next_step"|"question"|
             "deep_dive"|"heads_up",
       trigger: str|null, headline: str (<=60 chars),
-      bullets: [str] (<=3, each <=140 chars),
+      key_fact: str|null (<=48 chars) — single largest datum, rendered largest,
+      bullets: [str] (<=3, each <=140 chars reactive / <=80 chars proactive),
       cues: [str] (<=3, each <=3 words) — instant-glance keywords,
       say_this: str|null,
-      confidence: "high"|"medium", urgency: "now"|"soon"|"fyi",
-      source: "transcript"|"kb"|"knowledge", expires_in_s: int, topic_key: str
+      confidence: "high"|"medium", urgency: "now"|"fyi",
+      source: "transcript"|"kb"|"knowledge",
+      disposition: "render"|"log", update: bool,
+      expires_in_s: int, topic_key: str
     }
 
 Cards are obtained by FORCED TOOL USE: every card-producing request passes
@@ -42,15 +45,24 @@ CARD_TYPES = (
     "heads_up",
 )
 CARD_CONFIDENCES = ("high", "medium")
-CARD_URGENCIES = ("now", "soon", "fyi")
+CARD_URGENCIES = ("now", "fyi")
 CARD_SOURCES = ("transcript", "kb", "knowledge")
+CARD_DISPOSITIONS = ("render", "log")
 
 MAX_HEADLINE_CHARS = 60
 MAX_BULLETS = 3
+# Reactive (user asked) bullets get more room than proactive (watcher-driven).
 MAX_BULLET_CHARS = 140
+MAX_WATCHER_BULLET_CHARS = 80
+MAX_KEY_FACT_CHARS = 48
 # F4: cues are instant-glance keywords — at most 3, each at most 3 words.
 MAX_CUES = 3
 MAX_CUE_WORDS = 3
+
+# say_this is only trustworthy when both confidence and source are strong;
+# otherwise it's suppressed and folded into a hedged bullet instead.
+SAY_THIS_SOURCES = ("kb", "transcript")
+_LIKELY_PREFIXES = ("likely", "probably", "may ", "might ", "could ", "i think")
 
 _DEFAULT_EXPIRES_S = {"proactive": 45, "reactive": 300}
 
@@ -64,6 +76,7 @@ class Card:
     type: str  # one of CARD_TYPES
     trigger: str | None
     headline: str
+    key_fact: str | None = None
     bullets: list[str] = field(default_factory=list)
     # F4: instant-glance keywords (<=3, each <=3 words) — what the user reads
     # mid-sentence when bullets are too slow.
@@ -72,6 +85,8 @@ class Card:
     confidence: str = "medium"
     urgency: str = "fyi"
     source: str = "transcript"
+    disposition: str = "render"
+    update: bool = False
     expires_in_s: int = 45
     topic_key: str = ""
 
@@ -101,6 +116,14 @@ EMIT_CARDS_TOOL: dict = {
                             "type": "string",
                             "description": "Glanceable headline, max 60 characters.",
                         },
+                        "key_fact": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "The single largest datum on the card (e.g. a number, "
+                                "price, or date), max 48 characters, rendered largest. "
+                                "Null if there is no single standout fact."
+                            ),
+                        },
                         "bullets": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -125,6 +148,8 @@ EMIT_CARDS_TOOL: dict = {
                         "confidence": {"type": "string", "enum": list(CARD_CONFIDENCES)},
                         "urgency": {"type": "string", "enum": list(CARD_URGENCIES)},
                         "source": {"type": "string", "enum": list(CARD_SOURCES)},
+                        "disposition": {"type": "string", "enum": list(CARD_DISPOSITIONS)},
+                        "update": {"type": "boolean"},
                         "expires_in_s": {"type": "integer"},
                         "topic_key": {
                             "type": "string",
@@ -156,6 +181,45 @@ def _pick(value: object, allowed: tuple[str, ...], default: str) -> str:
     return value if isinstance(value, str) and value in allowed else default
 
 
+def _migrate_urgency(value: object) -> str:
+    """Map raw urgency input onto the current two-value enum.
+
+    Legacy "soon" fails toward "now" (better to over-notify during rollout
+    than to silently downgrade something that used to be timely).
+    """
+    if isinstance(value, str) and value in CARD_URGENCIES:
+        return value
+    if value == "soon":
+        return "now"
+    return "fyi"
+
+
+def _apply_say_this_gate(
+    say_this: str | None,
+    bullets: list[str],
+    *,
+    confidence: str,
+    source: str,
+    bullet_cap: int,
+) -> tuple[str | None, list[str]]:
+    """Suppress ``say_this`` unless confidence and source are both strong.
+
+    When gated out, fold a hedge into the first bullet instead of silently
+    dropping the signal — defensive by design, never raises.
+    """
+    if confidence == "high" and source in SAY_THIS_SOURCES and say_this:
+        return say_this, bullets
+
+    if say_this and confidence != "high":
+        if bullets:
+            first = bullets[0]
+            if not first.lower().startswith(_LIKELY_PREFIXES):
+                bullets = [_clamp_str(f"Likely: {first}", bullet_cap), *bullets[1:]]
+        return None, bullets
+
+    return say_this, bullets
+
+
 def parse_card(raw: object, *, lane: str) -> Card | None:
     """Parse one raw card dict defensively; return None only if unusable."""
     if not isinstance(raw, dict):
@@ -167,12 +231,20 @@ def parse_card(raw: object, *, lane: str) -> Card | None:
 
     lane = lane if lane in CARD_LANES else "reactive"
     card_type = _pick(raw.get("type"), CARD_TYPES, "heads_up")
+    bullet_cap = MAX_WATCHER_BULLET_CHARS if lane == "proactive" else MAX_BULLET_CHARS
+
+    key_fact_raw = raw.get("key_fact")
+    key_fact = (
+        _clamp_str(key_fact_raw, MAX_KEY_FACT_CHARS)
+        if isinstance(key_fact_raw, str) and key_fact_raw.strip()
+        else None
+    )
 
     bullets_raw = raw.get("bullets")
     bullets: list[str] = []
     if isinstance(bullets_raw, list):
         for item in bullets_raw[:MAX_BULLETS]:
-            text = _clamp_str(item, MAX_BULLET_CHARS)
+            text = _clamp_str(item, bullet_cap)
             if text:
                 bullets.append(text)
 
@@ -204,18 +276,31 @@ def parse_card(raw: object, *, lane: str) -> Card | None:
         else _slugify(headline)
     )
 
+    confidence = _pick(raw.get("confidence"), CARD_CONFIDENCES, "medium")
+    source = _pick(raw.get("source"), CARD_SOURCES, "transcript")
+    say_this, bullets = _apply_say_this_gate(
+        say_this, bullets, confidence=confidence, source=source, bullet_cap=bullet_cap
+    )
+
+    disposition = _pick(raw.get("disposition"), CARD_DISPOSITIONS, "render")
+    update_raw = raw.get("update")
+    update = update_raw if isinstance(update_raw, bool) else False
+
     return Card(
         id=f"card_{uuid.uuid4().hex[:12]}",
         lane=lane,
         type=card_type,
         trigger=trigger,
         headline=headline,
+        key_fact=key_fact,
         bullets=bullets,
         cues=cues,
         say_this=say_this,
-        confidence=_pick(raw.get("confidence"), CARD_CONFIDENCES, "medium"),
-        urgency=_pick(raw.get("urgency"), CARD_URGENCIES, "fyi"),
-        source=_pick(raw.get("source"), CARD_SOURCES, "transcript"),
+        confidence=confidence,
+        urgency=_migrate_urgency(raw.get("urgency")),
+        source=source,
+        disposition=disposition,
+        update=update,
         expires_in_s=expires_in_s,
         topic_key=topic_key,
     )

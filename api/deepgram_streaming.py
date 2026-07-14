@@ -72,7 +72,11 @@ class DeepgramStreamingClient:
 
     Callback signatures:
         on_interim_transcript(text, speaker)
-        on_final_transcript(text, speaker)   # speaker: "ME" | "THEM" | None
+        on_final_transcript(text, speaker, start, duration)
+            # speaker: "ME" | "THEM" | None
+            # start/duration: floats, seconds, on the Deepgram/meeting timeline
+            # (from LiveResultResponse.start/.duration, falling back to the
+            # first/last word timings when the top-level fields are absent).
         on_utterance_end(full_transcript)    # fired on the REAL UtteranceEnd
         on_connection_state(state)           # connected/reconnecting/disconnected
         on_error(message)
@@ -86,7 +90,7 @@ class DeepgramStreamingClient:
         channels: int = 2,
         keyterms: list[str] | None = None,
         on_interim_transcript: Callable[[str, str | None], None] | None = None,
-        on_final_transcript: Callable[[str, str | None], None] | None = None,
+        on_final_transcript: Callable[[str, str | None, float, float], None] | None = None,
         on_utterance_end: Callable[[str], None] | None = None,
         on_connection_state: Callable[[str], None] | None = None,
         on_error: Callable[[str], None] | None = None,
@@ -311,7 +315,8 @@ class DeepgramStreamingClient:
                 self._final_segments.append(line)
             logger.debug(f"Final transcript segment: {line[:80]}")
             if self._on_final_transcript:
-                self._on_final_transcript(transcript, speaker)
+                start, duration = self._result_timing(result)
+                self._on_final_transcript(transcript, speaker, start, duration)
         elif self._on_interim_transcript:
             self._on_interim_transcript(transcript, speaker)
 
@@ -354,6 +359,28 @@ class DeepgramStreamingClient:
         if channel == 1:
             return "THEM"
         return None
+
+    @staticmethod
+    def _result_timing(result: Any) -> tuple[float, float]:
+        """Extract (start, duration) seconds from a final Results message.
+
+        Prefers the top-level ``result.start``/``result.duration`` fields
+        (present on ``LiveResultResponse``). Falls back to summing word
+        timings (first word's start to last word's end) when the top-level
+        fields are absent or zero — some SDK/model combinations only populate
+        per-word timing.
+        """
+        start = float(getattr(result, "start", 0.0) or 0.0)
+        duration = float(getattr(result, "duration", 0.0) or 0.0)
+        if start == 0.0 and duration == 0.0:
+            try:
+                words = result.channel.alternatives[0].words
+            except (AttributeError, IndexError):
+                words = None
+            if words:
+                start = float(words[0].start)
+                duration = float(words[-1].end) - start
+        return start, duration
 
     # ------------------------------------------------------------------
     # Helpers

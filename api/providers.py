@@ -55,9 +55,9 @@ _ANTHROPIC_BUILTINS: tuple[tuple[str, str], ...] = (
 _JSON_MODE_INSTRUCTION = (
     "Respond ONLY with a JSON object matching this schema and nothing else "
     '(no prose, no markdown fences): {"cards": [ ... ]}. Each card object has '
-    "keys: type, trigger, headline, bullets (array of strings), say_this, "
-    'confidence, urgency, source, expires_in_s, topic_key. Return {"cards": []} '
-    "when there is nothing worth saying."
+    "keys: type, trigger, headline, key_fact, bullets (array of strings), say_this, "
+    "confidence, urgency (now|fyi), source, disposition, update, expires_in_s, "
+    'topic_key. Return {"cards": []} when there is nothing worth saying.'
 )
 
 

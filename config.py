@@ -78,6 +78,16 @@ ANTHROPIC_WEB_SEARCH_MAX_USES: Final[int] = 4
 
 # Background lane: rolling summary cadence (~every 5 min of meeting time).
 ROLLING_SUMMARY_INTERVAL_S: Final[float] = 300.0
+
+# Tier-1 speculative question detector (deterministic, no LLM) — fires the
+# reactive answer_this pipeline early on THEM's interim/final ASR text,
+# bypassing the slower watcher gate. See services/speculative_question.py.
+SPECULATIVE_ENABLED: Final[bool] = True
+SPECULATIVE_MODEL: Final[str] = ""  # "" = inherit answer_this default (Sonnet)
+SPECULATIVE_SAME_QUESTION_COOLDOWN_S: Final[float] = 8.0
+SPECULATIVE_GLOBAL_COOLDOWN_S: Final[float] = 4.0
+SPECULATIVE_NAME_FINAL_PAUSE_S: Final[float] = 0.7
+SPECULATIVE_RECENTLY_ANSWERED_S: Final[float] = 45.0
 ROLLING_SUMMARY_MAX_TOKENS: Final[int] = 400
 
 # Context pack budget (estimated as len(text.split()) * 1.3).

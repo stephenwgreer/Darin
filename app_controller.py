@@ -16,6 +16,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -25,10 +26,21 @@ import config
 from api.client import ApiClient, build_system_blocks, build_transcript_messages
 from api.deepgram_streaming import DeepgramStreamingClient
 from audio.recorder import ContinuousRecorder
-from services.auto_answer import AUTO_ANSWER_TRIGGER, AutoAnswerPolicy
+from services.auto_answer import (
+    AUTO_ANSWER_TRIGGER,
+    RESPONSE_EXPECTED_TRIGGERS,
+    AutoAnswerPolicy,
+)
 from services.cards import Card
 from services.context_pack import ContextPack
 from services.rolling_summary import RollingSummaryService
+from services.speculative_question import (
+    SPECULATIVE_TRIGGER,
+    Decision,
+    SpeculativeQuestionPolicy,
+    SpeculativeRules,
+)
+from services.talk_ratio import TalkRatioPolicy
 from services.watcher import Watcher
 from storage.meeting_store import MeetingStore
 
@@ -119,6 +131,9 @@ class AppController:
         # Copilot services (session-scoped; created on meeting start)
         self._watcher: Watcher | None = None
         self._rolling_summary: RollingSummaryService | None = None
+        # Pure-code talk-ratio heads-up (no LLM) — created in
+        # _start_copilot_services, reset on every meeting start/reset.
+        self._talk_ratio: TalkRatioPolicy | None = None
         self.context_pack: ContextPack | None = None
         # Local SAS Viya RAG knowledge base (grounds reactive/Ask/auto-answer
         # lanes). Bound by the web layer; None = RAG inactive. The proactive
@@ -133,6 +148,28 @@ class AppController:
         # Auto-Answer (default enabled; refreshed by the web layer from AppConfig).
         self.auto_answer_enabled: bool = True
         self._auto_answer_policy = AutoAnswerPolicy()
+
+        # Tier-1 speculative question detector (deterministic, no LLM) — fires
+        # answer_this early on THEM's interim/final ASR text. See
+        # services/speculative_question.py for the policy itself.
+        self.speculative_answer_enabled: bool = config.SPECULATIVE_ENABLED
+        self._speculative_policy = SpeculativeQuestionPolicy(SpeculativeRules(
+            same_question_cooldown_s=config.SPECULATIVE_SAME_QUESTION_COOLDOWN_S,
+            global_cooldown_s=config.SPECULATIVE_GLOBAL_COOLDOWN_S,
+            name_final_pause_s=config.SPECULATIVE_NAME_FINAL_PAUSE_S,
+            recently_answered_s=config.SPECULATIVE_RECENTLY_ANSWERED_S,
+        ))
+        self._speculative_lock = threading.Lock()
+        # Pending (question_key, transcript_snapshot) awaiting the speculative
+        # lane to free up so a rejected supersede can be retried (FINDING-3).
+        self._pending_supersede: tuple[str, str] | None = None
+        # The latest not-yet-final THEM interim text, appended to the reactive
+        # context snapshot so a Tier-1 interim fire still has the question text
+        # even though the utterance hasn't finalized yet (FINDING-1).
+        self._partial_question: str | None = None
+        # Whether the most recent reactive run actually emitted a card (vs.
+        # erroring or finding no transcript) — gates note_answered (FINDING-6).
+        self._last_reactive_emitted: bool = False
 
         # Card plumbing: emitted cards by id (for dismiss), recent transcript
         # lines with monotonic timestamps (for the reactive "last ~3 min").
@@ -473,6 +510,21 @@ class AppController:
     def _handle_utterance_end(self, full_transcript: str) -> None:
         """Handle utterance end — update current transcript and tick the watcher."""
         self.current_transcript = full_transcript
+
+        # Tier-1 speculative detector: a finalized THEM utterance is ground
+        # truth, so this can FIRE (nothing pending) or SUPERSEDE (a weaker
+        # interim guess was already fired for a different question). Runs
+        # BEFORE the watcher tick so a speculative answer is in flight before
+        # the (slower) watcher lane even starts its own pass.
+        if self.speculative_answer_enabled and self._meeting_state == "active":
+            try:
+                decision, hit = self._speculative_policy.on_utterance_final(full_transcript)
+                if decision in (Decision.FIRE, Decision.SUPERSEDE) and hit is not None:
+                    self._partial_question = None  # final is ground truth now
+                    self._fire_speculative(hit.question_key, source=decision.value)
+            except Exception as e:  # noqa: BLE001 — utterance-end path must never die
+                logger.warning("Tier-1 supersede failed: {}", e)
+
         if self._watcher is not None:
             self._watcher.on_utterance_end(full_transcript)
         if self._on_utterance_end:
@@ -501,11 +553,42 @@ class AppController:
         if self._on_interim_transcript:
             self._on_interim_transcript(text, speaker)
 
-    def _on_final_transcript_with_storage(self, text: str, speaker: str | None) -> None:
-        """Handle final transcript: store speaker-prefixed segment AND notify UI."""
+        # Tier-1 speculative detector (FINDING-1): fire on THEM's live interim
+        # text, ahead of utterance-end, so the reactive answer is already
+        # streaming by the time the question finishes. Never fires for ME or
+        # outside an active meeting.
+        if not self.speculative_answer_enabled or self._meeting_state != "active" or speaker != "THEM":
+            return
+        try:
+            decision, hit = self._speculative_policy.on_interim(text, speaker)
+            if decision is Decision.FIRE and hit is not None:
+                self._partial_question = text
+                self._fire_speculative(hit.question_key, source="interim")
+        except Exception as e:  # noqa: BLE001 — the ASR callback must never die
+            logger.warning("Tier-1 detect failed: {}", e)
+
+    def _on_final_transcript_with_storage(
+        self, text: str, speaker: str | None, start: float = 0.0, duration: float = 0.0
+    ) -> None:
+        """Handle final transcript: store speaker-prefixed segment AND notify UI.
+
+        ``start``/``duration`` (Deepgram/meeting-timeline seconds) are the
+        widened deepgram->controller hop (see api/deepgram_streaming.py); the
+        UI-facing ``self._on_final_transcript`` callback keeps its original
+        2-arg (text, speaker) shape.
+        """
         line = f"{speaker}: {text}" if speaker else text
         self._handle_meeting_segment(line)
         self._recent_lines.append((time.monotonic(), line))
+
+        if self._talk_ratio is not None:
+            try:
+                card = self._talk_ratio.observe(speaker, start, duration)
+                if card is not None:
+                    self._emit_card(card)
+            except Exception as e:  # noqa: BLE001 — must never break transcription
+                logger.warning("Talk-ratio observe failed: {}", e)
+
         if self._on_final_transcript:
             self._on_final_transcript(text, speaker)
 
@@ -514,6 +597,95 @@ class AppController:
         cutoff = time.monotonic() - seconds
         lines = [line for ts, line in list(self._recent_lines) if ts >= cutoff]
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Tier-1 speculative question detector (deterministic, no LLM)
+    # ------------------------------------------------------------------
+
+    def _fire_speculative(self, question_key: str, *, source: str) -> None:
+        """Kick off a speculative answer_this run for a detected question.
+
+        FINDING-2: runs under its own prompt_id ("speculative_answer") so it
+        never contends for the interactive lane slot with a manual "Answer
+        this" click or the watcher's auto-answer (both use "answer_this").
+        FINDING-6: never fires with an empty transcript snapshot.
+        """
+        from prompts.registry import get_prompt_config_by_id
+
+        answer_cfg = get_prompt_config_by_id("answer_this")
+        if answer_cfg is None:
+            logger.warning("Speculative answer: answer_this prompt not found")
+            return
+
+        cfg = replace(answer_cfg, id="speculative_answer")
+        if config.SPECULATIVE_MODEL:
+            cfg = replace(cfg, model=config.SPECULATIVE_MODEL)
+
+        base = self._recent_transcript(180.0) or self.current_transcript[-6000:]
+        partial = self._partial_question
+        transcript_override = (f"{base}\nTHEM: {partial}" if partial else base) or None
+        if not transcript_override:  # FINDING-6: never fire on empty context
+            return
+
+        self._speculative_policy.note_fired(question_key)
+        accepted = self.run_reactive_prompt(
+            cfg,
+            trigger_override=SPECULATIVE_TRIGGER,
+            transcript_override=transcript_override,
+            discard_if_inactive=True,
+            on_complete=lambda key=question_key: self._speculative_release(key),
+        )
+        if accepted:
+            self._speculative_policy.note_accepted()
+        else:
+            self._speculative_policy.note_rejected()
+            with self._speculative_lock:
+                self._pending_supersede = (question_key, transcript_override)
+        logger.info(
+            "Speculative answer {}",
+            "fired" if accepted else "queued (lane busy)",
+            question_key=question_key,
+            source=source,
+        )
+
+    def _speculative_release(self, question_key: str) -> None:
+        """on_complete for a speculative run: mark answered (if a card actually
+        rendered) and drain any supersede that was queued while this run was
+        in flight."""
+        if self._last_reactive_emitted:  # only mark answered if a card actually rendered
+            self._speculative_policy.note_answered(question_key)
+        self._drain_pending_supersede()
+
+    def _drain_pending_supersede(self) -> None:
+        """Retry a supersede that was rejected earlier because the
+        "speculative_answer" lane was still busy (FINDING-3)."""
+        with self._speculative_lock:
+            pending = self._pending_supersede
+            self._pending_supersede = None
+        if pending is None or self._meeting_state != "active":
+            return
+
+        qk, snapshot = pending
+        if self._speculative_policy.was_recently_answered(qk):
+            return
+
+        from prompts.registry import get_prompt_config_by_id
+
+        answer_cfg = get_prompt_config_by_id("answer_this")
+        if answer_cfg is None:
+            return
+        cfg = replace(answer_cfg, id="speculative_answer")
+        if config.SPECULATIVE_MODEL:
+            cfg = replace(cfg, model=config.SPECULATIVE_MODEL)
+
+        self._speculative_policy.note_fired(qk)
+        self.run_reactive_prompt(
+            cfg,
+            trigger_override=SPECULATIVE_TRIGGER,
+            transcript_override=snapshot,
+            discard_if_inactive=True,
+            on_complete=lambda key=qk: self._speculative_release(key),
+        )
 
     # ------------------------------------------------------------------
     # Meeting lifecycle (DAR2-26)
@@ -554,6 +726,12 @@ class AppController:
             self._recent_lines.clear()
             self._emitted_cards.clear()
             self.api_client.reset_meeting_cost()
+            self._speculative_policy.clear()
+            self._partial_question = None
+            with self._speculative_lock:
+                self._pending_supersede = None
+            if self._talk_ratio is not None:
+                self._talk_ratio.reset()
 
             started = await asyncio.to_thread(self.start_streaming)
             if not started:
@@ -587,6 +765,8 @@ class AppController:
     def _start_copilot_services(self) -> None:
         """Create and start the watcher + rolling summary for this session."""
         context_text = self.context_pack.as_text() if self.context_pack is not None else ""
+
+        self._talk_ratio = TalkRatioPolicy(persona=self._persona)
 
         self._watcher = Watcher(
             self.api_client,
@@ -701,6 +881,12 @@ class AppController:
             self.current_transcript = ""  # stale-transcript bug fix
             self._recent_lines.clear()
             self._emitted_cards.clear()
+            self._speculative_policy.clear()
+            if self._talk_ratio is not None:
+                self._talk_ratio.reset()
+            self._partial_question = None
+            with self._speculative_lock:
+                self._pending_supersede = None
             self._emit_state_change("idle")
 
     def on_meeting_state_change(self, callback: Callable[[str], None]) -> None:
@@ -1142,6 +1328,13 @@ class AppController:
 
         prompt_id = getattr(prompt_config, "id", "reactive")
         start_time = time.perf_counter()
+        # Shared flag read by _speculative_release to decide whether a real
+        # card rendered (FINDING-6: don't suppress the watcher fallback on an
+        # empty/error speculative run). Safe as a single shared attribute
+        # because speculative runs are serialized by the single-flight
+        # interactive lane on the "speculative_answer" prompt_id — only one
+        # such run can be inside this method at a time.
+        self._last_reactive_emitted = False
         try:
             instruction = prompt_config.template  # type: ignore[attr-defined]
             if question is not None:
@@ -1221,6 +1414,7 @@ class AppController:
 
             for card in cards:
                 self._emit_card(card)
+            self._last_reactive_emitted = True
             if self._on_processing_complete:
                 self._on_processing_complete(
                     {"cards": [c.to_dict() for c in cards], "prompt_id": prompt_id}
@@ -1240,9 +1434,18 @@ class AppController:
             # Guarantee the auto-answer in-flight guard is released on every exit
             # path (no-transcript return, discard, success, or exception); the
             # try body no longer calls on_complete so this fires exactly once.
+            #
+            # ORDER MATTERS: release the interactive-lane slot BEFORE calling
+            # on_complete(). Tier-1's on_complete (_speculative_release) can
+            # synchronously drain a queued supersede and re-fire a NEW
+            # "speculative_answer" run inline on this thread — if the lane slot
+            # were still held at that point, the re-fire would be rejected by
+            # _try_acquire_interactive and the supersede would be dropped. The
+            # auto-answer on_complete (note_finished) is order-safe either way,
+            # and the longform lane uses a different release key entirely.
+            self._release_interactive(prompt_id)
             if on_complete:
                 on_complete()
-            self._release_interactive(prompt_id)
 
     # ------------------------------------------------------------------
     # Card plumbing
@@ -1261,11 +1464,21 @@ class AppController:
 
         # Auto-Answer: a watcher card asking the user a question auto-triggers
         # the reactive answer_this pipeline (non-blocking).
-        if card.trigger == "question_at_user":
+        if card.trigger in RESPONSE_EXPECTED_TRIGGERS:
             self._maybe_auto_answer(card)
 
     def _maybe_auto_answer(self, source_card: Card) -> None:
         """Kick off an auto-answer for a watcher question card, if gated in."""
+        # FINDING-5: time-based mutual exclusion with Tier-1. If a speculative
+        # answer fired recently, Tier-1 already owns this window — don't let
+        # the (slower) watcher's auto-answer produce a SECOND bank-facing
+        # answer. Time-based (not question_key-based) so a token mismatch
+        # between the speculative question_key and the watcher's headline text
+        # can never leak a double-answer.
+        if self._speculative_policy.fired_within(config.SPECULATIVE_RECENTLY_ANSWERED_S):
+            logger.info("Auto-answer suppressed: Tier-1 owns this window")
+            return
+
         allowed, reason = self._auto_answer_policy.should_answer(
             enabled=self.auto_answer_enabled,
             trigger=source_card.trigger,

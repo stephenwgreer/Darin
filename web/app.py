@@ -83,6 +83,34 @@ def _load_test_transcript(controller: AppController, test_wav_path: str) -> None
         logger.warning("Failed to load test WAV: {}", e)
 
 
+_watcher_gate_sink_id: int | None = None
+
+
+def _install_watcher_gate_sink(storage_path: Path) -> None:
+    """Add a JSONL loguru sink for watcher pre-gate suppression records.
+
+    Idempotent: only one sink is ever installed for the process (create_app is
+    called once per real run but many times across the test suite). A sink
+    failure (unwritable path) is swallowed — observability must never block boot.
+    """
+    global _watcher_gate_sink_id
+    if _watcher_gate_sink_id is not None:
+        return
+    try:
+        gate_log = storage_path / "watcher_gate.jsonl"
+        gate_log.parent.mkdir(parents=True, exist_ok=True)
+        _watcher_gate_sink_id = logger.add(
+            str(gate_log),
+            filter=lambda record: record["extra"].get("watcher_gate", False),
+            serialize=True,
+            rotation="5 MB",
+            retention=4,
+            enqueue=True,
+        )
+    except Exception as e:  # noqa: BLE001 — logging setup never blocks the app
+        logger.warning("Could not install watcher_gate sink: {}", e)
+
+
 def create_app(token: str) -> FastAPI:
     """Create and return the FastAPI app with all dependencies wired.
 
@@ -96,6 +124,14 @@ def create_app(token: str) -> FastAPI:
 
     app_cfg_store = AppConfigStore()
     app_cfg = app_cfg_store.load()
+
+    # Watcher pre-gate suppression log (S7 close-the-loop): every proactive
+    # emission the watcher policy allowed OR killed, plus which gate killed it,
+    # goes to a structured JSONL sink for weekly miss-rate review. Records are
+    # tagged logger.bind(watcher_gate=True); this sink filters on that flag so
+    # normal stderr logging is unaffected. Idempotent across create_app calls
+    # (tests build many apps): keyed by a stable sink name via a module guard.
+    _install_watcher_gate_sink(Path(app_cfg.storage_path))
 
     bus = SSEEventBus()
 

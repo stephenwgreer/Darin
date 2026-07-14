@@ -42,6 +42,21 @@ def test_wrong_trigger() -> None:
     assert _policy().should_answer(**{**BASE, "trigger": None}) == (False, "wrong_trigger")
 
 
+def test_response_expected_trigger_allowed() -> None:
+    assert _policy().should_answer(**{**BASE, "trigger": "response_expected"}) == (True, "")
+
+
+def test_objection_trigger_allowed() -> None:
+    assert _policy().should_answer(**{**BASE, "trigger": "objection"}) == (True, "")
+
+
+def test_unrelated_trigger_still_rejected() -> None:
+    assert _policy().should_answer(**{**BASE, "trigger": "fact_check"}) == (
+        False,
+        "wrong_trigger",
+    )
+
+
 def test_not_active() -> None:
     assert _policy().should_answer(**{**BASE, "meeting_active": False}) == (False, "not_active")
 

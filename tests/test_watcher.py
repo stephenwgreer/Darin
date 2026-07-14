@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
+from prompts.templates import WATCHER_TICK_INSTRUCTION
 from services.cards import parse_card
-from services.watcher import Watcher, WatcherPolicy, WatcherRules
+from services.watcher import NO_TYPE_COOLDOWN_TRIGGERS, Watcher, WatcherPolicy, WatcherRules
 
 
 class FakeClock:
@@ -26,9 +27,21 @@ def make_card(
     card_type: str = "answer",
     headline: str = "A headline",
     topic_key: str = "topic-a",
+    urgency: str = "now",
+    trigger: str | None = None,
+    disposition: str = "render",
+    update: bool = False,
 ):
     card = parse_card(
-        {"type": card_type, "headline": headline, "topic_key": topic_key},
+        {
+            "type": card_type,
+            "headline": headline,
+            "topic_key": topic_key,
+            "urgency": urgency,
+            "trigger": trigger,
+            "disposition": disposition,
+            "update": update,
+        },
         lane="proactive",
     )
     assert card is not None
@@ -36,32 +49,32 @@ def make_card(
 
 
 # ---------------------------------------------------------------------------
-# WatcherPolicy: tick gating (min 12 s AND >= 30 new words)
+# WatcherPolicy: tick gating (min 8 s AND >= 15 new words)
 # ---------------------------------------------------------------------------
 
 
 class TestTickGating:
     def test_first_tick_allowed_with_enough_words(self) -> None:
         policy = WatcherPolicy(clock=FakeClock())
-        assert policy.should_tick(30) is True
+        assert policy.should_tick(15) is True
 
     def test_tick_blocked_below_word_threshold(self) -> None:
         policy = WatcherPolicy(clock=FakeClock())
-        assert policy.should_tick(29) is False
+        assert policy.should_tick(14) is False
 
-    def test_tick_blocked_within_12s_of_previous_tick(self) -> None:
+    def test_tick_blocked_within_8s_of_previous_tick(self) -> None:
         clock = FakeClock()
         policy = WatcherPolicy(clock=clock)
         policy.note_tick()
-        clock.advance(11.9)
+        clock.advance(7.9)
         assert policy.should_tick(100) is False
 
-    def test_tick_allowed_after_12s_and_30_words(self) -> None:
+    def test_tick_allowed_after_8s_and_15_words(self) -> None:
         clock = FakeClock()
         policy = WatcherPolicy(clock=clock)
         policy.note_tick()
-        clock.advance(12.1)
-        assert policy.should_tick(30) is True
+        clock.advance(8.1)
+        assert policy.should_tick(15) is True
 
     def test_both_conditions_required(self) -> None:
         clock = FakeClock()
@@ -156,17 +169,100 @@ class TestDismissSuppression:
         assert policy.dismissed_topics == frozenset()
 
 
-class TestRecentHeadlines:
-    def test_last_5_headlines_kept(self) -> None:
+class TestRecentTopics:
+    def test_last_5_topics_kept(self) -> None:
         clock = FakeClock()
         policy = WatcherPolicy(
             WatcherRules(render_cap_seconds=0, type_cooldown_seconds=0, topic_dedupe_seconds=0),
             clock=clock,
         )
         for i in range(7):
-            policy.note_rendered(make_card(headline=f"H{i}", topic_key=f"t{i}"))
+            policy.note_rendered(make_card(card_type="answer", topic_key=f"t{i}"))
             clock.advance(1.0)
-        assert list(policy.recent_headlines) == ["H2", "H3", "H4", "H5", "H6"]
+        assert list(policy.recent_topics) == [
+            ("answer", "t2"),
+            ("answer", "t3"),
+            ("answer", "t4"),
+            ("answer", "t5"),
+            ("answer", "t6"),
+        ]
+
+    def test_trigger_preferred_over_type_when_present(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+        card = make_card(card_type="reframe", topic_key="obj-1", trigger="objection")
+        policy.note_rendered(card)
+        assert list(policy.recent_topics) == [("objection", "obj-1")]
+
+
+class TestNoTypeCooldownTriggers:
+    def test_response_expected_trigger_exempt_from_type_cooldown(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+
+        first = make_card(card_type="answer", topic_key="t1", trigger="response_expected")
+        policy.note_rendered(first)
+
+        clock.advance(40.0)  # inside the 60s type cooldown window
+        second = make_card(card_type="answer", topic_key="t2", trigger="response_expected")
+        allowed, reason = policy.filter_card(second)
+        assert allowed is True
+        assert reason == ""
+
+    def test_frozenset_contains_expected_names(self) -> None:
+        expected = {"response_expected", "question_at_user", "objection"}
+        assert expected == NO_TYPE_COOLDOWN_TRIGGERS
+
+
+class TestFyiRailSkipsRenderCap:
+    def test_two_fyi_cards_back_to_back_both_allowed(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+
+        first = make_card(card_type="heads_up", topic_key="t1", urgency="fyi")
+        allowed, reason = policy.filter_card(first)
+        assert allowed is True
+        policy.note_rendered(first)
+
+        clock.advance(0.1)  # well within render_cap_seconds (and type_cooldown)
+        second = make_card(card_type="status", topic_key="t2", urgency="fyi")
+        allowed, reason = policy.filter_card(second)
+        assert allowed is True
+        assert reason == ""
+
+    def test_fyi_card_does_not_stamp_last_render_at(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+        policy.note_rendered(make_card(topic_key="t1", urgency="fyi"))
+        assert policy._last_render_at is None
+
+
+class TestUpdateRefreshesTopic:
+    def test_update_true_on_seen_topic_is_allowed(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+        policy.note_rendered(make_card(card_type="reframe", topic_key="objection-price"))
+
+        # Past render_cap (15s) and type_cooldown (60s), still inside the 300s
+        # topic_dedupe window — isolates the update:true refresh behaviour.
+        clock.advance(61.0)
+        refreshed = make_card(
+            card_type="reframe", topic_key="objection-price", update=True
+        )
+        allowed, reason = policy.filter_card(refreshed)
+        assert allowed is True
+        assert reason == ""
+
+    def test_without_update_same_topic_still_deduped(self) -> None:
+        clock = FakeClock()
+        policy = WatcherPolicy(clock=clock)
+        policy.note_rendered(make_card(card_type="reframe", topic_key="objection-price"))
+
+        clock.advance(61.0)
+        repeat = make_card(card_type="reframe", topic_key="objection-price", update=False)
+        allowed, reason = policy.filter_card(repeat)
+        assert allowed is False
+        assert reason == "topic_dedupe"
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +358,25 @@ class TestWatcherTicks:
 
         assert len(emitted) == 1
 
-    def test_recent_headlines_passed_into_tick_instruction(self) -> None:
+    def test_at_most_one_interrupt_and_one_rail_per_tick(self) -> None:
         clock = FakeClock()
-        card = make_card(headline="Shown already", topic_key="a")
+        cards = [
+            make_card(topic_key="a", urgency="now"),
+            make_card(card_type="status", topic_key="b", urgency="fyi"),
+            make_card(card_type="reframe", topic_key="c", urgency="now"),
+            make_card(card_type="heads_up", topic_key="d", urgency="fyi"),
+        ]
+        watcher, _, emitted = make_watcher(clock, cards=cards)
+
+        watcher.on_utterance_end("THEM: " + "word " * 40)
+        watcher._maybe_tick()
+
+        assert len(emitted) == 2
+        assert {c.topic_key for c in emitted} == {"a", "b"}
+
+    def test_recent_topics_passed_into_tick_instruction(self) -> None:
+        clock = FakeClock()
+        card = make_card(topic_key="a", trigger="response_expected")
         watcher, api_client, _ = make_watcher(clock, cards=[card])
 
         watcher.on_utterance_end("THEM: " + "word " * 40)
@@ -276,15 +388,68 @@ class TestWatcherTicks:
 
         messages = api_client.create_cards.call_args.kwargs["messages"]
         instruction = messages[-1]["content"][0]["text"]
-        assert "Shown already" in instruction
+        assert "a" in instruction
+        assert "response_expected" in instruction
 
-    def test_sales_persona_arms_sales_signal(self) -> None:
+    def test_sales_persona_arms_buying_signal_and_competitor_mention(self) -> None:
         clock = FakeClock()
         sales_watcher, _, _ = make_watcher(clock, persona="sales")
         general_watcher, _, _ = make_watcher(clock, persona="general")
 
-        assert "sales_signal" in sales_watcher._system_text
-        assert "sales_signal" not in general_watcher._system_text
+        assert "buying_signal" in sales_watcher._system_text
+        assert "competitor_mention" in sales_watcher._system_text
+        assert "buying_signal" not in general_watcher._system_text
+        assert "competitor_mention" not in general_watcher._system_text
+
+    def test_disposition_log_card_routes_to_on_log_item_not_on_card(self) -> None:
+        clock = FakeClock()
+        card = make_card(
+            card_type="next_step",
+            topic_key="promise-1",
+            trigger="promise_tracker",
+            urgency="fyi",
+            disposition="log",
+        )
+        api_client = Mock()
+        api_client.create_cards.return_value = [card]
+        emitted_cards: list = []
+        emitted_log_items: list = []
+        watcher = Watcher(
+            api_client,
+            on_card=emitted_cards.append,
+            on_log_item=emitted_log_items.append,
+            clock=clock,
+        )
+
+        watcher.on_utterance_end("THEM: " + "word " * 40)
+        watcher._maybe_tick()
+
+        assert emitted_cards == []
+        assert emitted_log_items == [card]
+
+    def test_log_card_does_not_consume_interrupt_budget(self) -> None:
+        """A log-disposition card plus an interrupt in the same tick: both land."""
+        clock = FakeClock()
+        log_card = make_card(
+            topic_key="promise-1", trigger="promise_tracker", urgency="fyi", disposition="log"
+        )
+        interrupt_card = make_card(topic_key="a", urgency="now")
+        api_client = Mock()
+        api_client.create_cards.return_value = [log_card, interrupt_card]
+        emitted_cards: list = []
+        emitted_log_items: list = []
+        watcher = Watcher(
+            api_client,
+            on_card=emitted_cards.append,
+            on_log_item=emitted_log_items.append,
+            clock=clock,
+        )
+
+        watcher.on_utterance_end("THEM: " + "word " * 40)
+        watcher._maybe_tick()
+
+        assert emitted_cards == [interrupt_card]
+        assert emitted_log_items == [log_card]
 
     def test_llm_failure_does_not_crash_worker(self) -> None:
         clock = FakeClock()
@@ -351,3 +516,16 @@ class TestWatcherLifecycle:
 
         assert emitted == []
         assert statuses == ["stopped"]
+
+
+# ---------------------------------------------------------------------------
+# Format-contract: watcher.py and templates.py must agree on the placeholder
+# name, or every watcher tick raises KeyError (silently blanked by the
+# never-die try/except in Watcher._run).
+# ---------------------------------------------------------------------------
+
+
+class TestFormatContract:
+    def test_watcher_tick_instruction_accepts_recent_topics_kwarg(self) -> None:
+        rendered = WATCHER_TICK_INSTRUCTION.format(recent_topics="x")
+        assert "x" in rendered

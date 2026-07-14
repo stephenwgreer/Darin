@@ -7,12 +7,16 @@ worker thread then decides whether to run ONE Haiku tick over the
 incrementally-cached transcript.
 
 All throttling is CODE, not prompt:
-- min 12 s between LLM ticks AND >= 30 new words accumulated;
-- global render cap: at most 1 card per 15 s;
-- per-type cooldown: 60 s;
-- topic dedupe (topic_key): 5 min;
+- min 8 s between LLM ticks AND >= 15 new words accumulated;
+- global render cap: at most 1 interrupt card per 15 s (rails don't count);
+- per-type cooldown: 60 s (skipped for response-expected-class triggers);
+- topic dedupe (topic_key): 5 min (bypassed by an update:true refresh);
 - user-dismissed topic_keys suppressed for the whole meeting;
-- the last 5 shown card headlines are passed into each tick prompt.
+- the last 5 shown (trigger, topic_key) pairs are passed into each tick prompt.
+
+Each tick may emit AT MOST one interrupt card and one rail card (urgency=="fyi"
+cards are rails and don't consume the interrupt budget), plus any number of
+disposition="log" cards, which bypass all gating and never render live.
 
 The pure gating rules live in :class:`WatcherPolicy` (injectable clock, no
 I/O) so they are unit-testable without threads or network.
@@ -33,12 +37,19 @@ from prompts.templates import WATCHER_TICK_INSTRUCTION, build_watcher_system
 from services.cards import Card
 
 
+# Trigger names exempt from per-type cooldown: response-expected moments must
+# never be suppressed just because a same-typed card rendered recently. Both
+# the legacy trigger name and its S3 replacement are listed during the rename
+# transition.
+NO_TYPE_COOLDOWN_TRIGGERS = frozenset({"response_expected", "question_at_user", "objection"})
+
+
 @dataclass
 class WatcherRules:
     """Tunable debounce/dedupe/cooldown thresholds (seconds / words)."""
 
-    min_tick_seconds: float = 12.0
-    min_new_words: int = 30
+    min_tick_seconds: float = 8.0
+    min_new_words: int = 15
     render_cap_seconds: float = 15.0
     type_cooldown_seconds: float = 60.0
     topic_dedupe_seconds: float = 300.0
@@ -60,12 +71,14 @@ class WatcherPolicy:
         self._last_type_at: dict[str, float] = {}
         self._last_topic_at: dict[str, float] = {}
         self._dismissed_topics: set[str] = set()
-        self.recent_headlines: deque[str] = deque(maxlen=5)
+        # Last 5 (trigger, topic_key) pairs shown — fed into the next tick
+        # prompt so the model can reuse an exact topic_key to refresh.
+        self.recent_topics: deque[tuple[str, str]] = deque(maxlen=5)
 
     # ---- tick gating ----
 
     def should_tick(self, new_word_count: int) -> bool:
-        """min 12 s since the last LLM tick AND >= 30 new words accumulated."""
+        """min 8 s since the last LLM tick AND >= 15 new words accumulated."""
         if new_word_count < self.rules.min_new_words:
             return False
         if self._last_tick_at is not None:
@@ -79,34 +92,50 @@ class WatcherPolicy:
     # ---- card emission gating ----
 
     def filter_card(self, card: Card) -> tuple[bool, str]:
-        """Return (allowed, reason). Reason is "" when allowed."""
+        """Return (allowed, reason). Reason is "" when allowed.
+
+        CRITICAL: a card is a "rail" (passive, doesn't consume the interrupt
+        budget) iff ``card.urgency == "fyi"``; every other value is an
+        interrupt. Gating on ``urgency == "now"`` instead would be a trap —
+        ``parse_card`` DEFAULTS urgency to "fyi", so an unset/legacy urgency
+        must still land as a rail, and the render cap must still apply to
+        every genuine interrupt (including any future non-"now" value).
+        """
         now = self._clock()
 
         if card.topic_key in self._dismissed_topics:
             return False, "dismissed_topic"
 
+        is_rail = card.urgency == "fyi"
         if (
-            self._last_render_at is not None
+            not is_rail
+            and self._last_render_at is not None
             and now - self._last_render_at < self.rules.render_cap_seconds
         ):
             return False, "render_cap"
 
-        last_type = self._last_type_at.get(card.type)
-        if last_type is not None and now - last_type < self.rules.type_cooldown_seconds:
-            return False, "type_cooldown"
+        if card.trigger not in NO_TYPE_COOLDOWN_TRIGGERS:
+            last_type = self._last_type_at.get(card.type)
+            if last_type is not None and now - last_type < self.rules.type_cooldown_seconds:
+                return False, "type_cooldown"
 
         last_topic = self._last_topic_at.get(card.topic_key)
         if last_topic is not None and now - last_topic < self.rules.topic_dedupe_seconds:
-            return False, "topic_dedupe"
+            # An update:true card refreshes an evolving topic instead of being
+            # deduped into silence.
+            if not card.update:
+                return False, "topic_dedupe"
 
         return True, ""
 
     def note_rendered(self, card: Card) -> None:
         now = self._clock()
-        self._last_render_at = now
+        # Rails (urgency == "fyi") don't consume the interrupt render budget.
+        if card.urgency != "fyi":
+            self._last_render_at = now
         self._last_type_at[card.type] = now
         self._last_topic_at[card.topic_key] = now
-        self.recent_headlines.append(card.headline)
+        self.recent_topics.append((card.trigger or card.type, card.topic_key))
 
     def dismiss_topic(self, topic_key: str) -> None:
         """Suppress a topic_key for the remainder of the meeting."""
@@ -129,6 +158,7 @@ class Watcher:
         context_pack_text: str = "",
         on_card: Callable[[Card], None] | None = None,
         on_status: Callable[[str], None] | None = None,
+        on_log_item: Callable[[Card], None] | None = None,
         model: str = config.WATCHER_MODEL,
         max_tokens: int = config.WATCHER_MAX_TOKENS,
         rules: WatcherRules | None = None,
@@ -140,6 +170,7 @@ class Watcher:
         self._context_pack_text = context_pack_text
         self._on_card = on_card
         self._on_status = on_status
+        self._on_log_item = on_log_item
         self._model = model
         self._max_tokens = max_tokens
         self.policy = WatcherPolicy(rules, clock=clock)
@@ -229,9 +260,13 @@ class Watcher:
         self._transcript_blocks.append(new_text)
         self._consumed_chars = len(transcript)
 
-        headlines = list(self.policy.recent_headlines)
-        headlines_text = "\n".join(f"- {h}" for h in headlines) if headlines else "(none yet)"
-        instruction = WATCHER_TICK_INSTRUCTION.format(recent_headlines=headlines_text)
+        recent = list(self.policy.recent_topics)
+        recent_text = (
+            "\n".join(f"- {trigger}: {topic_key}" for trigger, topic_key in recent)
+            if recent
+            else "(none yet)"
+        )
+        instruction = WATCHER_TICK_INSTRUCTION.format(recent_topics=recent_text)
 
         from api.client import build_system_blocks, build_transcript_messages
 
@@ -256,19 +291,57 @@ class Watcher:
             logger.info("Watcher tick finished after stop — result discarded")
             return
 
-        # The watcher returns {} or exactly ONE card — enforce in code too.
-        for card in cards[:1]:
-            allowed, reason = self.policy.filter_card(card)
-            if not allowed:
-                logger.info(
-                    "Watcher card suppressed",
-                    reason=reason,
-                    card_type=card.type,
-                    topic_key=card.topic_key,
-                )
+        # Multi-surface: at most ONE interrupt + ONE rail per tick, plus any
+        # number of disposition="log" items (which bypass gating entirely and
+        # never count against the interrupt/rail budget).
+        interrupt_emitted = False
+        rail_emitted = False
+        for card in cards:
+            if card.disposition == "log":
+                self._log_disposition_card(card)
                 continue
+
+            is_rail = card.urgency == "fyi"
+            if is_rail and rail_emitted:
+                continue
+            if not is_rail and interrupt_emitted:
+                continue
+
+            allowed, reason = self.policy.filter_card(card)
+            self._log_suppression(card, reason=reason, allowed=allowed)
+            if not allowed:
+                continue
+
             self.policy.note_rendered(card)
             self._emit_card(card)
+            if is_rail:
+                rail_emitted = True
+            else:
+                interrupt_emitted = True
+
+    # ------------------------------------------------------------------
+    # Structured gate logging
+    # ------------------------------------------------------------------
+
+    def _log_suppression(self, card: Card, *, reason: str, allowed: bool) -> None:
+        """Structured emit for every filter_card decision — allowed AND killed.
+
+        Feeds the watcher_gate.jsonl sink used for the periodic review of
+        gate behaviour; bound with watcher_gate=True so it can be filtered out
+        of normal application logs.
+        """
+        logger.bind(watcher_gate=True).info(
+            "Watcher card gated",
+            allowed=allowed,
+            reason=reason,
+            trigger=card.trigger,
+            card_type=card.type,
+            topic_key=card.topic_key,
+            urgency=card.urgency,
+            confidence=card.confidence,
+            source=card.source,
+            disposition=card.disposition,
+        )
 
     # ------------------------------------------------------------------
     # Callback plumbing (per-callback try/except — a bad consumer never kills us)
@@ -281,6 +354,23 @@ class Watcher:
             self._on_card(card)
         except Exception as e:  # noqa: BLE001
             logger.warning("Watcher on_card callback failed: {}", e)
+
+    def _emit_log_item(self, card: Card) -> None:
+        if self._on_log_item is None or self._stop_event.is_set():
+            return
+        try:
+            self._on_log_item(card)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Watcher on_log_item callback failed: {}", e)
+
+    def _log_disposition_card(self, card: Card) -> None:
+        """Route a disposition="log" card straight to on_log_item.
+
+        Bypasses filter_card/note_rendered/render_cap entirely — a log item is
+        a silent post-meeting artifact, never a live interrupt or rail, and
+        must never consume any gating budget.
+        """
+        self._emit_log_item(card)
 
     def _emit_status(self, state: str, *, force: bool = False) -> None:
         """Emit a watcher_status update; suppressed once stop() has begun.
