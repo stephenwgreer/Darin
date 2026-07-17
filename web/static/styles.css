@@ -245,6 +245,21 @@ header .btn-settings:hover {
   color: var(--masthead-text);
 }
 
+/* One masthead height for every control tier: the icon buttons fix at 38px,
+   so History and the persona toggle match it. Padding no longer sets their
+   height — it's centered inside the fixed box — so all three read level. */
+header .header-actions .btn-outline,
+header .header-actions .persona-toggle {
+  height: 38px;
+}
+header .header-actions .btn-outline {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+header .header-actions .persona-toggle {
+  align-items: stretch;
+}
+
 main {
   flex: 1;
   display: flex;
@@ -433,13 +448,15 @@ html.bg-darin .card { background: color-mix(in srgb, var(--bg-card) 85%, transpa
   overflow: hidden;
 }
 .persona-btn {
+  display: inline-flex;
+  align-items: center;
   background: transparent;
   border: none;
   color: var(--masthead-muted);
   font-family: var(--font-body);
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.3rem 0.7rem;
+  padding: 0 0.7rem;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -657,7 +674,7 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
 
 /* Urgency: the boundary seal. `now` deepens the border to the ochre seal and
    pulses the red attention seal exactly twice on arrival, then stops. `fyi`
-   cards live in the passive side rail (see .rail-*), never here. */
+   cards share the feed but arrive quietly — the standard slide-in, no seal. */
 .copilot-card.urgency-now {
   border-color: color-mix(in srgb, var(--ink-urgent) 80%, transparent);
   animation: card-in 0.25s ease-out, attention-seal 0.9s ease-out 2;
@@ -885,48 +902,6 @@ html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%,
 .copilot-card.aged.aged-expanded .card-bullets { display: block; }
 .copilot-card.aged.aged-expanded .card-meta { display: block; }
 .copilot-card.aged.aged-expanded .say-this { display: flex; }
-
-/* ── The passive side rail (fyi ledger) ───────────────────────────────── */
-/* Commentary and ambient nudges that must not compete for the operator's
-   attention or the interrupt slot. It reads as a recessed well — a quiet ledger
-   of notes off to the side — not a second feed. Nothing here is live, so
-   nothing here pulses or seals (Ink-Means-Alive Rule): the rail is static
-   paper. Its cards are the same case pocket, one tonal step quieter. */
-.rail-section {
-  margin-bottom: 0.6rem;
-  padding: 0.6rem 0.7rem;
-  background: var(--bg-well);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-html.bg-darin .rail-section { background: color-mix(in srgb, var(--bg-well) 88%, transparent); }
-
-.rail-title {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 0.45rem;
-}
-
-.rail-feed {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  max-height: 40vh;
-  overflow-y: auto;
-}
-
-/* Rail cards: the same pocket, quieter. No attention seal (fyi never pulses),
-   tighter padding, and the fill sits on the well so it recedes. */
-.rail-feed .copilot-card {
-  padding: 0.55rem 0.7rem;
-  background: var(--bg-card);
-  animation: card-in 0.2s ease-out;
-}
-.rail-feed .copilot-card .card-key-fact { font-size: 1.15rem; }
 
 /* ── Post-meeting section ────────────────────────────────────────────── */
 .bucket {
