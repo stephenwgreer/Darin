@@ -1,0 +1,1475 @@
+/* ── Civic Evidence Desk — two materials, one identity ─────────────────
+   Desk (light, default) and After Hours (dark, [data-theme="night"]).
+   Same typography, shapes, and signal vocabulary in both; only the
+   material tokens below change. Every accent is a stamp ink with one
+   meaning (DESIGN.md, One Meaning Rule); brass is furniture, never a
+   signal. All ink/surface pairs verified ≥4.5:1 (text) or ≥3:1 (marks). */
+
+/* ── Self-hosted fonts (CSP: font-src 'self' — no CDNs) ──────────────── */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/static/fonts/fraunces.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/static/fonts/fraunces-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Libre Franklin';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/libre-franklin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Libre Franklin';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/libre-franklin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/plex-mono.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/plex-mono-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/plex-mono-600.woff2') format('woff2');
+}
+
+/* ── Reset & base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* The `hidden` attribute must always win, even over display:flex rules —
+   app.js drives visibility with el.hidden on flex buttons/indicators. */
+[hidden] { display: none !important; }
+
+:root {
+  color-scheme: light;
+
+  /* Material: Desk (warm record paper) */
+  --bg:          #F4EADB;   /* record paper — the desk */
+  --bg-card:     #FBF6EC;   /* fresh sheet — cards, panels, modals */
+  --bg-card2:    #DFCAA8;   /* manila — hover fills, active tabs */
+  --bg-well:     #EFE3CC;   /* blotter — recessed wells */
+  --bg-input:    #FFFDF7;   /* near-white sheet for typing */
+  --border:      #D6C8AB;   /* rule line — every hairline */
+  --border-strong: #C4B491;
+  --text:        #17213A;   /* navy ink */
+  --text-secondary: #34415F;/* bullets — one step toward faded */
+  --text-muted:  #566074;   /* faded ink */
+
+  /* Stamp inks: -mark for borders/seals/fills, -text verified ≥4.5:1 */
+  --ink-interactive:      #4F78A6;  /* federal blue — actions, focus, ME */
+  --ink-interactive-text: #33507A;
+  --ink-them:             #366B62;  /* ledger teal — THEM, proactive lane */
+  --ink-them-text:        #366B62;
+  --ink-urgent:           #8A6320;  /* ochre seal — urgency only */
+  --ink-urgent-text:      #755416;
+  --ink-live:             #3F7249;  /* approval green — session live */
+  --ink-live-text:        #335C3B;
+  --ink-record:           #B83A2E;  /* inspection red — record/stop/destroy */
+  --ink-record-text:      #9E2F24;
+  --ink-post:             #6B4E8E;  /* notary violet — post-meeting */
+  --ink-post-text:        #6B4E8E;
+  --brass:                #C8AA6A;  /* furniture only — tabs, fittings */
+
+  /* The masthead is navy in both materials — the desk's nameplate */
+  --masthead:       #17213A;
+  --masthead-text:  #EDE4D3;
+  --masthead-muted: #9AA3B5;
+
+  /* Solid command stamps (start / stop / save) */
+  --btn-go-bg: #3F7249;   --btn-go-text: #FBF6EC;   --btn-go-hover: #35603D;
+  --btn-stop-bg: #B83A2E; --btn-stop-text: #FBF6EC; --btn-stop-hover: #9E2F24;
+  --btn-save-bg: #17213A; --btn-save-text: #FBF6EC; --btn-save-hover: #0F1626;
+  --btn-neutral-bg: #DFCAA8; --btn-neutral-text: #17213A; --btn-neutral-hover: #D2B98E;
+
+  --scrim: rgba(23, 33, 58, 0.45);
+  --shadow-toast: 0 6px 24px rgba(23, 33, 58, 0.18);
+
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Libre Franklin', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace;
+
+  /* Stamped, not lozenged */
+  --radius:    3px;
+  --radius-sm: 2px;
+  font-size: 14px;
+}
+
+/* Material: After Hours (the records office at night) */
+:root[data-theme="night"] {
+  color-scheme: dark;
+
+  --bg:          #131926;
+  --bg-card:     #1A2233;
+  --bg-card2:    #232D42;
+  --bg-well:     #10151F;
+  --bg-input:    #161D2C;
+  --border:      #2C3650;
+  --border-strong: #3A4763;
+  --text:        #EDE4D3;   /* lamplight paper */
+  --text-secondary: #C9CFDC;
+  --text-muted:  #9AA3B5;
+
+  --ink-interactive:      #7FA5CC;
+  --ink-interactive-text: #8FB2D6;
+  --ink-them:             #72B4A5;
+  --ink-them-text:        #72B4A5;
+  --ink-urgent:           #CE9E45;
+  --ink-urgent-text:      #CE9E45;
+  --ink-live:             #7CBF8E;
+  --ink-live-text:        #7CBF8E;
+  --ink-record:           #E08273;
+  --ink-record-text:      #E08273;
+  --ink-post:             #B195D2;
+  --ink-post-text:        #B195D2;
+
+  --btn-go-bg: #7CBF8E;   --btn-go-text: #10151F;   --btn-go-hover: #8ECDA0;
+  --btn-stop-bg: #E08273; --btn-stop-text: #10151F; --btn-stop-hover: #E9998C;
+  --btn-save-bg: #7FA5CC; --btn-save-text: #10151F; --btn-save-hover: #93B7DA;
+  --btn-neutral-bg: #232D42; --btn-neutral-text: #EDE4D3; --btn-neutral-hover: #2C3650;
+
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-toast: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
+/* Thin, theme-matched scrollbars on every scroll container. Modern Chrome and
+   Firefox use the standard properties; the ::-webkit-* rules cover Safari. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── Background themes (Settings → Appearance → Darin photo) ─────────── */
+html.bg-darin {
+  background:
+    linear-gradient(color-mix(in srgb, var(--bg) 82%, transparent),
+                    color-mix(in srgb, var(--bg) 82%, transparent)),
+    url('/static/DARIN_HIGH_RES.png') center / cover fixed no-repeat;
+}
+html.bg-darin body { background: transparent; }
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+body { display: flex; flex-direction: column; }
+
+/* The masthead: navy nameplate in both materials. */
+header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--masthead);
+  border-bottom: 2px solid var(--brass);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+html.bg-darin header {
+  background: color-mix(in srgb, var(--masthead) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.header-logo {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+header h1 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--masthead-text);
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Masthead controls sit on navy in both materials — paper-on-navy, not
+   the page's ink-on-paper tokens. */
+header .btn-outline,
+header .btn-settings {
+  color: var(--masthead-text);
+  border-color: color-mix(in srgb, var(--masthead-text) 30%, transparent);
+}
+header .btn-outline:hover:not(:disabled),
+header .btn-settings:hover {
+  background: color-mix(in srgb, var(--masthead-text) 12%, transparent);
+  color: var(--masthead-text);
+}
+
+/* One masthead height for every control tier: the icon buttons fix at 38px,
+   so History and the persona toggle match it. Padding no longer sets their
+   height — it's centered inside the fixed box — so all three read level. */
+header .header-actions .btn-outline,
+header .header-actions .persona-toggle {
+  height: 38px;
+}
+header .header-actions .btn-outline {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+header .header-actions .persona-toggle {
+  align-items: stretch;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem 2.5rem;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Two-column layout: main content + live-transcript sidebar (F1) ───── */
+/* The sidebar column only exists while a live transcript is showing; the
+   `.with-sidebar` modifier (toggled by app.js) reserves its track so the main
+   column spans full width otherwise. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+.layout.with-sidebar {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+}
+
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.transcript-sidebar {
+  position: sticky;
+  top: 4.75rem;
+  align-self: start;
+  max-height: calc(100vh - 5.75rem);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.85rem;
+  min-height: 0;
+}
+
+.sidebar-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  flex: none;
+}
+
+.transcript-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+@media (max-width: 900px) {
+  .layout.with-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .transcript-sidebar {
+    position: static;
+    max-height: 38vh;
+  }
+}
+
+/* ── Generic panels ──────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+html.bg-darin .card { background: color-mix(in srgb, var(--bg-card) 85%, transparent); }
+
+.section-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-green  { background: var(--btn-go-bg);  color: var(--btn-go-text); }
+.btn-green:hover:not(:disabled)  { background: var(--btn-go-hover); }
+
+.btn-red    { background: var(--btn-stop-bg); color: var(--btn-stop-text); }
+.btn-red:hover:not(:disabled)    { background: var(--btn-stop-hover); }
+
+.btn-grey   { background: var(--btn-neutral-bg); color: var(--btn-neutral-text); }
+.btn-grey:hover:not(:disabled)   { background: var(--btn-neutral-hover); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover:not(:disabled) { background: color-mix(in srgb, var(--bg-card2) 45%, transparent); }
+
+.btn-sm     { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+.btn-full   { width: 100%; justify-content: center; }
+.btn-nowrap { white-space: nowrap; }
+
+/* In-button spinner (per-prompt busy state — no global lock) */
+.spinner {
+  width: 0.8em;
+  height: 0.8em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  flex: none;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Rows ────────────────────────────────────────────────────────────── */
+.controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ── Header widgets: badge, watcher dot, persona ─────────────────────── */
+/* State badges live on the navy masthead — bright After Hours ink text in
+   both materials so they stay legible on the nameplate. */
+.badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  text-transform: uppercase;
+}
+.badge-idle        { background: rgba(154, 163, 181, 0.12); color: var(--masthead-muted); }
+.badge-active      { background: rgba(124, 191, 142, 0.14); color: #7CBF8E; }
+.badge-post-meeting{ background: rgba(177, 149, 210, 0.14); color: #B195D2; }
+
+/* Liveness is a fresh stamp, not a glow (Ink-Means-Alive Rule). */
+.watcher-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  transition: background 0.2s;
+}
+.watcher-stopped  { background: var(--masthead-muted); opacity: 0.5; }
+.watcher-watching { background: #7CBF8E; }
+.watcher-thinking {
+  background: #CE9E45;
+  animation: pulse 1.2s infinite;
+}
+
+/* Persona: a folder-tab strip, not a pill — the active tab is the front
+   folder in the drawer (manila fill, navy ink). */
+.persona-toggle {
+  display: inline-flex;
+  border: 1px solid color-mix(in srgb, var(--masthead-text) 30%, transparent);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.persona-btn {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--masthead-muted);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.persona-btn:hover { color: var(--masthead-text); }
+.persona-btn.active {
+  background: #DFCAA8;
+  color: #17213A;
+}
+
+/* ── Session bar ─────────────────────────────────────────────────────── */
+.rec-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-record-text);
+  font-weight: 600;
+}
+.rec-label { font-size: 0.7rem; letter-spacing: 0.1em; }
+
+.pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink-record);
+  animation: pulse 1.4s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+.status-text { font-size: 0.8rem; color: var(--text-muted); }
+
+.usage-line {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Live transcript sidebar lines — the record, set in the docket face ── */
+.strip-lines { display: flex; flex-direction: column; gap: 0.3rem; }
+#strip-interims { margin-top: 0.3rem; }
+
+.strip-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  min-width: 0;
+}
+/* Interim styling preserved: muted + italic (F1). */
+.strip-interim .strip-text { color: var(--text-muted); font-style: italic; }
+
+.strip-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.spk {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-sm);
+}
+.spk-me   { background: color-mix(in srgb, var(--ink-interactive) 16%, transparent); color: var(--ink-interactive-text); }
+.spk-them { background: color-mix(in srgb, var(--ink-them) 14%, transparent); color: var(--ink-them-text); }
+
+/* ── Action bar (5 reactive buttons + custom + Ask) ──────────────────── */
+.action-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-action {
+  background: color-mix(in srgb, var(--ink-interactive) 14%, transparent);
+  color: var(--ink-interactive-text);
+  border: 1px solid color-mix(in srgb, var(--ink-interactive) 35%, transparent);
+  padding: 0.42rem 0.9rem;
+  font-size: 0.82rem;
+}
+.btn-action:hover:not(:disabled) { background: color-mix(in srgb, var(--ink-interactive) 26%, transparent); }
+
+.btn-action-custom {
+  background: color-mix(in srgb, var(--ink-them) 12%, transparent);
+  color: var(--ink-them-text);
+  border: 1px solid color-mix(in srgb, var(--ink-them) 30%, transparent);
+}
+.btn-action-custom:hover:not(:disabled) { background: color-mix(in srgb, var(--ink-them) 24%, transparent); }
+
+.action-buttons-custom:empty { display: none; }
+
+.bucket-edit-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 0 2px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.bucket-edit-icon:hover { opacity: 1; color: var(--text); }
+
+/* ── Ask box ─────────────────────────────────────────────────────────── */
+.qa-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-interactive-text);
+  margin-bottom: 0.5rem;
+}
+
+.qa-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.qa-input {
+  flex: 1;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  transition: border-color 0.15s;
+  min-height: 2.4rem;
+}
+.qa-input:focus {
+  outline: none;
+  border-color: var(--ink-interactive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink-interactive) 18%, transparent);
+}
+.qa-input::placeholder { color: var(--text-muted); }
+.qa-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+#btn-ask {
+  border-color: color-mix(in srgb, var(--ink-interactive) 40%, transparent);
+  color: var(--ink-interactive-text);
+  min-height: 2.4rem;
+}
+#btn-ask:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink-interactive) 10%, transparent);
+  border-color: var(--ink-interactive);
+}
+
+/* ── Card feed ───────────────────────────────────────────────────────── */
+.card-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  /* Retention (F4): aged/dismissed cards accumulate here indefinitely (default
+     auto_hide_expired=false), so bound the feed to the viewport and scroll it
+     internally — the main column never grows the page or shifts as cards land. */
+  max-height: calc(100vh - 16rem);
+  overflow-y: auto;
+}
+
+.feed-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* The case pocket. Lane is encoded in the card's full 1px tinted border
+   (federal blue = reactive, ledger teal = proactive); urgency escalates the
+   border to the ochre seal. No side stripes — ever. */
+.copilot-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  opacity: 1;
+  transition: opacity 0.7s ease, transform 0.7s ease;
+  animation: card-in 0.25s ease-out;
+}
+html.bg-darin .copilot-card { background: color-mix(in srgb, var(--bg-card) 88%, transparent); }
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.copilot-card.lane-reactive  { border-color: color-mix(in srgb, var(--ink-interactive) 45%, transparent); }
+.copilot-card.lane-proactive { border-color: color-mix(in srgb, var(--ink-them) 45%, transparent); }
+
+/* Urgency: the boundary seal. `now` deepens the border to the ochre seal and
+   pulses the red attention seal exactly twice on arrival, then stops. `fyi`
+   cards share the feed but arrive quietly — the standard slide-in, no seal. */
+.copilot-card.urgency-now {
+  border-color: color-mix(in srgb, var(--ink-urgent) 80%, transparent);
+  animation: card-in 0.25s ease-out, attention-seal 0.9s ease-out 2;
+}
+@keyframes attention-seal {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink-record) 30%, transparent); }
+  60%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink-record) 22%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink-record) 0%, transparent); }
+}
+
+/* Proactive cards fade out at expires_in_s, then are removed by JS */
+.copilot-card.expiring { opacity: 0; transform: translateY(-4px); }
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Card-type chips are docket stamps: mono, uppercase, stamped rectangle —
+   never pills. Fill 12%, border 45%, ink-step text. */
+.card-chip {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 40%, transparent);
+  color: var(--text-muted);
+}
+.chip-answer     { background: color-mix(in srgb, var(--ink-interactive) 12%, transparent); border-color: color-mix(in srgb, var(--ink-interactive) 45%, transparent); color: var(--ink-interactive-text); }
+.chip-fact_check { background: color-mix(in srgb, var(--ink-urgent) 12%, transparent);      border-color: color-mix(in srgb, var(--ink-urgent) 45%, transparent);      color: var(--ink-urgent-text); }
+.chip-reframe    { background: color-mix(in srgb, var(--ink-post) 12%, transparent);        border-color: color-mix(in srgb, var(--ink-post) 45%, transparent);        color: var(--ink-post-text); }
+.chip-status     { background: color-mix(in srgb, var(--text-muted) 15%, transparent);      border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);      color: var(--text); }
+.chip-next_step  { background: color-mix(in srgb, var(--ink-live) 12%, transparent);        border-color: color-mix(in srgb, var(--ink-live) 45%, transparent);        color: var(--ink-live-text); }
+.chip-question   { background: color-mix(in srgb, var(--ink-them) 12%, transparent);        border-color: color-mix(in srgb, var(--ink-them) 45%, transparent);        color: var(--ink-them-text); }
+.chip-deep_dive  { background: color-mix(in srgb, var(--ink-post) 12%, transparent);        border-color: color-mix(in srgb, var(--ink-post) 45%, transparent);        color: var(--ink-post-text); }
+.chip-heads_up   { background: color-mix(in srgb, var(--ink-them) 12%, transparent);        border-color: color-mix(in srgb, var(--ink-them) 45%, transparent);        color: var(--ink-them-text); }
+
+.card-urgent-chip {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink-urgent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink-urgent) 50%, transparent);
+  color: var(--ink-urgent-text);
+}
+
+.card-lane-chip {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.card-auto-chip {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink-interactive) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink-interactive) 45%, transparent);
+  color: var(--ink-interactive-text);
+}
+
+.card-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+}
+.card-dismiss:hover { background: color-mix(in srgb, var(--bg-card2) 55%, transparent); color: var(--text); }
+
+/* Headlines speak — the display serif, one line the operator reads mid-call. */
+.card-headline {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.35rem;
+  max-width: 60ch;
+  text-wrap: balance;
+}
+
+/* key_fact — the payload datum, rendered largest on the card so it lands first
+   in a glance (headline says WHAT, key_fact carries the number/version/name).
+   Display serif, sized above the headline; ledger-teal ink ties it to the
+   proactive lane without becoming a signal of its own (still furniture-neutral
+   on reactive cards via the token, which the card border already disambiguates). */
+.card-key-fact {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  margin: 0.1rem 0 0.4rem;
+  text-wrap: balance;
+}
+
+/* Bullets are the "why" — subordinate to the say-this payload above them:
+   capped at a readable measure, one step toward faded ink. */
+.card-bullets {
+  list-style: disc;
+  padding-left: 1.15rem;
+  margin-bottom: 0.35rem;
+}
+.card-bullets li {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin-bottom: 0.15rem;
+  max-width: 72ch;
+  color: var(--text-secondary);
+}
+
+/* The payload strip — directly under the headline. The say-this line is a
+   quotation, so it alone earns the italic serif (Voice Rule). */
+.say-this {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: color-mix(in srgb, var(--ink-interactive) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink-interactive) 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  margin: 0.15rem 0 0.5rem;
+}
+.say-this-label {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-interactive-text);
+}
+.say-this-text {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--text);
+}
+.say-this-copy {
+  flex: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink-interactive) 40%, transparent);
+  color: var(--ink-interactive-text);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.say-this-copy:hover { background: color-mix(in srgb, var(--ink-interactive) 14%, transparent); }
+
+/* The docket line — the card's filing record. */
+.card-meta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ── Card cue badges (F4) — instant-glance keywords ───────────────────── */
+.card-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+}
+/* Cue badges are neutral by default; the ochre seal is reserved for urgency,
+   so cues only take it when the card itself is urgent (One Meaning Rule). */
+.card-cue {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.16rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-well);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.urgency-now .card-cue {
+  background: color-mix(in srgb, var(--ink-urgent) 14%, transparent);
+  color: var(--ink-urgent-text);
+  border-color: color-mix(in srgb, var(--ink-urgent) 45%, transparent);
+}
+
+/* ── Aged / compact retention (F4) ────────────────────────────────────── */
+/* Expired proactive cards and dismissed cards dim and collapse to a headline +
+   cue badges, sinking beneath the fresh cards. Clicking re-expands them. */
+.copilot-card.aged {
+  opacity: 0.6;
+  cursor: pointer;
+  border-color: var(--border);
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+.copilot-card.aged:hover { opacity: 0.85; }
+.copilot-card.aged .card-bullets,
+.copilot-card.aged .say-this,
+.copilot-card.aged .card-meta,
+.copilot-card.aged .card-dismiss,
+.copilot-card.aged .card-urgent-chip { display: none; }
+.copilot-card.aged .card-headline { margin-bottom: 0.25rem; }
+
+.copilot-card.aged.aged-expanded { opacity: 1; cursor: default; }
+.copilot-card.aged.aged-expanded .card-bullets { display: block; }
+.copilot-card.aged.aged-expanded .card-meta { display: block; }
+.copilot-card.aged.aged-expanded .say-this { display: flex; }
+
+/* ── Post-meeting section ────────────────────────────────────────────── */
+.bucket {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.bucket-purple .btn-prompt {
+  background: color-mix(in srgb, var(--ink-post) 12%, transparent);
+  color: var(--ink-post-text);
+  border: 1px solid color-mix(in srgb, var(--ink-post) 30%, transparent);
+}
+.bucket-purple .btn-prompt:hover:not(:disabled) { background: color-mix(in srgb, var(--ink-post) 24%, transparent); }
+
+.btn-prompt {
+  position: relative;
+  padding: 0.4rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-prompt:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-prompt .badge-check {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 14px;
+  height: 14px;
+  background: var(--btn-go-bg);
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--btn-go-text);
+  font-weight: 700;
+}
+.btn-prompt.done .badge-check { display: flex; }
+
+.segment-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.range-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.range-input {
+  width: 80px;
+  padding: 0.25rem 0.4rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.range-input:focus { outline: 1px solid var(--ink-interactive); }
+
+.post-actions { margin-bottom: 0.75rem; }
+
+.output-wrap {
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  min-height: 160px;
+}
+
+.output-title {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+/* Post-meeting output is the one editorial surface: the operator is off the
+   call, so it reads like an article — larger body, generous leading. */
+#output-panel {
+  color: var(--text);
+  line-height: 1.65;
+}
+
+/* Raw text while streaming; markdown once at processing_complete */
+#output-markdown {
+  font-size: 1rem;
+  color: var(--text);
+  line-height: 1.65;
+  max-width: 70ch;
+}
+#output-markdown.streaming {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+#output-markdown h1, #output-markdown h2, #output-markdown h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0.9rem 0 0.35rem;
+}
+#output-markdown ul, #output-markdown ol {
+  padding-left: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+#output-markdown p { margin-bottom: 0.5rem; }
+#output-markdown code {
+  background: color-mix(in srgb, var(--bg-card2) 55%, transparent);
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* Scaffold lists (stream_item long-form path) */
+#output-panel .insight-block { padding-top: 0.5rem; }
+#output-panel h3 {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin: 1rem 0 0.35rem;
+}
+#output-panel h3:first-child { margin-top: 0; }
+#output-panel ul {
+  padding-left: 1.2rem;
+  list-style-type: disc;
+}
+#output-panel li {
+  margin-bottom: 0.3rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 70ch;
+  color: var(--text);
+}
+
+/* ── Progress bar & toast ────────────────────────────────────────────── */
+.progress-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  z-index: 20;
+}
+
+.toast {
+  position: fixed;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translate(-50%, 8px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 0.82rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-toast);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 200;
+  max-width: 80vw;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ── Modal overlay ───────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  position: relative;
+  max-height: 85vh;
+  overflow-y: auto;
+  width: 560px;
+  max-width: 94vw;
+}
+.modal-wide { width: 640px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; }
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: background 0.15s;
+}
+.modal-close:hover { background: color-mix(in srgb, var(--bg-card2) 55%, transparent); color: var(--text); }
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Settings dialog (storage + appearance + Context Pack) ───────────── */
+.settings-section-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.settings-row { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.25rem; }
+.settings-label { font-size: 0.8rem; font-weight: 600; }
+.settings-hint { font-size: 0.75rem; color: var(--text-muted); }
+.settings-path-row { display: flex; gap: 0.5rem; align-items: center; }
+.settings-path-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+.settings-divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.bg-option-group { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.bg-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.bg-option input[type="radio"] { accent-color: var(--ink-interactive); cursor: pointer; }
+.bg-option-label { user-select: none; }
+
+/* Context Pack editor */
+.ctx-textarea { min-height: 180px; }
+.ctx-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.ctx-meta .over-budget { color: var(--ink-urgent-text); font-weight: 700; }
+.ctx-warning { color: var(--ink-urgent-text); font-weight: 600; }
+
+/* ── Custom model endpoints (Settings, F6) ───────────────────────────── */
+.endpoint-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.1rem; }
+.endpoint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-well);
+}
+.endpoint-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.endpoint-fields .form-input { font-size: 0.78rem; }
+.ep-delete { align-self: center; flex: none; white-space: nowrap; }
+@media (max-width: 560px) {
+  .endpoint-fields { grid-template-columns: 1fr; }
+}
+
+/* ── Knowledge Base / SAS Corpus (Settings) ──────────────────────────── */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.settings-toggle input[type="checkbox"] { accent-color: var(--ink-interactive); cursor: pointer; }
+.kb-stats { font-size: 0.75rem; color: var(--text-muted); }
+.kb-progress {
+  font-size: 0.75rem;
+  color: var(--ink-interactive-text);
+  font-weight: 600;
+}
+.kb-doc-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.kb-doc-empty { color: var(--text-muted); font-size: 0.8rem; font-style: italic; padding: 0.4rem 0; }
+.kb-doc-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-well);
+}
+.kb-doc-info { flex: 1; min-width: 0; }
+.kb-doc-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-doc-meta { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); }
+.kb-doc-actions { display: flex; align-items: center; gap: 0.3rem; flex: none; }
+.kb-chunk-preview {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+}
+.kb-chunk-empty { color: var(--text-muted); font-size: 0.75rem; font-style: italic; }
+.kb-chunk {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-card2) 40%, transparent);
+}
+.kb-chunk-head { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-interactive-text); margin-bottom: 0.15rem; }
+.kb-chunk-text {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+/* ── History dialog ──────────────────────────────────────────────────── */
+.meeting-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.meeting-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-well);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.meeting-row:hover { background: color-mix(in srgb, var(--bg-card2) 45%, transparent); border-color: color-mix(in srgb, var(--ink-interactive) 40%, transparent); }
+.meeting-info { flex: 1; min-width: 0; }
+.meeting-date { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+.meeting-title { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meeting-duration { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.meeting-arrow { color: var(--text-muted); }
+.meeting-empty { color: var(--text-muted); font-size: 0.85rem; font-style: italic; padding: 1rem 0; text-align: center; }
+
+.hidden-view { display: none; }
+
+.tx-back { display: flex; align-items: center; gap: 0.4rem; color: var(--ink-interactive-text); font-size: 0.8rem; cursor: pointer; background: none; border: none; padding: 0; margin-bottom: 1rem; }
+.tx-back:hover { text-decoration: underline; }
+.tx-meeting-title { font-family: var(--font-display); font-size: 1rem; font-weight: 600; margin-bottom: 0.2rem; }
+.tx-meta { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem; }
+.tx-body {
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+.tx-timestamp { color: var(--ink-interactive-text); font-size: 0.7rem; margin-right: 0.4rem; }
+.tx-empty { color: var(--text-muted); font-style: italic; }
+
+/* History: Cards tab (F4) */
+.history-tabs { margin-bottom: 0.75rem; }
+.tx-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+.tx-card-row {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-well);
+}
+.tx-card-headline { font-family: var(--font-display); font-size: 0.9rem; font-weight: 600; }
+.tx-card-say { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem; }
+
+/* ── Gear / header action buttons ────────────────────────────────────── */
+.btn-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-settings:hover { background: color-mix(in srgb, var(--bg-card2) 55%, transparent); color: var(--text); }
+
+/* ── Prompt editor dialog ────────────────────────────────────────────── */
+/* Tabs are folder tabs: square-cornered, sharing a baseline rule; the active
+   tab is the front folder — manila fill, navy ink. */
+.ptabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.ptab {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: transparent;
+  color: var(--text-muted);
+  transition: background 0.15s;
+  margin-bottom: -1px;
+}
+.ptab.active { background: var(--bg-card2); color: var(--btn-neutral-text); border-color: var(--border-strong); }
+.ptab:hover:not(.active) { background: color-mix(in srgb, var(--bg-card2) 40%, transparent); }
+:root[data-theme="night"] .ptab.active { color: var(--text); }
+
+.prompt-list-items { display: flex; flex-direction: column; gap: 0.35rem; max-height: 280px; overflow-y: auto; margin-bottom: 1rem; }
+.prompt-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-well);
+  font-size: 0.82rem;
+}
+.prompt-editor-row-name { flex: 1; }
+.pact-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pact-btn:hover { background: color-mix(in srgb, var(--bg-card2) 55%, transparent); color: var(--text); }
+.pact-btn-delete:hover { background: color-mix(in srgb, var(--ink-record) 14%, transparent); color: var(--ink-record-text); border-color: color-mix(in srgb, var(--ink-record) 30%, transparent); }
+
+.prompt-edit-form { display: none; flex-direction: column; gap: 0.75rem; }
+.prompt-edit-form.open { display: flex; }
+.form-back { display: flex; align-items: center; gap: 0.4rem; color: var(--ink-interactive-text); font-size: 0.78rem; cursor: pointer; background: none; border: none; padding: 0; }
+.form-back:hover { text-decoration: underline; }
+.form-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-label { font-size: 0.78rem; font-weight: 600; }
+.form-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+.form-textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  resize: vertical;
+  min-height: 120px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+.form-hint { font-size: 0.72rem; color: var(--text-muted); }
+.form-footer { justify-content: flex-end; }
+.btn-save { background: var(--btn-save-bg); color: var(--btn-save-text); border: none; }
+.btn-save:hover { background: var(--btn-save-hover); }
+.btn-delete-prompt { background: color-mix(in srgb, var(--ink-record) 12%, transparent); color: var(--ink-record-text); border: 1px solid color-mix(in srgb, var(--ink-record) 30%, transparent); }
+.btn-delete-prompt:hover { background: color-mix(in srgb, var(--ink-record) 22%, transparent); }
+
+/* ── Focus visibility ────────────────────────────────────────────────── */
+/* One consistent federal-blue ring on keyboard focus, replacing the UA default. */
+:is(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--ink-interactive);
+  outline-offset: 2px;
+}
+header :is(button, input):focus-visible {
+  outline-color: var(--masthead-text);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+/* Pulse/arrival animations stop; state is still conveyed by color and the
+   NOW chip. Card expiry is timer-driven (app.js), so dropping the fade
+   transition is safe — expired cards are removed at the same moment. */
+@media (prefers-reduced-motion: reduce) {
+  .copilot-card,
+  .copilot-card.urgency-now { animation: none; transition: none; }
+  .pulse-dot,
+  .watcher-thinking { animation: none; }
+  .toast { transition: opacity 0.2s ease; transform: translate(-50%, 0); }
+}

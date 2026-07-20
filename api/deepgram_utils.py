@@ -1,66 +1,75 @@
-import json
-import requests
+"""Deepgram batch (prerecorded) transcription utilities.
+
+Uploads audio from memory (WAV encoded in an ``io.BytesIO`` via soundfile)
+to Deepgram's REST API using the v4 SDK with the nova-3 model. Failures
+RAISE — an error string is never returned as a transcript.
+"""
+
+from __future__ import annotations
+
+import io
+import time
+
+import numpy as np
 import soundfile as sf
+from deepgram import DeepgramClient, PrerecordedOptions
+from loguru import logger
 
-def transcribe_with_deepgram(api_key, audio_data, sample_rate):
-    """
-    Transcribe audio using Deepgram API
-    
+import config
+
+
+def transcribe_with_deepgram(api_key: str, audio_data: np.ndarray, sample_rate: int) -> str:
+    """Transcribe audio in memory using the Deepgram REST API (nova-3).
+
     Args:
-        api_key: Deepgram API key
-        audio_data: Audio data as numpy array
-        sample_rate: Sample rate of audio
-        
+        api_key: Deepgram API key.
+        audio_data: Audio samples as a numpy array (mono int16 expected;
+            any soundfile-encodable array works).
+        sample_rate: Sample rate of the audio in Hz.
+
     Returns:
-        Transcribed text
+        The transcribed text (may be empty for silent audio).
+
+    Raises:
+        ValueError: If audio_data is empty.
+        Exception: Any Deepgram SDK/API error is propagated to the caller —
+            errors are never returned as transcript strings.
     """
-    # Save audio to temporary file
-    temp_file = "BSGPT_REC.wav"
-    if audio_data is not None:
-        sf.write(file=temp_file, data=audio_data, samplerate=sample_rate)
-    
-    print("Transcribing audio...")
+    if audio_data is None or len(audio_data) == 0:
+        raise ValueError("Audio data cannot be empty")
 
-    # Deepgram API endpoint
-    url = "https://api.deepgram.com/v1/listen"
+    # Encode WAV entirely in memory — no temp file side effects
+    wav_buffer = io.BytesIO()
+    sf.write(wav_buffer, audio_data, samplerate=sample_rate, format="WAV", subtype="PCM_16")
+    payload = wav_buffer.getvalue()
 
-    # Request headers
-    headers = {
-        "Authorization": f"Token {api_key}"
-    }
-    
-    # Parameters for the transcription
-    params = {
-        "punctuate": "true",
-        "model": "general",
-        "language": "en-US"
-    }
-    
-    with open(temp_file, "rb") as audio:
-        # Send the request to Deepgram
-        response = requests.post(
-            url,
-            headers=headers,
-            params=params,
-            data=audio
-        )
-    
-    if response.status_code == 200:
-        response_json = response.json()
-        
-        # Debug logging
-        print("Full response structure:")
-        print(json.dumps(response_json, indent=2))
-        
-        # Extract transcript from response
-        try:
-            transcript = response_json["results"]["channels"][0]["alternatives"][0]["transcript"]
-            print(f"Found transcript: {transcript}")
-            return transcript
-        except KeyError:
-            print("Standard path not found, examining response structure...")
-            return "Error: Could not locate transcript in response. Check console output for structure."
-    else:
-        print(f"Error: {response.status_code}")
-        print(response.text)
-        return f"Error: {response.status_code} - {response.text}"
+    logger.info(
+        "Transcribing audio via Deepgram REST",
+        model=config.DEEPGRAM_MODEL,
+        samples=len(audio_data),
+        sample_rate=sample_rate,
+        wav_bytes=len(payload),
+    )
+
+    options = PrerecordedOptions(
+        model=config.DEEPGRAM_MODEL,
+        language=config.DEEPGRAM_LANGUAGE,
+        smart_format=True,
+    )
+
+    start = time.perf_counter()
+    client = DeepgramClient(api_key)
+    response = client.listen.rest.v("1").transcribe_file({"buffer": payload}, options)
+
+    try:
+        transcript: str = response.results.channels[0].alternatives[0].transcript
+    except (AttributeError, IndexError) as e:
+        raise RuntimeError(f"Unexpected Deepgram response shape: {e}") from e
+
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "Deepgram batch transcription complete",
+        transcript_length=len(transcript),
+        duration_ms=f"{duration_ms:.2f}",
+    )
+    return transcript

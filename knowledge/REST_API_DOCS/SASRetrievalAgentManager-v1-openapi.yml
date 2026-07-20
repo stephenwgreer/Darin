@@ -1,0 +1,3769 @@
+components:
+  schemas:
+    agentAgentQueryRequest:
+      additionalProperties: false
+      description: >-
+        A query from an orchestrator agent against a sub-agent via A2A.
+
+        Distinguished from userAgentQueryRequest by the required parentQueryId field.
+      properties:
+        agentId:
+          title: Agentid
+          type: string
+        content:
+          title: Content
+          type: string
+        parentQueryId:
+          title: Parentqueryid
+          type: string
+        querySessionId:
+          nullable: true
+          title: Querysessionid
+          type: string
+      required:
+        - content
+        - agentId
+        - parentQueryId
+      title: agentAgentQueryRequest
+      type: object
+    agentCollectionResponse:
+      description: A list of agent resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of agent resources.
+          items:
+            $ref: "#/components/schemas/minimizedAgent"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: agentCollectionResponse
+      type: object
+    asyncQueryResponse:
+      description: The response model for an asynchronous query.
+      properties:
+        queryId:
+          title: Queryid
+          type: string
+        querySessionId:
+          title: Querysessionid
+          type: string
+      required:
+        - queryId
+        - querySessionId
+      title: asyncQueryResponse
+      type: object
+    collectionCollectionResponse:
+      description: A list of collection resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of collection resources.
+          items:
+            $ref: "#/components/schemas/minimizedCollection"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: collectionCollectionResponse
+      type: object
+    llmCallCollectionResponse:
+      description: A list of LLM call resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of LLM call resources.
+          items:
+            $ref: "#/components/schemas/minimizedLlmCall"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: llmCallCollectionResponse
+      type: object
+    llmCallInput:
+      description: The representation of an LLM call input.
+      properties:
+        content:
+          nullable: true
+          title: Content
+          type: string
+        modelName:
+          nullable: true
+          title: Modelname
+          type: string
+        modelProvider:
+          nullable: true
+          title: Modelprovider
+          type: string
+        temperature:
+          nullable: true
+          title: Temperature
+          type: number
+      title: llmCallInput
+      type: object
+    llmCallOutput:
+      description: The representation of an LLM call output.
+      properties:
+        response:
+          nullable: true
+          title: Response
+          type: string
+        toolCalls:
+          nullable: true
+          title: Toolcalls
+          type: array
+      title: llmCallOutput
+      type: object
+    llmCollectionResponse:
+      description: A list of LLM resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of LLM resources.
+          items:
+            $ref: "#/components/schemas/minimizedLlm"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: llmCollectionResponse
+      type: object
+    minimizedAgent:
+      description: A representation of an agent that includes only a subset of fields.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          nullable: true
+          title: Id
+          type: string
+        name:
+          nullable: true
+          title: Name
+          type: string
+      title: minimizedAgent
+      type: object
+    minimizedCollection:
+      description: A representation of a collection that includes only a subset of fields.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          nullable: true
+          title: Id
+          type: string
+        name:
+          nullable: true
+          title: Name
+          type: string
+      title: minimizedCollection
+      type: object
+    minimizedLlm:
+      description: A representation of an LLM that includes only a subset of fields.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          nullable: true
+          title: Id
+          type: string
+        name:
+          nullable: true
+          title: Name
+          type: string
+        type:
+          nullable: true
+          title: Type
+          type: string
+      title: minimizedLlm
+      type: object
+    minimizedLlmCall:
+      description: A representation of an LLM call that includes only a subset of fields.
+      properties:
+        completionCost:
+          anyOf:
+            - type: number
+            - type: integer
+          nullable: true
+          title: Completioncost
+        completionTokens:
+          nullable: true
+          title: Completiontokens
+          type: integer
+        id:
+          nullable: true
+          title: Id
+          type: string
+        input:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/llmCallInput"
+          type: object
+        llmId:
+          nullable: true
+          title: Llmid
+          type: string
+        output:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/llmCallOutput"
+          type: object
+        parentQueryId:
+          nullable: true
+          title: Parentqueryid
+          type: string
+        promptCost:
+          anyOf:
+            - type: number
+            - type: integer
+          nullable: true
+          title: Promptcost
+        promptTokens:
+          nullable: true
+          title: Prompttokens
+          type: integer
+      title: minimizedLlmCall
+      type: object
+    minimizedQuery:
+      description: A representation of a query that includes only a subset of fields.
+      properties:
+        content:
+          title: Content
+          type: string
+        errorCode:
+          title: Errorcode
+          type: integer
+        errorText:
+          nullable: true
+          title: Errortext
+          type: string
+        id:
+          title: Id
+          type: string
+        origin:
+          title: Origin
+          type: string
+        parentQueryId:
+          nullable: true
+          title: Parentqueryid
+          type: string
+        querySessionId:
+          title: Querysessionid
+          type: string
+        response:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/queryOutput"
+          type: object
+        target:
+          title: Target
+          type: string
+        targetId:
+          additionalProperties: true
+          title: Targetid
+          type: object
+      required:
+        - id
+        - content
+        - errorCode
+        - querySessionId
+        - origin
+        - target
+        - targetId
+      title: minimizedQuery
+      type: object
+    minimizedQuerySession:
+      description: A representation of a query session that includes only a subset of fields.
+      properties:
+        id:
+          nullable: true
+          title: Id
+          type: string
+        insertTimestamp:
+          nullable: true
+          title: Inserttimestamp
+          type: string
+        title:
+          nullable: true
+          title: Title
+          type: string
+        updateTimestamp:
+          nullable: true
+          title: Updatetimestamp
+          type: string
+      title: minimizedQuerySession
+      type: object
+    minimizedRetrievalCall:
+      description: A representation of a retrieval call that includes only a subset of fields.
+      properties:
+        completionCost:
+          anyOf:
+            - type: number
+            - type: integer
+          nullable: true
+          title: Completioncost
+        completionTokens:
+          nullable: true
+          title: Completiontokens
+          type: integer
+        id:
+          nullable: true
+          title: Id
+          type: string
+        input:
+          nullable: true
+          title: Input
+          type: object
+        output:
+          nullable: true
+          title: Output
+          type: object
+        parentQueryId:
+          nullable: true
+          title: Parentqueryid
+          type: string
+      title: minimizedRetrievalCall
+      type: object
+    minimizedSourceFileTag:
+      description: A representation of a source tag that includes only a subset of fields.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          nullable: true
+          title: Id
+          type: string
+        name:
+          nullable: true
+          title: Name
+          type: string
+        sourceId:
+          nullable: true
+          title: Sourceid
+          type: string
+      title: minimizedSourceFileTag
+      type: object
+    minimizedToolCall:
+      description: A representation of a tool call that includes only a subset of fields.
+      properties:
+        cost:
+          anyOf:
+            - type: number
+            - type: integer
+          nullable: true
+          title: Cost
+        id:
+          nullable: true
+          title: Id
+          type: string
+        input:
+          nullable: true
+          title: Input
+          type: object
+        output:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/toolCallOutput"
+          type: object
+        parentQueryId:
+          nullable: true
+          title: Parentqueryid
+          type: string
+        toolName:
+          nullable: true
+          title: Toolname
+          type: string
+        toolServerId:
+          nullable: true
+          title: Toolserverid
+          type: string
+      title: minimizedToolCall
+      type: object
+    queryCollectionResponse:
+      description: A list of query resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of query resources.
+          items:
+            $ref: "#/components/schemas/minimizedQuery"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: queryCollectionResponse
+      type: object
+    queryOutput:
+      description: The model for the query's response.
+      properties:
+        answer:
+          nullable: true
+          title: Answer
+          type: string
+        context:
+          nullable: true
+          title: Context
+          type: array
+        toolCalls:
+          nullable: true
+          title: Toolcalls
+          type: array
+        usageMetadata:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/usageMetadata"
+          type: object
+      title: queryOutput
+      type: object
+    queryResponse:
+      description: The model for the query's response.
+      properties:
+        content:
+          title: Content
+          type: string
+        errorCode:
+          title: Errorcode
+          type: integer
+        errorText:
+          nullable: true
+          title: Errortext
+          type: string
+        id:
+          title: Id
+          type: string
+        origin:
+          title: Origin
+          type: string
+        parentQueryId:
+          nullable: true
+          title: Parentqueryid
+          type: string
+        querySessionId:
+          title: Querysessionid
+          type: string
+        response:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/queryOutput"
+          type: object
+        target:
+          title: Target
+          type: string
+        targetId:
+          additionalProperties: true
+          title: Targetid
+          type: object
+        userEmail:
+          title: Useremail
+          type: string
+      required:
+        - id
+        - content
+        - userEmail
+        - errorCode
+        - querySessionId
+        - origin
+        - target
+        - targetId
+      title: queryResponse
+      type: object
+    querySessionCollectionResponse:
+      description: A list of query session resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of query session resources.
+          items:
+            $ref: "#/components/schemas/minimizedQuerySession"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: querySessionCollectionResponse
+      type: object
+    responseMessage:
+      description: The response model for creating a source object.
+      properties:
+        message:
+          description: A confirmation message indicating the result of the source creation.
+          title: Message
+          type: string
+      required:
+        - message
+      title: responseMessage
+      type: object
+    retrievalCallCollectionResponse:
+      description: A list of retrieval call resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of retrieval call resources.
+          items:
+            $ref: "#/components/schemas/minimizedRetrievalCall"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: retrievalCallCollectionResponse
+      type: object
+    sasApiException:
+      description: A custom exception for SAS API errors.
+      properties:
+        details:
+          example:
+            - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+          items:
+            type: string
+          title: Details
+          type: array
+        errorCode:
+          example: 401
+          title: Error Code
+          type: number
+        httpStatusCode:
+          example: 401
+          title: HTTP Status Code
+          type: number
+        message:
+          example: Credentials could not be validated.
+          title: Message
+          type: string
+        version:
+          example: 2
+          title: Version
+          type: number
+      title: sasApiException
+      type: object
+    source:
+      description: The model for a source object.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          description: The source primary key.
+          title: Id
+          type: string
+        inputType:
+          description: The input type of the source.
+          title: Inputtype
+          type: string
+        insertTimestamp:
+          description: The timestamp inserted for the source.
+          nullable: true
+          title: Inserttimestamp
+          type: string
+        localUri:
+          description: The local URI of the source.
+          nullable: true
+          title: Localuri
+          type: string
+        metadata:
+          description: The metadata associated with the source.
+          nullable: true
+          title: Metadata
+          type: object
+        name:
+          description: The source name.
+          title: Name
+          type: string
+        remoteUri:
+          description: The remote URI of the source.
+          nullable: true
+          title: Remoteuri
+          type: string
+        secrets:
+          description: The secrets associated with the source.
+          nullable: true
+          title: Secrets
+          type: object
+        sourceTemplateId:
+          nullable: true
+          title: Sourcetemplateid
+          type: string
+        sourceTemplateVersion:
+          nullable: true
+          title: Sourcetemplateversion
+          type: integer
+        sourceType:
+          description: The type of the source.
+          title: Sourcetype
+          type: string
+        updateTimestamp:
+          description: The updated timestamp for the source.
+          nullable: true
+          title: Updatetimestamp
+          type: string
+      required:
+        - id
+        - name
+        - sourceType
+        - inputType
+      title: Source
+      type: object
+    sourceCollection:
+      description: A list of sources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of collection resources.
+          items:
+            $ref: "#/components/schemas/source"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          default: sources
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: sourceCollection
+      type: object
+    sourceFile:
+      description: The model for a source file object.
+      properties:
+        filepath:
+          description: The file path.
+          title: Filepath
+          type: string
+        filters:
+          description: The filters associated with the source file.
+          nullable: true
+          title: Filters
+          type: object
+        insertTimestamp:
+          description: The time that the file was created.
+          nullable: true
+          title: Inserttimestamp
+          type: string
+        metadata:
+          description: The metadata associated with the source file.
+          nullable: true
+          title: Metadata
+          type: object
+        sourceFileId:
+          description: "Note: This is a Primary Key.<pk/>"
+          title: Sourcefileid
+          type: string
+        sourceId:
+          description: "Note: This is a Foreign Key to `source.id`.<fk table='source' column='id'/>"
+          title: Sourceid
+          type: string
+        updateTimestamp:
+          description: The time that the file was last modified.
+          nullable: true
+          title: Updatetimestamp
+          type: string
+      required:
+        - sourceFileId
+        - sourceId
+        - filepath
+      title: sourceFile
+      type: object
+    sourceFileCollection:
+      description: A list of sources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of collection resources.
+          items:
+            $ref: "#/components/schemas/sourceFile"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          default: sourceFiles
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: sourceFileCollection
+      type: object
+    sourceFileResponse:
+      description: The model for a source file response.
+      properties:
+        id:
+          description: The ID of the source file.
+          title: Id
+          type: string
+        sourceId:
+          description: The ID of the source associated with the file.
+          title: Sourceid
+          type: string
+      required:
+        - id
+        - sourceId
+      title: sourceFileResponse
+      type: object
+    sourceFileTagCollectionResponse:
+      description: A list of source tag resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of source tag resources.
+          items:
+            $ref: "#/components/schemas/minimizedSourceFileTag"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: sourceFileTagCollectionResponse
+      type: object
+    sourceFileTagRequest:
+      description: The model for a source file request.
+      properties:
+        description:
+          description: The description of the source file tag.
+          nullable: true
+          title: Description
+          type: string
+        metadata:
+          description: The metadata associated with the source file tag.
+          nullable: true
+          title: Metadata
+          type: object
+        name:
+          description: The name of the source file tag.
+          title: Name
+          type: string
+        sourceId:
+          description: The ID used to set a local source tag. If unset, the tag will be global.
+          nullable: true
+          title: Sourceid
+          type: string
+      required:
+        - name
+      title: sourceFileTagRequest
+      type: object
+    sourceFileTagResponse:
+      description: The model for a source file response.
+      properties:
+        description:
+          nullable: true
+          title: Description
+          type: string
+        id:
+          description: The ID of the source file tag.
+          title: Id
+          type: string
+        insertTimestamp:
+          nullable: true
+          title: Inserttimestamp
+          type: string
+        metadata:
+          nullable: true
+          title: Metadata
+          type: object
+        name:
+          title: Name
+          type: string
+        sourceId:
+          description: The ID used to set a local source tag. If unset, the tag will be global.
+          nullable: true
+          title: Sourceid
+          type: string
+        updateTimestamp:
+          nullable: true
+          title: Updatetimestamp
+          type: string
+      required:
+        - id
+        - name
+      title: sourceFileTagResponse
+      type: object
+    sourceRequest:
+      description: The model for a source request.
+      properties:
+        description:
+          description: The description of the source.
+          nullable: true
+          title: Description
+          type: string
+        id:
+          description: The ID of the source.
+          nullable: true
+          title: Id
+          type: string
+        inputType:
+          description: The input type of the source.
+          title: Inputtype
+          type: string
+        metadata:
+          description: The metadata associated with the source.
+          nullable: true
+          title: Metadata
+          type: object
+        name:
+          description: The name of the source.
+          title: Name
+          type: string
+        remoteUri:
+          description: The remote URI of the source.
+          nullable: true
+          title: Remoteuri
+          type: string
+        secrets:
+          description: The secrets associated with the source.
+          nullable: true
+          title: Secrets
+          type: object
+        sourceType:
+          description: The type of the source.
+          title: Sourcetype
+          type: string
+      required:
+        - name
+        - sourceType
+        - inputType
+      title: sourceRequest
+      type: object
+    sourceResponse:
+      description: The model for a source response.
+      properties:
+        description:
+          description: The description of the source.
+          nullable: true
+          title: Description
+          type: string
+        id:
+          description: The ID of the source.
+          title: Id
+          type: string
+        inputType:
+          description: The input type of the source.
+          title: Inputtype
+          type: string
+        name:
+          description: The name of the source.
+          title: Name
+          type: string
+        sourceType:
+          description: The type of the source.
+          title: Sourcetype
+          type: string
+      required:
+        - id
+        - name
+        - sourceType
+        - inputType
+      title: sourceResponse
+      type: object
+    toolCallCollectionResponse:
+      description: A list of tool call resources.
+      properties:
+        count:
+          description: The number of results returned in the collection.
+          nullable: true
+          title: Count
+          type: integer
+        items:
+          description: The representation of tool call resources.
+          items:
+            $ref: "#/components/schemas/minimizedToolCall"
+          nullable: true
+          title: Items
+          type: array
+        limit:
+          description: The maximum number of results requested.
+          nullable: true
+          title: Limit
+          type: integer
+        name:
+          description: The name of the collection requested.
+          nullable: true
+          title: Name
+          type: string
+        start:
+          description: The starting index of the collection.
+          nullable: true
+          title: Start
+          type: integer
+      title: toolCallCollectionResponse
+      type: object
+    toolCallOutput:
+      description: The representation of a tool call output.
+      properties:
+        content:
+          nullable: true
+          title: Content
+          type: array
+        isError:
+          nullable: true
+          title: Iserror
+          type: boolean
+        structuredContent:
+          nullable: true
+          title: Structuredcontent
+          type: object
+      title: toolCallOutput
+      type: object
+    uploadSourceFile:
+      description: The schema to upload a source file.
+      properties:
+        file:
+          format: binary
+          title: File
+          type: string
+      required:
+        - file
+      title: Body_createSourceFile
+      type: object
+    usageMetadata:
+      description: A model for usage metadata concerning a query.
+      properties:
+        llmCompletionCost:
+          description: The cost of completion tokens.
+          nullable: true
+          title: Llmcompletioncost
+          type: number
+        llmCompletionTokens:
+          description: The number of completion tokens used.
+          nullable: true
+          title: Llmcompletiontokens
+          type: integer
+        llmPromptCost:
+          description: The cost of prompt tokens.
+          nullable: true
+          title: Llmpromptcost
+          type: number
+        llmPromptTokens:
+          description: The number of prompt tokens used.
+          nullable: true
+          title: Llmprompttokens
+          type: integer
+        llmTotalCost:
+          description: The total cost of tokens.
+          nullable: true
+          title: Llmtotalcost
+          type: number
+        llmTotalTokens:
+          description: The total number of tokens used.
+          nullable: true
+          title: Llmtotaltokens
+          type: integer
+      title: usageMetadata
+      type: object
+    userAgentQueryRequest:
+      additionalProperties: false
+      description: A query from a user against a published agent.
+      properties:
+        agentId:
+          title: Agentid
+          type: string
+        content:
+          title: Content
+          type: string
+        querySessionId:
+          nullable: true
+          title: Querysessionid
+          type: string
+      required:
+        - content
+        - agentId
+      title: userAgentQueryRequest
+      type: object
+    userCollectionQueryRequest:
+      additionalProperties: false
+      description: A query from a non-administrator user against a set of collections.
+      properties:
+        collectionIds:
+          items:
+            type: string
+          title: Collectionids
+          type: array
+        content:
+          title: Content
+          type: string
+        querySessionId:
+          nullable: true
+          title: Querysessionid
+          type: string
+      required:
+        - content
+        - collectionIds
+      title: userCollectionQueryRequest
+      type: object
+  securitySchemes:
+    httpBearer:
+      description: The custom HTTP bearer token authentication.
+      scheme: bearer
+      type: http
+info:
+  contact:
+    email: devex@sas.com
+    name: SAS Developers
+    url: https://developer.sas.com
+  description: The Retrieval Agent Manager API enables users to query collections or agents for conversation and retrieve conversational responses.
+  termsOfService: https://www.sas.com/en_us/legal/copyright.html
+  title: SAS Retrieval Agent Manager
+  version: "1"
+openapi: 3.0.3
+paths:
+  /:
+    get:
+      description: Returns a list of the public endpoints.
+      operationId: root
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to a root request
+                  value:
+                    links:
+                      - href: /
+                        method: GET
+                        rel: self
+                        responseType: application/json
+                        type: application/json
+                        uri: /
+                    version: "1"
+          description: Successful Response
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+      security:
+        - httpBearer: []
+      summary: Get a list of the public endpoints
+      tags:
+        - Root
+  /agents:
+    get:
+      description: Returns a list of the agents.
+      operationId: getAgents
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get agents
+                  value:
+                    count: 1
+                    items:
+                      - description: An agent providing weather data.
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        name: Weather Agent
+                    limit: 50
+                    name: agents
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/agentCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of all agents
+      tags:
+        - Agents
+  /collections:
+    get:
+      description: Returns a list of the available collections.
+      operationId: getCollections
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get collections
+                  value:
+                    count: 1
+                    items:
+                      - description: A collection containing weather data.
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        name: Weather Collection
+                    limit: 50
+                    name: collections
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/collectionCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available collections
+      tags:
+        - Collections
+  /llmCalls:
+    get:
+      description: Returns a list of the available LLM calls.
+      operationId: getLlmCalls
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id, llmId, and parentQueryId. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id, llmId, and parentQueryId. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get collections
+                  value:
+                    count: 1
+                    items:
+                      - completionCost: 0.0005
+                        completionTokens: 25
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        input:
+                          content: What is the weather like today?
+                          modelName: gpt-4o
+                          modelProvider: azure
+                          temperature: 0.7
+                        llmId: de772bda-8756-41a8-9c68-defe2932bdad
+                        output:
+                          response: The weather today is sunny with a high of 75°F.
+                          toolCalls: []
+                        parentQueryId: 19c0e653-28f5-49da-aa34-7ade481b362e
+                        promptCost: 0.0003
+                        promptTokens: 15
+                    limit: 50
+                    name: collections
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/llmCallCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available LLM calls
+      tags:
+        - Llm Calls
+  /llms:
+    get:
+      description: Returns a list of all the available LLMs.
+      operationId: getLlms
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id and name. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get llms
+                  value:
+                    count: 1
+                    items:
+                      - description: LLM From API
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        name: gpt-4o
+                        type: azure_openai
+                    limit: 50
+                    name: llms
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/llmCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available LLMs
+      tags:
+        - Llms
+  /query:
+    get:
+      description: Returns a list of all the queries for a given session ID.
+      operationId: getQueries
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id, querySessionId, and parentQueryId. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id, querySessionId, and parentQueryId. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get query sessions
+                  value:
+                    count: 1
+                    items:
+                      - content: What is the weather today?
+                        errorCode: 0
+                        errorText: ""
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        origin: user
+                        parentQueryId: ""
+                        querySessionId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                        response:
+                          answer: The weather today is sunny with a high of 75°F.
+                          context: []
+                          toolCalls: []
+                          usageMetadata:
+                            llmCompletionCost: 0.00024
+                            llmCompletionTokens: 12
+                            llmPromptCost: 0.00016
+                            llmPromptTokens: 8
+                            llmTotalCost: 0.0004
+                            llmTotalTokens: 20
+                        target: collection
+                        targetId:
+                          configuration_ids:
+                            - 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                    limit: 50
+                    name: queries
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/queryCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available queries
+      tags:
+        - Query
+    post:
+      description: Creates a query.
+      operationId: createQuery
+      parameters:
+        - description: This is an indicator for whether the query response is returned. If 'true', this call returns the query response. If 'false', the query is executed asynchronously and the response must be fetched separately. This parameter is required.
+          in: query
+          name: synchronous
+          required: true
+          schema:
+            description: This is an indicator for whether the query response is returned. If 'true', this call returns the query response. If 'false', the query is executed asynchronously and the response must be fetched separately. This parameter is required.
+            title: Synchronous
+            type: boolean
+        - description: This is an indicator for whether to persist the query in the SAS Retrieval Agent Manager database. If 'true', the query persists. If 'false', the query is not retained in the database.
+          in: query
+          name: persistent
+          required: false
+          schema:
+            default: true
+            description: This is an indicator for whether to persist the query in the SAS Retrieval Agent Manager database. If 'true', the query persists. If 'false', the query is not retained in the database.
+            title: Persistent
+            type: boolean
+      requestBody:
+        content:
+          application/json:
+            examples:
+              example-1:
+                summary: An example request by the user to query an agent
+                value:
+                  agentId: 6fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                  content: What is the weather like today?
+                  querySessionId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+              example-2:
+                summary: An example request by the user to query a collection
+                value:
+                  collectionIds:
+                    - 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    - 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                  content: What is the weather like today?
+                  querySessionId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+            schema:
+              anyOf:
+                - $ref: "#/components/schemas/agentAgentQueryRequest"
+                - $ref: "#/components/schemas/userAgentQueryRequest"
+                - $ref: "#/components/schemas/userCollectionQueryRequest"
+              title: Query
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to a synchronous query
+                  value:
+                    content: What is a business result?
+                    errorCode: 0
+                    id: 6fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                    origin: agent
+                    parentQueryId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                    querySessionId: 21647604-55c0-4283-b5df-7e1c273d86aa
+                    response:
+                      answer: A business result is a measurable outcome that indicates the success or progress of a company in achieving its strategic goals and objectives.
+                      context: []
+                      toolCalls: []
+                      usageMetadata:
+                        llmCompletionCost: 0.00056
+                        llmCompletionTokens: 28
+                        llmPromptCost: 0.00016
+                        llmPromptTokens: 8
+                        llmTotalCost: 0.00072
+                        llmTotalTokens: 36
+                    target: collection
+                    targetId:
+                      configurationIds:
+                        - 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                        - 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    userEmail: appadmin@example.com
+              schema:
+                $ref: "#/components/schemas/queryResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "201":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to a synchronous query
+                  value:
+                    content: What is a business result?
+                    errorCode: 0
+                    id: 6fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                    origin: agent
+                    parentQueryId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                    querySessionId: 21647604-55c0-4283-b5df-7e1c273d86aa
+                    response:
+                      answer: A business result is a measurable outcome that indicates the success or progress of a company in achieving its strategic goals and objectives.
+                      context: []
+                      toolCalls: []
+                      usageMetadata:
+                        llmCompletionCost: 0.00056
+                        llmCompletionTokens: 28
+                        llmPromptCost: 0.00016
+                        llmPromptTokens: 8
+                        llmTotalCost: 0.00072
+                        llmTotalTokens: 36
+                    target: collection
+                    targetId:
+                      configurationIds:
+                        - 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                        - 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    userEmail: appadmin@example.com
+                example-2:
+                  summary: An example response to an asynchronous query
+                  value:
+                    queryId: 6fd000e3-5945-40cf-83ef-0c7fc19fcde1
+                    querySessionId: 4fd000e3-5945-40cf-83ef-0c7fc19fcde1
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/queryResponse"
+                  - $ref: "#/components/schemas/asyncQueryResponse"
+          description: A query was created.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Create a query
+      tags:
+        - Query
+  /querySessions:
+    get:
+      description: Returns a list of the available query sessions.
+      operationId: getQuerySessions
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id and title. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id and title. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+        - description: The criteria for sorting. Supported attributes include id, title, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+          in: query
+          name: sortBy
+          required: false
+          schema:
+            description: The criteria for sorting. Supported attributes include id, title, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+            nullable: true
+            title: Sortby
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get query sessions
+                  value:
+                    count: 1
+                    items:
+                      - id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        insertTimestamp: 2025-12-12T19:48:53.448286+00:00
+                        title: What is the weather today?
+                        updateTimestamp: 2025-12-12T19:48:53.448286+00:00
+                    limit: 50
+                    name: querySessions
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/querySessionCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available query sessions
+      tags:
+        - Query Sessions
+  /retrievalCalls:
+    get:
+      description: Returns a list of the retrieval calls made.
+      operationId: getRetrievalCalls
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id and parentQueryId. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id and parentQueryId. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get retrieval calls
+                  value:
+                    count: 1
+                    items:
+                      - completionCost: 0.0005
+                        completionTokens: 25
+                        configurationIds:
+                          - de772bda-8756-41a8-9c68-defe2932bdad
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        input:
+                          content: What is the weather like today?
+                        output:
+                          documents:
+                            - id: weather-document-123
+                              metadata: {}
+                              pageContent: The weather today is sunny with a high of 75°F.
+                              type: Document
+                        parentQueryId: 19c0e653-28f5-49da-aa34-7ade481b362e
+                    limit: 50
+                    name: retrievalCalls
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/retrievalCallCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available retrieval calls
+      tags:
+        - Retrieval Calls
+  /sources:
+    get:
+      description: Returns a list of sources.
+      operationId: getSources
+      parameters:
+        - description: The maximum number of sources to be returned.
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 10
+            description: The maximum number of sources to be returned.
+            nullable: true
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first source to be returned.
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first source to be returned.
+            nullable: true
+            title: Start
+            type: integer
+        - description: The criteria for sorting. Supported attributes include name, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+          in: query
+          name: sortBy
+          required: false
+          schema:
+            description: The criteria for sorting. Supported attributes include name, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+            nullable: true
+            title: Sortby
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example of a list of source objects
+                  value:
+                    count: 3
+                    items:
+                      - id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        inputType: file
+                        insertTimestamp: 2025-12-12T19:48:53.448286+00:00
+                        localUri: /ramuser/data/infoFiles
+                        metadata:
+                          description: Collected info files for RAM source.
+                        name: Info Files
+                        sourceType: local
+                        updateTimestamp: 2025-12-13T09:15:22.123456+00:00
+                      - id: 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                        inputType: file
+                        insertTimestamp: 2025-10-05T08:12:00.000000+00:00
+                        localUri: /ramuser/data/weather
+                        metadata:
+                          description: Daily weather CSV files.
+                        name: Weather Data
+                        sourceType: local
+                        updateTimestamp: 2025-11-15T17:45:00.000000+00:00
+                      - id: de772bda-8756-41a8-9c68-defe2932bdad
+                        inputType: file
+                        insertTimestamp: 2025-09-01T12:00:00.000000+00:00
+                        localUri: /ramuser/data/gitDocs
+                        metadata:
+                          description: Documentation synced from remote git.
+                        name: Git Docs
+                        sourceType: git
+                        updateTimestamp: 2025-12-20T12:30:00.000000+00:00
+                    limit: 10
+                    name: sources
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/sourceCollection"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of the available sources
+      tags:
+        - Sources
+    post:
+      description: Creates a source.
+      operationId: createSource
+      requestBody:
+        content:
+          application/json:
+            examples:
+              example-1:
+                summary: An example of a local source object
+                value:
+                  description: Files with much info
+                  inputType: file
+                  metadata: {}
+                  name: Info Files
+                  sourceType: local
+              example-2:
+                summary: An example of a git source object
+                value:
+                  description: A git repository source
+                  inputType: file
+                  metadata:
+                    schedule: 0 0 * * 5
+                  name: Git Repository
+                  remoteUri: https://github.com/example/repo.git
+                  sourceType: git
+            schema:
+              $ref: "#/components/schemas/sourceRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for creating a local source object
+                  value:
+                    description: Files with much info
+                    id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    inputType: file
+                    name: Info Files
+                    sourceType: local
+                example-2:
+                  summary: An example response for creating a git source object
+                  value:
+                    description: A git repository source
+                    id: 86cc0aae-04ed-4e0f-97d2-53e8b7dc9881
+                    inputType: repository
+                    name: Git Repository
+                    sourceType: git
+              schema:
+                $ref: "#/components/schemas/sourceResponse"
+          description: The source was created.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+            Location:
+              description: The URI of the newly created source.
+              example: /sources/079b46b9-fbc4-44ce-8cb1-163330e4d812
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Create a source
+      tags:
+        - Sources
+  "/sources/{sourceId}":
+    delete:
+      description: Deletes a source object by its unique identifier.
+      operationId: deleteSource
+      parameters:
+        - description: The id for the source to delete.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id for the source to delete.
+            title: Sourceid
+            type: string
+      responses:
+        "204":
+          description: The source was deleted.
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Delete a source
+      tags:
+        - Sources
+    get:
+      description: Returns a source object by its unique identifier.
+      operationId: getSource
+      parameters:
+        - description: The id for the source object to get.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id for the source object to get.
+            title: Sourceid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for getting a source object
+                  value:
+                    id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    inputType: file
+                    insertTimestamp: 2025-12-12T19:48:53.448286+00:00
+                    metadata:
+                      createdBy: 9850832c-bf81-4335-9947-cdb9bb33d017
+                    name: Info Files
+                    secrets:
+                      envVars: []
+                    sourceType: local
+                    updateTimestamp: 2025-12-13T09:15:22.123456+00:00
+              schema:
+                $ref: "#/components/schemas/source"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a source
+      tags:
+        - Sources
+  "/sources/{sourceId}/files":
+    get:
+      description: Returns a list of files from a local source.
+      operationId: getSourceFiles
+      parameters:
+        - description: The id of the source to retrieve all files.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id of the source to retrieve all files.
+            title: Sourceid
+            type: string
+        - description: The maximum number of files to be returned.
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 10
+            description: The maximum number of files to be returned.
+            nullable: true
+            title: Limit
+            type: integer
+        - description: Zero based offset of the first file to be returned.
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: Zero based offset of the first file to be returned.
+            minimum: 0
+            title: Start
+            type: integer
+        - description: The criteria for sorting. Supported attributes include sourceFileId, filepath, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+          in: query
+          name: sortBy
+          required: false
+          schema:
+            description: The criteria for sorting. Supported attributes include sourceFileId, filepath, insertTimestamp, and updateTimestamp. Additional attributes might be added in future releases.
+            nullable: true
+            title: Sortby
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get files in a source
+                  value:
+                    count: 3
+                    items:
+                      - filepath: example1.txt
+                        insertTimestamp: 2025-12-12T10:15:30.123456+00:00
+                        metadata:
+                          size: 123
+                          type: text/plain
+                        sourceFileId: 3c8b12a9-17d1-4f1b-822b-423ec8491bc0
+                        sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        updateTimestamp: 2025-12-13T09:45:12.654321+00:00
+                      - filepath: reports/2025-12-summary.pdf
+                        insertTimestamp: 2025-12-12T11:20:05.000000+00:00
+                        metadata:
+                          size: 204800
+                          type: application/pdf
+                        sourceFileId: a1b2c3d4-1111-4f1b-822b-423ec8491bc0
+                        sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        updateTimestamp: 2025-12-12T11:20:05.000000+00:00
+                      - filepath: data/weather/daily_2025-12-13.csv
+                        insertTimestamp: 2025-12-13T06:30:00.000000+00:00
+                        metadata:
+                          size: 9876
+                          type: text/csv
+                        sourceFileId: b2c3d4e5-2222-4f1b-822b-423ec8491bc0
+                        sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        updateTimestamp: 2025-12-13T06:45:12.000000+00:00
+                    limit: 10
+                    name: sourceFiles
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/sourceFileCollection"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of files from a specific source
+      tags:
+        - Sources
+    post:
+      description: Uploads a file to a local source.
+      operationId: createSourceFile
+      parameters:
+        - description: The id of the source to upload a file to.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id of the source to upload a file to.
+            title: Sourceid
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            examples:
+              example-1:
+                summary: An example request for uploading files
+                value:
+                  file: example1.txt
+            schema:
+              $ref: "#/components/schemas/uploadSourceFile"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for posting a file within a source.
+                  value:
+                    id: 3c8b12a9-17d1-4f1b-822b-423ec8491bc0
+                    sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+              schema:
+                $ref: "#/components/schemas/sourceFileResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+            Location:
+              description: The URI of the newly created source file.
+              example: /sources/079b46b9-fbc4-44ce-8cb1-163330e4d812/files/3c8b12a9-17d1-4f1b-822b-423ec8491bc0
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Create a file in a specific source
+      tags:
+        - Sources
+  "/sources/{sourceId}/files/{fileId}":
+    delete:
+      description: Deletes a file in a local source.
+      operationId: deleteSourceFile
+      parameters:
+        - description: The id of the source to delete the file from.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id of the source to delete the file from.
+            title: Sourceid
+            type: string
+        - description: The id of the file to delete.
+          in: path
+          name: fileId
+          required: true
+          schema:
+            description: The id of the file to delete.
+            title: Fileid
+            type: string
+      responses:
+        "204":
+          description: The file was deleted.
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Delete a file from a source
+      tags:
+        - Sources
+    get:
+      description: Returns a file in a local source.
+      operationId: getSourceFile
+      parameters:
+        - description: The id of the source to retrieve the file from.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The id of the source to retrieve the file from.
+            title: Sourceid
+            type: string
+        - description: The id of the file to retrieve.
+          in: path
+          name: fileId
+          required: true
+          schema:
+            description: The id of the file to retrieve.
+            title: Fileid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for pulling a file from a source.
+                  value:
+                    filepath: report.pdf
+                    insertTimestamp: 2025-12-12T10:15:30.123456+00:00
+                    metadata:
+                      size: 204800
+                      type: pdf
+                    sourceFileId: f39dad75-a389-469a-a258-4e7295a12b8b
+                    sourceId: cef92c26-c0dc-4a6f-a10a-7e3996bf2559
+                    updateTimestamp: 2025-12-13T09:45:12.654321+00:00
+              schema:
+                $ref: "#/components/schemas/sourceFile"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a file from a specific source
+      tags:
+        - Sources
+  "/sources/{sourceId}/files/{fileId}/tags/{tagId}":
+    delete:
+      description: Removes a tag from a source file.
+      operationId: deleteTagFromSourceFile
+      parameters:
+        - description: The ID of the source the file belongs to.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The ID of the source the file belongs to.
+            title: Sourceid
+            type: string
+        - description: The ID of the file to remove the tag from.
+          in: path
+          name: fileId
+          required: true
+          schema:
+            description: The ID of the file to remove the tag from.
+            title: Fileid
+            type: string
+        - description: The ID of the tag to remove.
+          in: path
+          name: tagId
+          required: true
+          schema:
+            description: The ID of the tag to remove.
+            title: Tagid
+            type: string
+      responses:
+        "204":
+          description: The tag was removed.
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Removes a source file tag from a source file
+      tags:
+        - Sources
+    put:
+      description: Updates a source file with a tag.
+      operationId: updateFileWithTag
+      parameters:
+        - description: The ID of the source the file belongs to.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The ID of the source the file belongs to.
+            title: Sourceid
+            type: string
+        - description: The ID of the file to update the tag for.
+          in: path
+          name: fileId
+          required: true
+          schema:
+            description: The ID of the file to update the tag for.
+            title: Fileid
+            type: string
+        - description: The ID of the tag to update.
+          in: path
+          name: tagId
+          required: true
+          schema:
+            description: The ID of the tag to update.
+            title: Tagid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for updating a source file with a tag
+                  value:
+                    message: Tag 'confidential' was successfully added to file with id 'f39dad75-a389-469a-a258-4e7295a12b8b'.
+              schema:
+                $ref: "#/components/schemas/responseMessage"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "404":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the specified resource is not found
+                  value:
+                    details:
+                      - "loc: path.id"
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 404
+                    httpStatusCode: 404
+                    message: The specified resource was not found.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The specified resource was not found.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Update a source file with a tag
+      tags:
+        - Sources
+  "/sources/{sourceId}/triggerAutomation":
+    put:
+      description: Triggers automation for a source.
+      operationId: updateSourceTriggerAutomation
+      parameters:
+        - description: The ID of the source to trigger its automation.
+          in: path
+          name: sourceId
+          required: true
+          schema:
+            description: The ID of the source to trigger its automation.
+            title: Sourceid
+            type: string
+      responses:
+        "200":
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Trigger automation based on a source
+      tags:
+        - Sources
+  /tags:
+    get:
+      description: Returns a list of tags for source files.
+      operationId: getTags
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id, name, and sourceId. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id, name, and sourceId. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get source file tags
+                  value:
+                    count: 2
+                    items:
+                      - description: Files that contain confidential information.
+                        id: 123e4567-e89b-12d3-a456-426614174000
+                        name: confidential
+                      - description: Files related to project alpha.
+                        id: 123e4567-e89b-12d3-a456-426614174000
+                        name: project-alpha
+                        sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    limit: 10
+                    name: sourceFileTags
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/sourceFileTagCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of all source file tags
+      tags:
+        - Tags
+    post:
+      description: Creates a tag for a source file.
+      operationId: createTag
+      requestBody:
+        content:
+          application/json:
+            examples:
+              example-1:
+                summary: An example request for creating a global source file tag
+                value:
+                  description: Files that contain confidential information.
+                  metadata: {}
+                  name: confidential
+              example-2:
+                summary: An example request for creating a local source file tag
+                value:
+                  description: Files related to project alpha.
+                  metadata: {}
+                  name: project-alpha
+                  sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+            schema:
+              $ref: "#/components/schemas/sourceFileTagRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response for creating a global source file tag
+                  value:
+                    description: Files that contain confidential information.
+                    id: 123e4567-e89b-12d3-a456-426614174000
+                    insertTimestamp: 2025-12-12T19:48:53.448286+00:00
+                    metadata: {}
+                    name: confidential
+                    updateTimestamp: 2025-12-12T19:48:53.448286+00:00
+                example-2:
+                  summary: An example response for creating a local source file tag
+                  value:
+                    description: Files related to project alpha.
+                    id: 123e4567-e89b-12d3-a456-426614174000
+                    insertTimestamp: 2025-12-12T19:48:53.448286+00:00
+                    metadata: {}
+                    name: project-alpha
+                    sourceId: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                    updateTimestamp: 2025-12-12T19:48:53.448286+00:00
+              schema:
+                $ref: "#/components/schemas/sourceFileTagResponse"
+          description: A tag was created.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+            Location:
+              description: The URI of the newly created tag.
+              example: /tags/079b46b9-fbc4-44ce-8cb1-163330e4d812
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Create a source file tag
+      tags:
+        - Tags
+  "/tags/{tagId}":
+    delete:
+      description: Deletes a source file tag.
+      operationId: deleteTag
+      parameters:
+        - description: The ID of the file tag to delete.
+          in: path
+          name: tagId
+          required: true
+          schema:
+            description: The ID of the file tag to delete.
+            title: Tagid
+            type: string
+      responses:
+        "204":
+          description: The tag was deleted.
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Delete a source file tag
+      tags:
+        - Tags
+  /toolCalls:
+    get:
+      description: Returns a list of the tool calls.
+      operationId: getToolCalls
+      parameters:
+        - description: The criteria for filtering. Supported attributes include id, toolServerId, toolName and parentQueryId. Additional attributes might be added in future releases.
+          in: query
+          name: filter
+          required: false
+          schema:
+            description: The criteria for filtering. Supported attributes include id, toolServerId, toolName and parentQueryId. Additional attributes might be added in future releases.
+            nullable: true
+            title: Filter
+            type: string
+        - description: The maximum number of records to be returned. `>= 1` or `<= 100`
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            description: The maximum number of records to be returned. `>= 1` or `<= 100`
+            title: Limit
+            type: integer
+        - description: The zero-based offset of the first record to be returned. `>= 0`
+          in: query
+          name: start
+          required: false
+          schema:
+            default: 0
+            description: The zero-based offset of the first record to be returned. `>= 0`
+            title: Start
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response to get tool calls
+                  value:
+                    count: 1
+                    items:
+                      - cost: 0.0001
+                        id: 079b46b9-fbc4-44ce-8cb1-163330e4d812
+                        input:
+                          question: Is the openai/gym repository related to AI agents?
+                        output:
+                          content:
+                            - text: Yes, the openai/gym repository is directly related to AI agents.
+                              type: text
+                          isError: false
+                          structuredContent:
+                            result: Yes, the openai/gym repository is directly related to AI agents.
+                        parentQueryId: 19c0e653-28f5-49da-aa34-7ade481b362e
+                        toolName: ask_question
+                        toolServerId: de772bda-8756-41a8-9c68-defe2932bdad
+                    limit: 50
+                    name: toolCalls
+                    start: 0
+              schema:
+                $ref: "#/components/schemas/toolCallCollectionResponse"
+          description: The request succeeded.
+          headers:
+            Content-Type:
+              schema:
+                example: application/json
+                type: string
+        "400":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when the request is invalid
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 400
+                    httpStatusCode: 400
+                    message: Invalid query parameter.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The request was invalid.
+        "401":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a user is not authorized
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 401
+                    httpStatusCode: 401
+                    message: The credentials could not be validated.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The user was not authenticated.
+        "422":
+          content:
+            application/json:
+              examples:
+                example-1:
+                  summary: An example response when a validation error occurs
+                  value:
+                    details:
+                      - "correlator: 123e4567-e89b-12d3-a456-426614174000"
+                    errorCode: 422
+                    httpStatusCode: 422
+                    message: Missing or invalid fields in request body or parameters.
+                    version: 2
+              schema:
+                $ref: "#/components/schemas/sasApiException"
+          description: The server understands the request but was unable to process the contained instructions.
+      security:
+        - httpBearer: []
+      summary: Get a list of all tool calls
+      tags:
+        - Tool Calls
+servers:
+  - description: The base URL for the service.
+    url: https://example.com/SASRetrievalAgentManager/api/v1
+tags:
+  - description: Contains the operations for the root resource.
+    name: Root
+  - description: Contains the operations to manage a query.
+    name: Query
+  - description: Contains the operations to manage query sessions.
+    name: Query Sessions
+  - description: Contains the operations to manage collections.
+    name: Collections
+  - description: Contains the operations to manage LLMs.
+    name: Llms
+  - description: Contains the operations to manage LLM calls.
+    name: Llm Calls
+  - description: Contains the operations to manage tool calls.
+    name: Tool Calls
+  - description: Contains the operations to manage retrieval calls.
+    name: Retrieval Calls
+  - description: Contains the operations to manage agents.
+    name: Agents
+  - description: Contains the operations to manage sources and files.
+    name: Sources
+  - description: Contains the operations to manage tags.
+    name: Tags

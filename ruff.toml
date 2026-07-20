@@ -1,0 +1,76 @@
+# Ruff configuration for Python linting and formatting
+# Used by CI pipeline to enforce code quality standards
+
+# Exclude common directories
+exclude = [
+    ".venv",
+    "venv",
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+# Python version target
+target-version = "py311"
+
+# Line length (matches Black default)
+line-length = 100
+
+[lint]
+# Enable these rule sets
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort (import sorting)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade (upgrade syntax for newer Python)
+    "B",   # flake8-bugbear (find common bugs)
+    "A",   # flake8-builtins (no shadowing builtins)
+    "C4",  # flake8-comprehensions (better comprehensions)
+    "T20", # flake8-print (no print statements)
+    "SIM", # flake8-simplify (simplify code)
+    "RET", # flake8-return (return statements)
+]
+
+# Disable specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "T201",   # Allow print statements (remove in production code)
+    "B008",   # Allow function calls in default arguments
+    "SIM108", "SIM114", "SIM102", "SIM105", "RET504", "RET505", "RET502", "E712", "E701", "B007", "F841",
+]
+
+# Allow autofix for these rules
+fixable = [
+    "I",      # isort (import sorting)
+    "F401",   # Remove unused imports
+    "UP",     # pyupgrade
+    "C4",     # Simplify comprehensions
+]
+
+# Never autofix these
+unfixable = []
+
+[lint.per-file-ignores]
+# Allow certain rules in test files
+"tests/**/*.py" = [
+    "T201",  # Allow print in tests
+    "S101",  # Allow assert in tests
+]
+
+[lint.isort]
+# Import sorting configuration
+known-first-party = ["api", "audio", "middleware", "processing", "prompts", "storage", "ui"]
+force-single-line = false
+lines-after-imports = 2
+
+[format]
+# Formatting configuration
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

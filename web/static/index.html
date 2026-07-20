@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Darin</title>
+  <link rel="icon" type="image/png" href="/static/Darin_Round.png" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <!-- Token bootstrap lives in a static file so CSP can drop 'unsafe-inline' -->
+  <script src="/static/boot.js"></script>
+</head>
+<body>
+
+<header>
+  <img src="/static/Darin_Round.png" alt="Darin" class="header-logo" />
+  <h1>DARIN</h1>
+  <span id="state-badge" class="badge badge-idle">Idle</span>
+  <span id="watcher-dot" class="watcher-dot watcher-stopped" title="Watcher off"></span>
+  <div class="header-actions">
+    <div id="persona-toggle" class="persona-toggle" title="Persona">
+      <button class="persona-btn" data-persona="general">General</button>
+      <button class="persona-btn" data-persona="sales">Sales</button>
+      <button class="persona-btn" data-persona="technical">Technical</button>
+    </div>
+    <button id="btn-history" class="btn btn-outline">🕐 History</button>
+    <button id="btn-open-prompt-editor" class="btn-settings" title="Prompt Editor">🎛</button>
+    <button id="btn-theme" class="btn-settings" title="Toggle Desk / After Hours theme">◐</button>
+    <button id="btn-settings" class="btn-settings" title="Settings">⚙</button>
+  </div>
+</header>
+
+<main>
+
+  <div id="layout" class="layout">
+
+    <div class="main-col">
+
+      <!-- ── Session controls ──────────────────────────────────────────── -->
+      <section id="session-bar" class="card">
+        <div class="controls-row">
+          <button id="btn-start-meeting" class="btn btn-green">Start Session</button>
+          <button id="btn-stop-meeting"  class="btn btn-red"  hidden>End Session</button>
+          <button id="btn-new-meeting"   class="btn btn-grey" hidden>New Session</button>
+          <span id="rec-indicator" class="rec-indicator" hidden>
+            <span class="pulse-dot"></span>
+            <span class="rec-label">REC</span>
+            <span id="timer-label">00:00:00</span>
+          </span>
+          <button id="btn-last-30" class="btn btn-outline btn-sm" disabled>Last 30s</button>
+          <button id="btn-last-60" class="btn btn-outline btn-sm" disabled>Last 60s</button>
+          <span id="capture-status" class="status-text"></span>
+          <span id="usage-line" class="usage-line" title="Estimated LLM spend this meeting"></span>
+        </div>
+      </section>
+
+      <!-- ── Action bar: reactive registry buttons + custom + Ask ──────── -->
+      <section id="action-bar" class="card">
+        <div class="action-rows">
+          <div id="action-buttons" class="action-buttons"></div>
+          <div id="custom-actions" class="action-buttons action-buttons-custom"></div>
+        </div>
+        <div class="qa-row">
+          <input type="text" id="qa-input" class="qa-input"
+                 placeholder="Ask anything about the conversation…" disabled />
+          <button id="btn-ask" class="btn btn-outline" disabled>Ask</button>
+        </div>
+      </section>
+
+      <!-- ── Card feed ─────────────────────────────────────────────────── -->
+      <section id="card-feed-section">
+        <div id="card-feed" class="card-feed"></div>
+        <div id="feed-empty" class="feed-empty">
+          Start a session — proactive cards and button answers appear here.
+        </div>
+      </section>
+
+      <!-- ── Post-meeting analysis ─────────────────────────────────────── -->
+      <section id="post-meeting-section" class="card" hidden>
+        <div class="section-title">Post-Meeting Analysis</div>
+
+        <div id="segment-controls" class="segment-controls">
+          <label class="radio-label">
+            <input type="radio" name="segment-mode" value="full" checked />
+            Full Transcript
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="segment-mode" value="range" />
+            Time Range
+          </label>
+          <span id="range-inputs" class="range-inputs" hidden>
+            <input type="number" id="from-minute" min="0" placeholder="From (min)" class="range-input" />
+            <span>to</span>
+            <input type="number" id="to-minute"   min="0" placeholder="To (min)"   class="range-input" />
+          </span>
+        </div>
+
+        <div id="bucket-post-meeting" class="bucket bucket-purple"></div>
+
+        <div class="controls-row post-actions">
+          <button id="btn-copy-transcript" class="btn btn-outline btn-sm">Copy Transcript</button>
+        </div>
+
+        <div class="output-wrap">
+          <div id="output-title" class="output-title">Analysis Output</div>
+          <div id="output-panel"></div>
+          <div id="output-markdown" hidden></div>
+        </div>
+      </section>
+
+    </div><!-- /main-col -->
+
+    <!-- ── Live transcript sidebar ─────────────────────────────────────── -->
+    <aside id="transcript-strip" class="transcript-sidebar card" hidden>
+      <div class="sidebar-title">Live Transcript</div>
+      <div id="transcript-scroll" class="transcript-scroll">
+        <div id="strip-finals" class="strip-lines"></div>
+        <div id="strip-interims" class="strip-lines"></div>
+      </div>
+    </aside>
+
+  </div><!-- /layout -->
+
+  <!-- ── Progress bar / toast ──────────────────────────────────────── -->
+  <div id="progress-bar" class="progress-bar" hidden></div>
+  <div id="toast" class="toast"></div>
+
+  <!-- ── Settings Modal ────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">⚙ Settings</span>
+        <button class="modal-close" data-close="modal-settings">✕</button>
+      </div>
+      <div class="settings-section-title">Storage</div>
+      <div class="settings-row">
+        <label class="settings-label">Meeting Storage Location</label>
+        <span class="settings-hint">Where meeting transcripts and analyses are saved</span>
+        <div class="settings-path-row">
+          <input class="settings-path-input" id="settings-path-input" readonly />
+          <button class="btn btn-outline btn-nowrap" id="btn-browse-folder">Browse…</button>
+        </div>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Appearance</div>
+      <div class="settings-row">
+        <label class="settings-label">Background</label>
+        <div class="bg-option-group">
+          <label class="bg-option">
+            <input type="radio" name="bg-style" value="default" id="bg-default" />
+            <span class="bg-option-label">Default</span>
+          </label>
+          <label class="bg-option">
+            <input type="radio" name="bg-style" value="darin" id="bg-darin" />
+            <span class="bg-option-label">Darin</span>
+          </label>
+        </div>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Cards</div>
+      <div class="settings-row">
+        <label class="bg-option">
+          <input type="checkbox" id="auto-hide-expired" />
+          <span class="bg-option-label">Auto-hide expired proactive cards</span>
+        </label>
+        <span class="settings-hint">
+          When off, expired proactive cards dim and collapse to a headline + cues
+          (click to re-expand) instead of disappearing.
+        </span>
+      </div>
+      <div class="settings-row">
+        <label class="bg-option">
+          <input type="checkbox" id="auto-answer-enabled" />
+          <span class="bg-option-label">Auto-answer questions aimed at me</span>
+        </label>
+        <span class="settings-hint">
+          When someone asks you a question on the call, Darin automatically
+          prepares a full answer card (at most one every 20 seconds).
+        </span>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Custom Model Endpoints</div>
+      <div class="settings-row">
+        <span class="settings-hint">
+          OpenAI-compatible endpoints (Groq, Gemini, Cerebras, Ollama, proxies).
+          Select them per prompt in the Prompt Editor. Keys are never shown in full.
+        </span>
+        <div id="endpoint-list" class="endpoint-list"></div>
+        <button class="btn btn-outline btn-sm btn-nowrap" id="btn-add-endpoint" type="button">
+          + Add Endpoint
+        </button>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Context Pack</div>
+      <div class="settings-row">
+        <span class="settings-hint">
+          Grounding documents cached into every live analysis. Markdown; total budget ~20k tokens.
+        </span>
+        <div class="ptabs" id="ctx-tabs">
+          <button class="ptab active" data-ctx="profile">Profile</button>
+          <button class="ptab" data-ctx="products">Products</button>
+          <button class="ptab" data-ctx="known_issues">Known Issues</button>
+        </div>
+        <textarea class="form-textarea ctx-textarea" id="ctx-textarea"
+                  placeholder="Markdown for this document — who you are, what you own, what tends to break…"></textarea>
+        <div class="ctx-meta">
+          <span id="ctx-token-count">≈ 0 tokens total</span>
+          <span id="ctx-token-warning" class="ctx-warning" hidden>
+            Over the ~20k token budget — trim these docs
+          </span>
+        </div>
+      </div>
+      <hr class="settings-divider"/>
+      <div class="settings-section-title">Knowledge Base / SAS Corpus</div>
+      <div class="settings-row">
+        <span class="settings-hint">
+          Local RAG over a folder of SAS Viya PDFs. Passages are vectorized
+          on-device and injected into live answers — nothing leaves this machine.
+        </span>
+        <label class="settings-toggle">
+          <input type="checkbox" id="kb-enabled" />
+          <span class="bg-option-label">Enable SAS knowledge base</span>
+        </label>
+        <div class="settings-path-row">
+          <input class="settings-path-input" id="kb-folder-input"
+                 placeholder="/path/to/SAS Viya docs folder" />
+          <button class="btn btn-outline btn-nowrap" id="kb-scan-btn" type="button">Scan folder</button>
+        </div>
+        <div class="kb-stats" id="kb-stats"></div>
+        <div class="kb-progress" id="kb-progress" hidden></div>
+        <div class="kb-doc-list" id="kb-doc-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modal-settings">Cancel</button>
+        <button class="btn btn-save" id="btn-save-settings">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History Modal ─────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-history">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <span class="modal-title">🕐 Meeting History</span>
+        <button class="modal-close" data-close="modal-history">✕</button>
+      </div>
+      <div id="history-list-view">
+        <div id="meeting-list" class="meeting-list"></div>
+      </div>
+      <div id="history-transcript-view" class="hidden-view">
+        <button class="tx-back" id="tx-back-btn">← Back to meetings</button>
+        <div class="tx-meeting-title" id="tx-title"></div>
+        <div class="tx-meta" id="tx-meta"></div>
+        <div class="ptabs history-tabs">
+          <button class="ptab active" id="history-tab-transcript">Transcript</button>
+          <button class="ptab" id="history-tab-cards">Cards</button>
+        </div>
+        <div id="tx-transcript-pane">
+          <div class="tx-body" id="tx-body"></div>
+        </div>
+        <div id="tx-cards-pane" hidden>
+          <div class="tx-cards" id="tx-cards-body"></div>
+        </div>
+        <div class="qa-label">Ask about this meeting</div>
+        <span class="settings-hint">The answer appears as a card in the main feed.</span>
+        <div class="qa-row">
+          <input type="text" id="tx-ask-input" class="qa-input" placeholder="e.g. What were the main concerns?" />
+          <button class="btn btn-outline" id="tx-ask-btn">Ask</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Prompt Editor Modal ───────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-prompts">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <span class="modal-title">🎛 Prompt Editor</span>
+        <button class="modal-close" data-close="modal-prompts">✕</button>
+      </div>
+      <div id="prompt-list-view">
+        <div class="ptabs" id="ptabs"></div>
+        <div id="prompt-list-items" class="prompt-list-items"></div>
+        <button class="btn btn-outline btn-full" id="btn-new-prompt">
+          + New Custom Prompt
+        </button>
+      </div>
+      <div id="prompt-edit-form" class="prompt-edit-form">
+        <button class="form-back" id="prompt-form-back">← Back to prompts</button>
+        <div class="form-row">
+          <label class="form-label">Button Label</label>
+          <input class="form-input" id="form-btn-label" placeholder="e.g. Competitor Check"/>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Output Title</label>
+          <input class="form-input" id="form-out-title" placeholder="e.g. Competitor Analysis"/>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Model</label>
+          <select class="form-input" id="form-model"></select>
+          <span class="form-hint">Which model runs this prompt. Custom endpoints are managed in Settings.</span>
+        </div>
+        <div class="form-row">
+          <label class="bg-option">
+            <input type="checkbox" id="form-web-search" />
+            <span class="bg-option-label">Web search</span>
+          </label>
+          <span class="form-hint" id="form-web-search-hint">
+            Only available on Anthropic models.
+          </span>
+        </div>
+        <div class="form-row">
+          <label class="bg-option">
+            <input type="checkbox" id="form-use-rag" />
+            <span class="bg-option-label">Use SAS knowledge base</span>
+          </label>
+          <span class="form-hint">
+            Ground this prompt in the local SAS Viya corpus (Settings → Knowledge Base).
+          </span>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Prompt Instruction</label>
+          <textarea class="form-textarea" id="form-template"
+                    placeholder="What should Darin do when you click this button? Custom prompts run as reactive cards over the recent conversation."></textarea>
+          <span class="form-hint">Runs over the rolling summary + last ~3 minutes; the result arrives as a card.</span>
+        </div>
+        <div class="modal-footer form-footer">
+          <button class="btn btn-outline" id="prompt-form-cancel">Cancel</button>
+          <button class="btn btn-delete-prompt" id="btn-delete-prompt">Delete Prompt</button>
+          <button class="btn btn-save" id="btn-save-prompt">Save Prompt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="/static/marked.min.js"></script>
+<script src="/static/app.js"></script>
+<!-- impeccable-live-start -->
+<script src="http://localhost:8400/live.js"></script>
+<!-- impeccable-live-end -->
+</body>
+</html>

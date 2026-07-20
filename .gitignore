@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ruff cache
+.ruff_cache/
+
 # C extensions
 *.so
 
@@ -11,6 +14,9 @@ __pycache__/
 
 #old files
 old_ref/
+
+# Log files
+logs/
 
 # Distribution / packaging
 .Python
@@ -123,12 +129,42 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
+.env.*.local
+.env.staging
+.env.production
 .venv
+.venv-wsl/
+.venv-linux/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Package manager lock files (CRITICAL: Only uv allowed for Python)
+# NEVER commit these - they indicate unauthorized package manager usage
+Pipfile
+Pipfile.lock
+poetry.lock
+poetry.toml
+conda.yml
+environment.yml
+
+# Node.js package manager files (CRITICAL: Only bun allowed for Node)
+# NEVER commit these - they indicate unauthorized package manager usage
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npmrc
+.yarnrc
+.pnpm-debug.log
+
+# Allow uv.lock (authorized Python package manager)
+!uv.lock
+
+# Allow bun.lockb (authorized Node.js package manager)
+!bun.lockb
 
 # Spyder project settings
 .spyderproject

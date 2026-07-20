@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "audio*", "middleware*", "processing*", "prompts*", "storage*", "ui*", "web*"]
+exclude = ["tests*", "test_audio*", "assets*"]
+
+[project]
+name = "darin-audio-assistant"
+version = "0.1.0"
+description = "Desktop audio assistant for real-time meeting transcription and AI-powered analysis"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26.0,<2.0",
+    "soundcard==0.4.3",
+    # comtypes is Windows COM bindings — soundcard's WASAPI backend needs it;
+    # macOS (CoreAudio) and Linux (PulseAudio) backends do not.
+    "comtypes==1.4.10; sys_platform == 'win32'",
+    "soundfile==0.13.1",
+    "deepgram-sdk>=4,<5",
+    "python-dotenv==1.0.0",
+    "anthropic>=0.40.0",
+    "openai>=1.55.0",
+    "loguru>=0.7.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+]
+
+[project.optional-dependencies]
+# Local RAG knowledge base (SAS Viya PDFs). Heavy (sentence-transformers pulls
+# torch, ~2GB). Install with: uv sync --extra rag
+# To avoid CUDA wheels on Linux, pin the CPU torch index (see CLAUDE.md).
+rag = [
+    "pymupdf>=1.24,<2.0",
+    "sentence-transformers>=3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.15.0",
+    "mypy>=1.19.1",
+    "ipykernel",
+    "jupyter",
+    "types-requests>=2.32.4.20260107",
+]
+
+[tool.uv]
+# WSL CONVENTION: Do NOT set `venv` here — this file is shared between Windows and WSL.
+# Windows developers use the default `.venv` (managed via PowerShell).
+# WSL agents and CI must set UV_PROJECT_ENVIRONMENT=.venv-linux before calling `uv sync`.
+# Use scripts/setup-wsl-dev.sh for a one-liner that handles this automatically.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_unimported = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+check_untyped_defs = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "soundcard.*",
+    "comtypes.*",
+    "deepgram.*",
+]
+ignore_missing_imports = true
