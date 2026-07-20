@@ -105,6 +105,76 @@ class TestMeetingState:
         assert controller._timer_task is None
 
 
+class TestTeardownResilience:
+    """Review finding H1: a failing teardown step must not wedge the state machine."""
+
+    def test_stop_meeting_reaches_post_meeting_when_stop_streaming_raises(
+        self, controller: AppController
+    ) -> None:
+        controller.stop_streaming = MagicMock(side_effect=RuntimeError("ws close failed"))
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        # Must not propagate; state must still transition and recorder still stop.
+        loop.run_until_complete(controller.stop_meeting())
+        loop.close()
+
+        assert controller.meeting_state == "post_meeting"
+        controller.recorder.stop_recording.assert_called()
+
+    def test_start_meeting_works_after_a_failed_teardown(
+        self, controller: AppController
+    ) -> None:
+        """The core H1 symptom: after a teardown error, the app must not 409 forever."""
+        controller.stop_streaming = MagicMock(side_effect=RuntimeError("boom"))
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        loop.run_until_complete(controller.stop_meeting())
+        loop.run_until_complete(controller.reset_to_idle())
+        # A fresh meeting can start — state is idle, not wedged in active.
+        assert controller.meeting_state == "idle"
+        loop.run_until_complete(controller.start_meeting())
+        assert controller.meeting_state == "active"
+        if controller._timer_task:
+            controller._timer_task.cancel()
+        loop.close()
+
+    def test_reset_to_idle_reaches_idle_when_stop_streaming_raises(
+        self, controller: AppController
+    ) -> None:
+        controller.stop_streaming = MagicMock(side_effect=RuntimeError("boom"))
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(controller.start_meeting())
+        controller._streaming_client = MagicMock()
+        loop.run_until_complete(controller.reset_to_idle())
+        loop.close()
+        assert controller.meeting_state == "idle"
+
+
+class TestSegmentPersistenceIsolation:
+    """Review finding M4: a storage error must not kill the final-transcript callback."""
+
+    def test_append_segment_failure_does_not_propagate(
+        self, controller: AppController
+    ) -> None:
+        controller._active_meeting_id = 42
+        controller._meeting_store.append_segment.side_effect = OSError("dir gone")
+        # Must swallow-and-log, not raise, so the rest of the callback runs.
+        controller._handle_meeting_segment("THEM: hello")
+
+    def test_final_transcript_callback_survives_storage_failure(
+        self, controller: AppController
+    ) -> None:
+        controller._active_meeting_id = 42
+        controller._meeting_store.append_segment.side_effect = OSError("disk full")
+        ui_calls: list[tuple[str, str | None]] = []
+        controller._on_final_transcript = lambda text, spk: ui_calls.append((text, spk))
+
+        controller._on_final_transcript_with_storage("hello", "THEM")
+
+        # The UI callback still fired despite the storage error.
+        assert ui_calls == [("hello", "THEM")]
+
+
 class TestMeetingCallbacks:
     """Test observer callback pattern."""
 

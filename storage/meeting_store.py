@@ -24,10 +24,15 @@ from pathlib import Path
 
 from loguru import logger
 
+from storage.atomic import atomic_write_text
 from storage.models import MeetingRecord, TranscriptSegment
 
 
 _DEFAULT_BASE_DIR = Path.home() / ".darin-audio-assistant" / "meetings"
+
+
+class MeetingMetaError(ValueError):
+    """Raised when a meeting's meta.txt is empty, truncated, or unparseable."""
 
 
 class MeetingStore:
@@ -62,8 +67,15 @@ class MeetingStore:
         return self._meeting_dir(meeting_id) / "analyses"
 
     def _read_meta(self, meeting_id: str) -> tuple[datetime, datetime | None]:
-        """Read start_time and optional end_time from meta.txt."""
+        """Read start_time and optional end_time from meta.txt.
+
+        Raises MeetingMetaError if meta.txt is empty/truncated (e.g. a crash
+        between the mkdir and the meta write) so callers can treat it as a
+        missing/corrupt meeting rather than crashing on an IndexError.
+        """
         lines = self._meta_path(meeting_id).read_text(encoding="utf-8").splitlines()
+        if not lines or not lines[0].strip():
+            raise MeetingMetaError(f"meta.txt empty or truncated: {meeting_id}")
         start_time = datetime.fromisoformat(lines[0])
         end_time = datetime.fromisoformat(lines[1]) if len(lines) > 1 and lines[1] else None
         return start_time, end_time
@@ -94,7 +106,7 @@ class MeetingStore:
             meeting_dir = self._meeting_dir(meeting_id)
             meeting_dir.mkdir(parents=True)
             self._analyses_dir(meeting_id).mkdir()
-            self._meta_path(meeting_id).write_text(now.isoformat() + "\n", encoding="utf-8")
+            atomic_write_text(self._meta_path(meeting_id), now.isoformat() + "\n")
 
         logger.info("Meeting started", meeting_id=meeting_id)
         return meeting_id
@@ -106,15 +118,26 @@ class MeetingStore:
             return
         now = datetime.now(tz=UTC)
         with self._lock:
-            start_line = meta_path.read_text(encoding="utf-8").splitlines()[0]
-            meta_path.write_text(f"{start_line}\n{now.isoformat()}\n", encoding="utf-8")
+            meta_lines = meta_path.read_text(encoding="utf-8").splitlines()
+            if not meta_lines:
+                # Truncated/empty meta.txt (e.g. a crash between mkdir and the
+                # meta write): stamp a best-effort start so the record stays
+                # readable rather than leaving it unrecoverable.
+                logger.warning(
+                    "meta.txt empty at end_meeting; writing end-only record",
+                    meeting_id=meeting_id,
+                )
+                start_line = now.isoformat()
+            else:
+                start_line = meta_lines[0]
+            atomic_write_text(meta_path, f"{start_line}\n{now.isoformat()}\n")
         logger.info("Meeting ended", meeting_id=meeting_id)
 
     def save_title(self, meeting_id: str, title: str) -> None:
         """Save a generated title for a meeting (title.txt alongside meta.txt)."""
         path = self._meeting_dir(meeting_id) / "title.txt"
         with self._lock:
-            path.write_text(title.strip(), encoding="utf-8")
+            atomic_write_text(path, title.strip())
         logger.debug("Title saved", meeting_id=meeting_id)
 
     # ------------------------------------------------------------------
@@ -148,7 +171,11 @@ class MeetingStore:
         if not meta_path.exists():
             return None
 
-        start_time, end_time = self._read_meta(meeting_id)
+        try:
+            start_time, end_time = self._read_meta(meeting_id)
+        except MeetingMetaError as e:
+            logger.warning("get_meeting: corrupt meta.txt", meeting_id=meeting_id, error=str(e))
+            return None
         segments: list[TranscriptSegment] = []
 
         seg_path = self._segments_path(meeting_id)
@@ -229,7 +256,15 @@ class MeetingStore:
         if not meta_path.exists():
             return ""
 
-        start_time, _ = self._read_meta(meeting_id)
+        try:
+            start_time, _ = self._read_meta(meeting_id)
+        except MeetingMetaError as e:
+            logger.warning(
+                "get_transcript_segment_range: corrupt meta.txt",
+                meeting_id=meeting_id,
+                error=str(e),
+            )
+            return ""
         from_seconds = from_minute * 60
         to_seconds = to_minute * 60
 
@@ -299,7 +334,7 @@ class MeetingStore:
         """Save (or overwrite) a post-meeting analysis result."""
         path = self._analyses_dir(meeting_id) / f"{prompt_id}.txt"
         with self._lock:
-            path.write_text(output_text, encoding="utf-8")
+            atomic_write_text(path, output_text)
         logger.debug("Analysis saved", meeting_id=meeting_id, prompt_id=prompt_id)
 
     def get_analysis(self, meeting_id: str, prompt_id: str) -> str | None:

@@ -6,10 +6,13 @@ Stored at ~/.darin-audio-assistant/config.json.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from loguru import logger
+
+from storage.atomic import atomic_write_text
 
 
 _DEFAULT_CONFIG_PATH = Path.home() / ".darin-audio-assistant" / "config.json"
@@ -222,5 +225,11 @@ class AppConfigStore:
             "knowledge_base_enabled": config.knowledge_base_enabled,
             "knowledge_docs_folder": config.knowledge_docs_folder,
         }
-        self._path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(data, indent=2))
+        # Config holds custom-endpoint API keys in plaintext — restrict it to the
+        # owner so other local accounts / backup agents can't read the secrets.
+        try:
+            os.chmod(self._path, 0o600)
+        except OSError as e:  # noqa: BLE001 — best-effort (e.g. Windows/FS quirks)
+            logger.debug("Could not chmod config to 0600: {}", e)
         logger.debug("Config saved to {}", self._path)

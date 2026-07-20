@@ -544,9 +544,20 @@ class AppController:
                 logger.warning("on_error callback failed: {}", e)
 
     def _handle_meeting_segment(self, text: str) -> None:
-        """Append a final transcript segment to the active meeting."""
+        """Append a final transcript segment to the active meeting.
+
+        Storage failures (a mid-call unwritable/disappeared meeting dir, disk
+        full) are logged and swallowed: this runs on the Deepgram final callback,
+        and letting the exception propagate would also kill the recent-lines
+        append, talk-ratio observe, and UI callback that follow (review finding
+        M4). Losing one persisted segment is far cheaper than losing the rest of
+        the live pipeline.
+        """
         if self._meeting_store is not None and self._active_meeting_id is not None:
-            self._meeting_store.append_segment(self._active_meeting_id, text)
+            try:
+                self._meeting_store.append_segment(self._active_meeting_id, text)
+            except Exception as e:  # noqa: BLE001 — must never break transcription
+                logger.warning("Failed to persist transcript segment: {}", e)
 
     def _handle_interim_transcript(self, text: str, speaker: str | None) -> None:
         """Forward interim transcripts (with speaker attribution) to the UI."""
@@ -804,6 +815,20 @@ class AppController:
             except Exception as e:  # noqa: BLE001 — background lane must never die
                 logger.warning("Failed to persist rolling summary: {}", e)
 
+    async def _safe_teardown(self, label: str, fn: Callable[[], object]) -> None:
+        """Run one teardown step off-thread, swallowing+logging any failure.
+
+        Teardown must never abort partway: if stop_streaming/stop_recording
+        raises (e.g. a websocket-close error or a torn meta.txt in end_meeting),
+        the meeting state transition and the remaining teardown steps still have
+        to run — otherwise the state machine wedges in "active" with the mic
+        still capturing and every future start returns 409 (review finding H1).
+        """
+        try:
+            await asyncio.to_thread(fn)
+        except Exception as e:  # noqa: BLE001 — teardown resilience is the point
+            logger.warning("Teardown step failed ({}): {}", label, e)
+
     async def stop_meeting(self) -> None:
         """End the meeting session: stop streaming AND the recorder."""
         async with self._transition_lock:
@@ -811,10 +836,10 @@ class AppController:
 
             self._last_meeting_id = self._active_meeting_id  # preserve for post-meeting
             completed_id = self._active_meeting_id
-            await asyncio.to_thread(self._stop_copilot_services)
-            await asyncio.to_thread(self.stop_streaming)
+            await self._safe_teardown("stop_copilot_services", self._stop_copilot_services)
+            await self._safe_teardown("stop_streaming", self.stop_streaming)
             if self.recorder.is_recording:
-                await asyncio.to_thread(self.stop_recording)
+                await self._safe_teardown("stop_recording", self.stop_recording)
             self._meeting_state = "post_meeting"
             self._emit_state_change("post_meeting")
         if completed_id is not None:
@@ -870,11 +895,11 @@ class AppController:
         """
         async with self._transition_lock:
             await self._cancel_timer_task()
-            await asyncio.to_thread(self._stop_copilot_services)
+            await self._safe_teardown("stop_copilot_services", self._stop_copilot_services)
             if self._streaming_client is not None:
-                await asyncio.to_thread(self.stop_streaming)
+                await self._safe_teardown("stop_streaming", self.stop_streaming)
             if self.recorder.is_recording:
-                await asyncio.to_thread(self.stop_recording)
+                await self._safe_teardown("stop_recording", self.stop_recording)
             self._meeting_state = "idle"
             self._meeting_start_time = None
             self._last_meeting_id = None
